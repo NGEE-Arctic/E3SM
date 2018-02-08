@@ -9,6 +9,7 @@ module SatellitePhenologyMod
   ! !USES:
   use shr_strdata_mod , only : shr_strdata_type, shr_strdata_create
   use shr_strdata_mod , only : shr_strdata_print, shr_strdata_advance
+  use shr_const_mod   , only : SHR_CONST_TKFRZ
   use shr_kind_mod    , only : r8 => shr_kind_r8
   use shr_kind_mod    , only : CL => shr_kind_CL
   use shr_kind_mod    , only : CX => shr_kind_CXX
@@ -16,16 +17,21 @@ module SatellitePhenologyMod
   use decompMod       , only : bounds_type
   use abortutils      , only : endrun
   use elm_varctl      , only : scmlat,scmlon,single_column
-  use elm_varctl      , only : iulog, use_lai_streams
+  use elm_varctl      , only : iulog, use_lai_streams, use_cn
   use elm_varcon      , only : grlnd
   use controlMod      , only : NLFilename
   use decompMod       , only : gsmap_lnd_gdc2glo
   use domainMod       , only : ldomain
   use fileutils       , only : getavu, relavu
   use VegetationType       , only : veg_pp
+  use GridcellType         , only : grc_pp
+  use VegetationDataType   , only : veg_es
   use CanopyStateType , only : canopystate_type
   use WaterstateType  , only : waterstate_type
   use ColumnDataType  , only : col_ws
+  use ColumnDataType  , only : col_es
+  use TemperatureType , only : temperature_type
+  use SoilstateType   , only : soilstate_type
   use perf_mod        , only : t_startf, t_stopf
   use spmdMod         , only : masterproc
   use spmdMod         , only : mpicom, comp_id
@@ -297,7 +303,7 @@ contains
 
   !-----------------------------------------------------------------------
   subroutine SatellitePhenology(bounds, num_filter, filter, &
-       waterstate_vars, canopystate_vars)
+       waterstate_vars, canopystate_vars, soilstate_vars)
     !
     ! !DESCRIPTION:
     ! Ecosystem dynamics: phenology, vegetation
@@ -305,36 +311,65 @@ contains
     !
     ! !USES:
     use pftvarcon,  only : woody
+
+    use elm_time_manager, only : get_curr_date, get_step_size, get_nstep
+    use elm_varcon      , only : secspday
     use elm_varctl, only : use_fates_sp
+
     !
     ! !ARGUMENTS:
     type(bounds_type)      , intent(in)    :: bounds
     integer                , intent(in)    :: num_filter                        ! number of column points in filter
     integer                , intent(in)    :: filter(bounds%endp-bounds%begp+1) ! patch filter
     type(waterstate_type)  , intent(in)    :: waterstate_vars
+    type(soilstate_type)   , intent(in)    :: soilstate_vars
     type(canopystate_type) , intent(inout) :: canopystate_vars
     !
     ! !LOCAL VARIABLES:
+    integer  :: g                                 ! indices
     integer  :: fp,p,c                            ! indices
     real(r8) :: ol                                ! thickness of canopy layer covered by snow (m)
     real(r8) :: fb                                ! fraction of canopy layer covered by snow
+    real(r8) :: onset_gdd, fracday, dt, ndays_on, ndays_off, crit_dayl
+    real(r8) :: soilpsi_off, soilpsi_on, crit_onset_swi, crit_offset_swi
+    real(r8) :: crit_offset_fdd, crit_onset_fdd, ws_flag, crit_onset_gdd
+    integer spring_threshold, autumn_threshold
     !-----------------------------------------------------------------------
 
     associate(                                                           &
          frac_sno           => col_ws%frac_sno   ,          & ! Input:  [real(r8) (:) ] fraction of ground covered by snow (0 to 1)
          snow_depth         => col_ws%snow_depth ,          & ! Input:  [real(r8) (:) ] snow height (m)
          tlai               => canopystate_vars%tlai_patch    ,          & ! Output: [real(r8) (:) ] one-sided leaf area index, no burying by snow
+         dayl               => grc_pp%dayl,                              & ! Input:  [real(r8)  (:)   ]  daylength (s)
+         prev_dayl          => grc_pp%prev_dayl,                         & ! Input:  [real(r8)  (:)   ]  previous daylength (s)
+         t_ref2m            => veg_es%t_ref2m        ,                   & ! Input:  [real(r8) (:) ] 2-meter air temperature (K)
+         t_soisno           => col_es%t_soisno       ,                   & ! Input : [real(r8) (:) ] soil temperature (K)      
+         tmean              => veg_es%t_2m3650       ,                   & ! Input:[real(r8) (:)   ]  10-year running mean of the 2 m temperature (K)                    
+         soilpsi            => soilstate_vars%soilpsi_col     ,          & ! Input: [real(r8)  (:,:) ]  soil water potential in each soil layer (MPa) 
          tsai               => canopystate_vars%tsai_patch    ,          & ! Output: [real(r8) (:) ] one-sided stem area index, no burying by snow
          elai               => canopystate_vars%elai_patch    ,          & ! Output: [real(r8) (:) ] one-sided leaf area index with burying by snow
          esai               => canopystate_vars%esai_patch    ,          & ! Output: [real(r8) (:) ] one-sided stem area index with burying by snow
          htop               => canopystate_vars%htop_patch    ,          & ! Output: [real(r8) (:) ] canopy top (m)
          hbot               => canopystate_vars%hbot_patch    ,          & ! Output: [real(r8) (:) ] canopy bottom (m)
-         frac_veg_nosno_alb => canopystate_vars%frac_veg_nosno_alb_patch & ! Output: [integer  (:) ] fraction of vegetation not covered by snow (0 OR 1) [-]
+         frac_veg_nosno_alb => canopystate_vars%frac_veg_nosno_alb_patch,& ! Output: [integer  (:) ] fraction of vegetation not covered by snow (0 OR 1) [-]
+         sp_gdd             => canopystate_vars%sp_gdd_patch,            & ! Output:
+         sp_chil            => canopystate_vars%sp_chil_patch,           & ! Output:
+         sp_swi_on          => canopystate_vars%sp_swi_on_patch,         & ! Output:
+         sp_swi_off         => canopystate_vars%sp_swi_off_patch,        & ! Output:
+         sp_fdd_off         => canopystate_vars%sp_fdd_off_patch,        & ! Output:
+         sp_onset_day       => canopystate_vars%sp_onset_day_patch,      & ! Output:
+         sp_offset_day      => canopystate_vars%sp_offset_day_patch,     & ! Output:
+         sp_dayl_temp       => canopystate_vars%sp_dayl_temp_patch,      & ! Output:
+         annlai             => canopystate_vars%annlai_patch,            &
+         ivt                => veg_pp%itype                              &
          )
 
       if (use_lai_streams) then
          call lai_interp(bounds, canopystate_vars)
       endif
+ 
+      dt      = real( get_step_size(), r8 )
+      fracday = dt/secspday
 
       do fp = 1, num_filter
          p = filter(fp)
@@ -355,9 +390,27 @@ contains
          ! leaf area index SAI  <- msai1 and msai2
          ! top height      HTOP <- mhvt1 and mhvt2
          ! bottom height   HBOT <- mhvb1 and mhvb2
+ 
+         !Parameter values (note - these should be retrieved from the parameter file)
+         ndays_on  = 30._r8
+         ndays_off = 15._r8
+         crit_onset_swi  = 15._r8
+         crit_onset_fdd  = 15._r8  !Functionality not implemented
+         crit_offset_swi = 15._r8
+         crit_offset_fdd = 15._r8
+         soilpsi_off = -2._r8
+         soilpsi_on = -2._r8
 
          if (.not. use_lai_streams) then
             tlai(p) = timwt(1)*mlai2t(p,1) + timwt(2)*mlai2t(p,2)
+            !DMR 10.17.18 - Predict seasonal phenology using max monthly LAI
+            !from Satellite
+            !Check if winter solstice has happened (daylength increasing)
+            if (dayl(g) >= prev_dayl(g)) then
+              ws_flag = 1._r8
+            else
+              ws_flag = 0._r8
+            end if
          endif
 
          tsai(p) = timwt(1)*msai2t(p,1) + timwt(2)*msai2t(p,2)

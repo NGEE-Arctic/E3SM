@@ -161,6 +161,9 @@ module VegetationPropertiesType
      real(r8), pointer :: stocking(:)         ! stocking density for pft (stems / hectare)
      real(r8), pointer :: taper(:)            ! ratio of height:radius_breast_height (woody vegetation allometry)
 
+     real(r8), pointer :: crit_gdd1(:)     => null()   !Deciduous pheonlogy critical GDD intercept
+     real(r8), pointer :: crit_gdd2(:)     => null()   !Deciduous pheonlogy critical GDD slope
+
    contains
    procedure, public :: Init => veg_vp_init
 
@@ -201,6 +204,7 @@ contains
     use pftvarcon , only : bbbopt, mbbopt, nstor, br_xr, tc_stress, lmrhd
     ! new properties for flexible PFT (NGEE Arctic IM4)
     use pftvarcon , only : climatezone, nonvascular, graminoid, iscft,needleleaf, nfixer
+    use pftvarcon , only : crit_gdd1, crit_gdd2
     ! snow/vegetation interactions (NGEE Arctic IM3)
     use pftvarcon , only : bendresist, stocking, vegshape, taper
     !
@@ -337,6 +341,8 @@ contains
     allocate( this%iscft(0:numpft))                              ; this%iscft(:)                 =.false.
     allocate( this%needleleaf(0:numpft))                         ; this%needleleaf(:)            =spval
     allocate( this%nfixer(0:numpft))                             ; this%nfixer(:)                =spval
+    allocate( this%crit_gdd1(0:numpft))                          ; this%crit_gdd1(:)             =spval
+    allocate( this%crit_gdd2(0:numpft))                          ; this%crit_gdd2(:)             =spval
     ! -----------------------------------------------------------------------------------------------------------
     ! NGEE Arctic snow-vegetation interactions
     allocate(this%bendresist(0:numpft))                          ; this%bendresist(:)            =spval
@@ -440,6 +446,8 @@ contains
        this%needleleaf(m)   = needleleaf(m)
        this%nfixer(m)       = nfixer(m)
 
+       this%crit_gdd1(m)    = crit_gdd1(m)
+       this%crit_gdd2(m)    = crit_gdd2(m)
 
        this%Nfix_NPP_c1(m)  = Nfix_NPP_c1(m)
        this%Nfix_NPP_c2(m)  = Nfix_NPP_c2(m)

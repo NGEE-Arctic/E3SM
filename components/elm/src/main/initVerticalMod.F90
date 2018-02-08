@@ -704,11 +704,11 @@ contains
                ti = t - topi + 1
                
                if (lun_pp%urbpoi(l) .and. col_pp%itype(c) /= icol_road_imperv .and. col_pp%itype(c) /= icol_road_perv) then
-               	  col_pp%nlevbed(c) = nlevurb
-               else if (col_pp%is_lake(c)) then
-               	  col_pp%nlevbed(c) = nlevlak
+               	  nlevbed = nlevurb
+               else if (lun_pp%itype(l) == istdlak) then
+               	  nlevbed = nlevlak
                else if (lun_pp%itype(l) == istice_mec) then
-               	  col_pp%nlevbed(c) = 5
+               	  nlevbed = 5
                else
                   ! check for near zero DTBs, set minimum value
                   beddep = max(dtb(g,ti), zsoi(1))    ! better to use first-layer thickness
@@ -727,10 +727,10 @@ contains
                   nlevbed = max(nlevbed, 1)  ! in alpine or similar situation, it's not ideal assuming 5 layers
 	              nlevbed = min(nlevbed, nlevgrnd)
                   
-                  col_pp%nlevbed(c) = nlevbed
-	              col_pp%zibed(c)   = zisoi(nlevbed)
                end if
 
+               col_pp%nlevbed(c) = nlevbed
+	           col_pp%zibed(c)   = zisoi(nlevbed)
 
             end do
 	     end if

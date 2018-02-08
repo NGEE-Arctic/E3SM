@@ -336,6 +336,8 @@ module pftvarcon
   real(r8), allocatable :: temp_iscft(:)       ! for file read, translated to logical afterwards
   real(r8), allocatable :: nfixer(:)           ! nitrogen fixer flag  (0 = inable, 1 = able to nitrogen fixation from atm. N2)
 
+  real(r8), allocatable :: crit_gdd1(:)        ! Critical GDD intercept
+  real(r8), allocatable :: crit_gdd2(:)        ! Critical GDD slope with MAT
 
   !
   ! !PUBLIC MEMBER FUNCTIONS:
@@ -665,6 +667,9 @@ contains
     allocate( temp_iscft         (0:mxpft) )
     allocate( needleleaf         (0:mxpft) )
     allocate( nfixer             (0:mxpft) )
+
+    allocate( crit_gdd1          (0:mxpft) )
+    allocate( crit_gdd2          (0:mxpft) )
 
    ! NGEE arctic snow-vegetation interactions
     allocate( bendresist         (0:mxpft) )
@@ -1149,6 +1154,16 @@ contains
     if (.not. readv ) then
       taper(:) = 200._r8 ! pftnames not set to integers yet, so reassign further down.
       taper_defaults = .true.
+    end if
+
+    call ncd_io('crit_gdd1', crit_gdd1, 'read', ncid, readvar=readv, posNOTonfile=.true.)
+    if (.not. readv ) then
+      crit_gdd1(:) = 4.8_r8
+    end if
+
+    call ncd_io('crit_gdd2', crit_gdd2, 'read', ncid, readvar=readv, posNOTonfile=.true.)
+    if (.not. readv) then
+      crit_gdd2(:) = 0.13_r8
     end if
 
     ! NOTE: the following 5 PFT flags/options are addtions to 'woody', 'stress_decid', 'season_decid',

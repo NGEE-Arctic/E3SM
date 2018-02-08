@@ -702,7 +702,7 @@ contains
 
           do lev = 1,nlevgrnd
              ! Number of soil layers in hydrologically active columns = NLEV2BED
-	     nlevbed = col_pp%nlevbed(c)
+	         nlevbed = col_pp%nlevbed(c)
              if ( more_vertlayers )then ! duplicate clay and sand values from last soil layer
 
                 if (lev .eq. 1) then
@@ -775,6 +775,11 @@ contains
                 ipedof=get_ipedof(0)
                 call pedotransf(ipedof, sand, clay, &
                      this%watsat_col(c,lev), this%bsw_col(c,lev), this%sucsat_col(c,lev), xksat)
+
+                if (use_var_soil_thick .and. lev > nlevbed) then
+                   this%watsat_col(c,lev) = 0.01_r8  ! very small value for porosity of bedrock
+                   xksat = 1.e-20_r8                 ! cannot be zero (used below as denominator)
+                endif
 
                 om_watsat         = max(0.93_r8 - 0.1_r8   *(zsoi(lev)/zsapric), 0.83_r8)
                 om_b              = min(2.7_r8  + 9.3_r8   *(zsoi(lev)/zsapric), 12.0_r8)

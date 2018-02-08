@@ -191,7 +191,10 @@ contains
          col_lag_npp    => col_cf%lag_npp         , & ! Input: [real(r8) (:)]  (gC/m2/s) lagged net primary production
          qflx_tran_veg  => col_wf%qflx_tran_veg    , & ! col vegetation transpiration (mm H2O/s) (+ = to atm)
          qflx_evap_veg  => col_wf%qflx_evap_veg    , & ! col vegetation evaporation (mm H2O/s) (+ = to atm)
-         nfix_to_sminn  => col_nf%nfix_to_sminn     & ! Output: [real(r8) (:)]  symbiotic/asymbiotic N fixation to soil mineral N (gN/m2/s)
+         nfix_to_sminn  => col_nf%nfix_to_sminn    , & ! Output: [real(r8) (:)]  symbiotic/asymbiotic N fixation to soil mineral N (gN/m2/s)
+
+         Nfix_NPP_c1    => veg_vp%Nfix_NPP_c1     , & ! Pre-exponential parameter for NPP_based N fixation
+         Nfix_NPP_c2    => veg_vp%Nfix_NPP_c2       & ! Exponential parameter for NPP_based N fixation
          )
 
 

@@ -136,7 +136,7 @@ contains
     use shr_log_mod, only : errMsg => shr_log_errMsg
     use fileutils  , only : getfil
     use abortutils , only : endrun
-    use ncdio_pio  , only : file_desc_t, ncd_defvar, ncd_io, ncd_pio_openfile, ncd_pio_closefile
+    use ncdio_pio  , only : file_desc_t, ncd_defvar, ncd_io, ncd_pio_openfile, ncd_pio_closefile, ncd_inqvdlen
     use spmdMod    , only : masterproc
     use topounit_varcon, only : max_topounits
     use GridcellType , only : grc_pp
@@ -152,6 +152,7 @@ contains
     integer            :: ier          ! error status
     logical            :: readvar
     integer  ,pointer  :: soic2d (:,:)   ! read in - soil color
+    integer            :: dlen
     !---------------------------------------------------------------------
 
     ! Allocate module variable for soil color
@@ -164,6 +165,10 @@ contains
     call getfil (fsurdat, locfn, 0)
     call ncd_pio_openfile (ncid, locfn, 0)
 
+    call ncd_inqvdlen(ncid,'mxsoil_color',1,dlen,ier)
+    if(ier .ne. -1 .and. dlen>1) then 
+     call endrun('mxsoil_color dimension greater than 1')
+    endif
     call ncd_io(ncid=ncid, varname='mxsoil_color', flag='read', data=mxsoil_color, readvar=readvar)
     if ( .not. readvar ) mxsoil_color = 8
 
