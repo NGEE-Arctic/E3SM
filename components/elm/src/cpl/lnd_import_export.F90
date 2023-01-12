@@ -533,7 +533,9 @@ contains
               if (yr .le. atm2lnd_vars%endyear_met_spinup) atm2lnd_vars%tindex(g,v,1) = atm2lnd_vars%timelen_spinup(v)
              end if
           end do    !end variable loop        
+
         else
+          ! met data loaded
           do v=1,met_nvars
             if (atm2lnd_vars%npf(v) - 1._r8 .gt. 1e-3) then
               if (v .eq. 4 .or. v .eq. 5 .or. (v .ge. 8 .and. v .le. 13)) then    !rad/Precipitation
@@ -541,18 +543,11 @@ contains
                   atm2lnd_vars%tindex(g,v,1) = atm2lnd_vars%tindex(g,v,1)+1
                   atm2lnd_vars%tindex(g,v,2) = atm2lnd_vars%tindex(g,v,2)+1
                 end if
-              else
-                if (atm2lnd_vars%npf(v) .ne. 2._r8) then
-                  if (mod(tod/get_step_size()-1,nint(atm2lnd_vars%npf(v))) <= atm2lnd_vars%npf(v)/2._r8 .and. &
-                      mod(tod/get_step_size(),nint(atm2lnd_vars%npf(v))) > atm2lnd_vars%npf(v)/2._r8) then
-                    atm2lnd_vars%tindex(g,v,1) = atm2lnd_vars%tindex(g,v,1)+1
-                    atm2lnd_vars%tindex(g,v,2) = atm2lnd_vars%tindex(g,v,2)+1
-                  end if
-                else
-                  if (mod(tod/get_step_size(),nint(atm2lnd_vars%npf(v))) == 1 .and. nstep .gt. 3) then
-                     atm2lnd_vars%tindex(g,v,1) = atm2lnd_vars%tindex(g,v,1)+1
-                     atm2lnd_vars%tindex(g,v,2) = atm2lnd_vars%tindex(g,v,2)+1
-                  end if
+              else  
+                if ( (mod(tod/get_step_size(),nint(atm2lnd_vars%npf(v)))-atm2lnd_vars%npf(v)/2._r8) .ge. -1.e-3 .and. &
+                     (mod(tod/get_step_size()+1,nint(atm2lnd_vars%npf(v)))-atm2lnd_vars%npf(v)/2._r8) .lt. 0. ) then
+                  atm2lnd_vars%tindex(g,v,1) = atm2lnd_vars%tindex(g,v,1)+1
+                  atm2lnd_vars%tindex(g,v,2) = atm2lnd_vars%tindex(g,v,2)+1
                 end if
               end if
             else
@@ -560,6 +555,7 @@ contains
               atm2lnd_vars%tindex(g,v,2) = atm2lnd_vars%tindex(g,v,2)+nint(1/atm2lnd_vars%npf(v))
             end if
 
+            ! cycling years of data
             if (const_climate_hist .or. yr .le. atm2lnd_vars%startyear_met) then
               if (atm2lnd_vars%tindex(g,v,1) .gt. atm2lnd_vars%timelen_spinup(v)) atm2lnd_vars%tindex(g,v,1) = 1
               if (atm2lnd_vars%tindex(g,v,2) .gt. atm2lnd_vars%timelen_spinup(v)) atm2lnd_vars%tindex(g,v,2) = 1
