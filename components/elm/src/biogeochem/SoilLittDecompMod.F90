@@ -36,7 +36,7 @@ module SoilLittDecompMod
   use elm_varctl             , only : use_elm_interface, use_pflotran, pf_cmode
   use elm_varctl             , only : use_cn, use_fates
   use elm_instMod            , only : alm_fates
-  use elm_varctl             , only : use_alquimia
+  use elm_varctl             , only : use_alquimia, alquimia_pf_coupled
   !
   implicit none
   save
@@ -667,7 +667,7 @@ contains
             smin_no3_to_plant_vr_loc(:,:) = 0._r8
 
       ! Alquimia needs to correct for N or P limitation being turned off because it skips the calculation in SoilLittDecompAlloc
-      if(use_alquimia) then 
+      if(use_alquimia .and. alquimia_pf_coupled) then
          supplement_to_sminn_vr(1:num_soilc,:) = 0._r8  ! need to zeros, because alquimia coupling had skipped this step
          if( cnallocate_carbon_only() .or. cnallocate_carbonphosphorus_only()) then
             do fc=1,num_soilc
@@ -706,10 +706,10 @@ contains
                sminn_vr(c,j) = col_ns%smin_nh4_vr(c,j) + col_ns%smin_no3_vr(c,j)
             enddo
          enddo
-      endif
+      endif ! if (use_alquimia)
 
       ! MUST have already updated needed bgc variables from PFLOTRAN by this point
-      if((use_elm_interface.and.use_pflotran.and.pf_cmode) .or. use_alquimia) then
+      if((use_elm_interface.and.use_pflotran.and.pf_cmode) .or. (use_alquimia .and. alquimia_pf_coupled)) then
          ! fpg calculation
          do fc=1,num_soilc
             c = filter_soilc(fc)
@@ -824,7 +824,7 @@ contains
       end if
       !------------------------------------------------------------------
 
-    if((use_pflotran.and.pf_cmode) .or. use_alquimia ) then
+    if((use_pflotran.and.pf_cmode) .or. (use_alquimia .and. alquimia_pf_coupled)) then
     ! in PlantCNPAlloc():
     ! smin_nh4_to_plant_vr(c,j), smin_no3_to_plant_vr(c,j), sminn_to_plant_vr(c,j) may be adjusted
     ! therefore, we need to update smin_no3_vr(c,j) & smin_nh4_vr(c,j)

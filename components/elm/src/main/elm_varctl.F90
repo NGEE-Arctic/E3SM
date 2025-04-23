@@ -556,6 +556,7 @@ module elm_varctl
   character(len=32), public :: alquimia_plantNO3demand_name = 'Plant_NO3_demand'
   character(len=32), public :: alquimia_plantNH4demand_name = 'Plant_NH4_demand'
   logical, public           :: alquimia_handsoff    = .true.
+  logical, public           :: alquimia_pf_coupled  = .false.  ! pflotran bgc actually coupled, otherwise EMI only. It will set during initialization.
 
   ! cpl_bypass
    character(len=fname_len), public :: metdata_type   = ' '    ! metdata type for CPL_BYPASS mode

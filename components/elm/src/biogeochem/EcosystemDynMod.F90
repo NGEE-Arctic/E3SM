@@ -142,7 +142,7 @@ contains
     use perf_mod             , only: t_startf, t_stopf
     use shr_sys_mod          , only: shr_sys_flush
     use PhosphorusDynamicsMod         , only: PhosphorusBiochemMin_balance
-    use elm_varctl           , only: use_alquimia
+    use elm_varctl           , only: use_alquimia, alquimia_pf_coupled
 
     !
     ! !ARGUMENTS:
@@ -198,7 +198,7 @@ contains
 
     !-----------------------------------------------------------------------
     ! pflotran: when both 'pf-bgc' and 'pf-h' on, no need to call CLM-CN's N leaching module
-    if (.not. (pf_cmode .and. pf_hmode) .and. .not. use_alquimia) then
+    if (.not. (pf_cmode .and. pf_hmode) .and. .not. (use_alquimia .and. alquimia_pf_coupled)) then
      call NitrogenLeaching(num_soilc, filter_soilc, dt)
 
      call PhosphorusLeaching(num_soilc, filter_soilc, dt)
@@ -529,7 +529,7 @@ contains
     use ExternalModelInterfaceMod , only: EMI_Driver
     use ExternalModelConstants    , only: EM_ID_ALQUIMIA,EM_ALQUIMIA_SOLVE_STAGE
     use elm_time_manager          , only: get_step_size_real
-    use elm_varctl                , only: use_alquimia
+    use elm_varctl                , only: use_alquimia, alquimia_pf_coupled
     use ColumnDataType            , only: col_chem
     use elm_instMod               , only: waterstate_vars
     !
@@ -590,6 +590,17 @@ contains
           col_es            = col_es                    , &
           col_ws            = col_ws                    , &
           col_wf            = col_wf                      )
+
+       ! Don't skip default soil bgc, if not really alquimia/pflotran-bgc coupled
+       ! (NOTE that this will test EMI-alquimia interface only)
+       if (.not. alquimia_pf_coupled) then
+
+        call SoilLittDecompAlloc (bounds, num_soilc, filter_soilc,    &
+                  num_soilp, filter_soilp,                     &
+                  canopystate_vars, soilstate_vars,            &
+                  cnstate_vars, ch4_vars,                      &
+                  dt)
+       endif
      
        call t_stopf('bgc via alquimia interface')
 

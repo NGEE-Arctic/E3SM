@@ -45,9 +45,9 @@ module ExternalModelAlquimiaMod
   use alquimia_fortran_interface_mod, only : AlquimiaFortranInterface
   use iso_c_binding,                  only : c_ptr
   use c_f_interface_module,           only : c_f_string_ptr, f_c_string_ptr
-#endif
 
-  use, intrinsic :: iso_c_binding, only : C_CHAR, c_double, c_int, c_bool, c_f_pointer
+  use, intrinsic :: iso_c_binding,    only : C_CHAR, c_double, c_int, c_bool, c_f_pointer
+#endif
 
   implicit none
 
@@ -85,6 +85,7 @@ module ExternalModelAlquimiaMod
     integer :: index_e2l_state_decomp_cpools
     integer :: index_e2l_state_decomp_npools
     integer :: index_e2l_flux_hr
+    integer :: index_e2l_flux_hrimm
     integer :: index_e2l_flux_ch4
     integer :: index_e2l_state_nh4
     integer :: index_e2l_state_no3
@@ -174,6 +175,7 @@ module ExternalModelAlquimiaMod
     integer, pointer, dimension(:)    :: pool_reaction_mapping
 
     integer                           :: CO2_pool_number,  CH4_pool_number,  acetate_pool_number
+    integer                           :: hrimm_pool_number
     integer                           :: NH4_pool_number,  NO3_pool_number,  N2O_pool_number,    N2_pool_number
     integer                           :: Nimm_pool_number, Nmin_pool_number, Nimp_pool_number
     integer                           :: plantNO3uptake_pool_number,     plantNH4uptake_pool_number
@@ -489,7 +491,11 @@ contains
     ! Heterotrophic respiration flux
     id                                             = E2L_FLUX_HETEROTROPHIC_RESP
     call e2l_list%AddDataByID(id, number_em_stages, em_stages, index)
-    this%index_e2l_flux_hr              = index
+    this%index_e2l_flux_hr                         = index
+
+    id                                             = E2L_FLUX_HETEROTROPHIC_RESP_VERTICALLY_RESOLVED
+    call e2l_list%AddDataByID(id, number_em_stages, em_stages, index)
+    this%index_e2l_flux_hrimm                      = index
 
     id                                             = E2L_FLUX_METHANE
     call e2l_list%AddDataByID(id, number_em_stages, em_stages, index)
@@ -691,6 +697,7 @@ contains
                                                AllocateAlquimiaAuxiliaryOutputData, &
                                                AllocateAlquimiaGeochemicalCondition
                                             
+    use elm_varctl     , only : use_alquimia, alquimia_pf_coupled
     use elm_varctl     , only : alquimia_inputfile, alquimia_engine_name,                    &
                                 alquimia_IC_name,   alquimia_handsoff
     use elm_varpar     , only : alquimia_num_primary,       alquimia_num_minerals,           &
@@ -726,6 +733,9 @@ contains
     
     write(iulog,*) 'Entering Alquimia setup'
     
+    ! a control option
+    alquimia_pf_coupled = .true.
+
     inputfile   = alquimia_inputfile
     engine_name = alquimia_engine_name
     IC_name     = alquimia_IC_name   ! Name of initial condition
@@ -809,6 +819,11 @@ contains
 
 #else
 
+    use elm_varctl, only : use_alquimia, alquimia_pf_coupled
+    use elm_varpar, only : alquimia_num_primary,       alquimia_num_minerals,           &
+                           alquimia_num_surface_sites, alquimia_num_ion_exchange_sites, &
+                           alquimia_num_aux_doubles,   alquimia_num_aux_ints
+
     implicit none
     !
     ! !ARGUMENTS
@@ -819,8 +834,26 @@ contains
     type(bounds_type)    , intent (in)   :: bounds_clump
 
     !-----
-    call endrun(msg='ERROR: Attempting to run with alquimia when model not compiled with USE_ALQUIMIA_LIB')
+    if (use_alquimia) then
+      ! test EMI for Alquimia to check data passing but bypassing of alquimia BGC solve
+      write(iulog,*)
+      write(iulog,*) '--WARNING-- Testing data passing of ELM-EMI-alquimia, WIHTOUT actual alquimia calls '
+      !
 
+      alquimia_pf_coupled = .false.
+
+      ! the following is set to 1 so that it won't break any fortran array dimensioned from 1:alquimia_num_*
+      alquimia_num_primary            = 1
+      alquimia_num_minerals           = 1
+      alquimia_num_surface_sites      = 1
+      alquimia_num_ion_exchange_sites = 1
+      alquimia_num_aux_doubles        = 1
+      alquimia_num_aux_ints           = 1
+
+    else
+      call endrun(msg='ERROR: Attempting to run with alquimia when model not compiled with USE_ALQUIMIA_LIB')
+
+    endif
 #endif
 
   end subroutine EMAlquimia_Init
@@ -985,17 +1018,22 @@ contains
                                   bounds_clump)
 
     
-#ifdef USE_ALQUIMIA_LIB
 !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 !
+    use elm_varctl,             only : use_alquimia, alquimia_pf_coupled
+    use elm_varpar,             only : alquimia_num_primary,       alquimia_num_minerals,           &
+                                       alquimia_num_surface_sites, alquimia_num_ion_exchange_sites, &
+                                       alquimia_num_aux_doubles,   alquimia_num_aux_ints
     use elm_varpar,             only : nlevdecomp, ndecomp_pools
     use landunit_varcon,        only : istcrop, istsoil
     ! use clm_varcon,           only : catomw,natomw ! Replacing these with constants that are the same as PFLOTRAN defs
     use CNDecompCascadeConType, only : decomp_cascade_con
 
+#ifdef USE_ALQUIMIA_LIB
     use AlquimiaContainers_module,        only : AlquimiaEngineStatus
     use alquimia_fortran_interface_mod,   only : ReactionStepOperatorSplit, GetAuxiliaryOutput
     use PFloTranAlquimiaInterface_module, only : printState
+#endif
     
 
     implicit none
@@ -1039,6 +1077,8 @@ contains
     real(r8) , pointer, dimension(:)     :: n2oflux_e2l, n2flux_e2l                           ! 1D total surface emission
     real(r8) , pointer, dimension(:)     :: NO3runoff_e2l, DONrunoff_e2l                      ! 1D total column runoff (gN/m2/s)
     real(r8) , pointer, dimension(:)     :: DICrunoff_e2l, DOCrunoff_e2l                      ! 1D total column runoff (gN/m2/s)
+
+    real(r8) , pointer, dimension(:,:)   :: hrimm_e2l                                         ! 2D emission (col, layer)
     real(r8) , pointer, dimension(:,:)   :: n2o_e2l, n2_e2l
     real(r8) , pointer, dimension(:,:)   :: Nimm_e2l, Nimp_e2l, Nmin_e2l
 
@@ -1069,11 +1109,13 @@ contains
     real(r8), parameter                  :: natomw = 14.0067d0 ! Value in clmvarcon is 14.007
     real(r8), parameter                  :: catomw = 12.0110d0 ! Value in clmvarcon is 12.011
     
+#ifdef USE_ALQUIMIA_LIB
     real(r8),dimension(this%chem_sizes%num_primary)     :: surf_flux, surf_bc, lat_flux, lat_bc
     character(kind=C_CHAR,len=kAlquimiaMaxStringLength) :: status_message
     procedure(ReactionStepOperatorSplit), pointer       :: engine_ReactionStepOperatorSplit
     procedure(GetAuxiliaryOutput), pointer              :: engine_getAuxiliaryOutput
     ! real (c_double), pointer                           :: alquimia_mobile_data(:), alquimia_immobile_data(:), alquimia_rates_data(:)
+#endif
 
     !--------
     
@@ -1143,12 +1185,12 @@ contains
     ! C and N pools from EMI --> ELM
     call e2l_list%GetPointerToReal3D(this%index_e2l_state_decomp_cpools , soilcarbon_e2l)   ! gC/m2
     call e2l_list%GetPointerToReal3D(this%index_e2l_state_decomp_npools , soilnitrogen_e2l) ! gN/m2
-    ! call e2l_list%GetPointerToReal2D(this%index_e2l_flux_hr ,      hr_e2l)                ! gC/m3/s  (TODO)
     call e2l_list%GetPointerToReal1D(this%index_e2l_flux_hr ,        hr_e2l)                ! gC/m2/s (vertically integrated)
 
     call e2l_list%GetPointerToReal1D(this%index_e2l_flux_ch4 ,       methaneflux_e2l)       ! gC/m2/s
     call e2l_list%GetPointerToReal2D(this%index_e2l_state_ch4_vr ,   methane_vr_e2l)        ! gC/m2/s
     
+    call e2l_list%GetPointerToReal2D(this%index_e2l_flux_hrimm,      hrimm_e2l)             ! gC/m3/s (vertically resolved)
     call e2l_list%GetPointerToReal2D(this%index_e2l_state_no3 ,      no3_e2l)               ! gN/m3
     call e2l_list%GetPointerToReal2D(this%index_e2l_state_nh4 ,      nh4_e2l)               ! gN/m3
     call e2l_list%GetPointerToReal2D(this%index_e2l_state_n2o ,      n2o_e2l)               ! gN/m3
@@ -1184,6 +1226,10 @@ contains
     call e2l_list%GetPointerToReal2D(this%index_e2l_state_carbonate, carbonate_e2l)
 
     call e2l_list%GetPointerToReal1D(this%index_e2l_chem_dt,         actual_dt_e2l)
+
+     !----------------------------------------------------------------------------------------------------------------------------------
+
+#ifdef USE_ALQUIMIA_LIB
 
     ! First check if pools have been mapped between ELM and Alquimia
     if(.not. associated(this%carbon_pool_mapping)) then
@@ -1396,7 +1442,7 @@ contains
              ! Need to distinguish between tidal flooding and rainfall infiltration. Doing based on h2osfc but not sure if that's correct
              ! Now that we have tide height info, we could use that instead. But this won't be correct while tide is going down
              if (h2osfc_l2e(c)>0) then
-                  surf_bc(this%chloride_pool_number) = flood_salinity_l2e(c)/(35.453*0.0018066_r8)
+                  surf_bc(this%chloride_pool_number) = flood_salinity_l2e(c)/(35.453_r8*0.0018066_r8)
                   if (this%sulfate_pool_number>0) then
                     surf_bc(this%sulfate_pool_number) = flood_salinity_l2e(c)/0.0018066_r8*0.14_r8/96.06_r8 ! Ratio from Jiaze's manuscript
                   endif
@@ -1412,7 +1458,7 @@ contains
                   endif
                   if(this%sodium_pool_number>0) surf_bc(this%sodium_pool_number)   = 0.0_r8
                   if(this%sulfide_pool_number>0) surf_bc(this%sulfide_pool_number) = 0.0_r8
-                  if(this%Hplus_pool_number>0) surf_bc(this%Hplus_pool_number)     = 10**(-(7+0.0_r8*2.0_r8/30.0))
+                  if(this%Hplus_pool_number>0) surf_bc(this%Hplus_pool_number)     = 10**(-(7+0.0_r8*2.0_r8/30.0_r8))
 
              endif
 
@@ -1600,6 +1646,11 @@ contains
               !   hr_e2l(c,j) = hr_e2l(c,j) + total_mobile_e2l(c,j,this%CO2_pool_number)*catomw
               !   hr_e2l(c,j) = hr_e2l(c,j)/dt
               ! endif
+
+            ! for tracking
+            if (this%hrimm_pool_number>0) then
+               hrimm_e2l(c,j) = total_immobile_e2l(c,j,this%hrimm_pool_number)*catomw/dt
+            endif
 
             DOC_e2l(c,j) = 0.0_r8
             DON_e2l(c,j) = 0.0_r8
@@ -1791,18 +1842,59 @@ contains
 ! alquimia libs are NOT available
 #else
 
-    implicit none
+    if (use_alquimia .and. .not. alquimia_pf_coupled) then
+      ! test EMI for Alquimia to check data passing but bypassing of alquimia BGC solve
+       write(iulog,*)
+       write(iulog,*) '--WARNING-- Testing data passing of ELM-EMI-alquimia, WIHTOUT actual initial alquimia/pflotran condition setting '
+
+       do fc = 1, num_soilc
+           c = filter_soilc(fc)
+
+           ! pass 'l2e' data back to 'e2l',
+           ! or assign a zero to 'e2l' if not from 'l2e'.
+           ! (NOTE: this is necessary, because those 'call e2l_list%' may overwrite global variables if any in ELM datatypes.
+           do j=1, nlevdecomp
+              do poolnum=1,ndecomp_pools
+                 soilcarbon_e2l(c,j,poolnum)   = soilcarbon_l2e(c,j,poolnum)
+                 soilnitrogen_e2l(c,j,poolnum) = soilnitrogen_l2e(c,j,poolnum)
+              enddo
+              no3_e2l(c,j)   = no3_l2e(c,j)
+              nh4_e2l(c,j)   = nh4_l2e(c,j)
+
+              n2o_e2l(c,j)        = 0._r8
+              n2_e2l(c,j)         = 0._r8
+              methane_vr_e2l(c,j) = 0._r8
+              DIC_e2l(c,j)        = 0._r8
+              DOC_e2l(c,j)        = 0._r8
+              DON_e2l(c,j)        = 0._r8
+              carbonate_e2l(c,j)  = 0._r8
+
+              !
+              hrimm_e2l(c,j)          = 0._r8
+              Nimm_e2l(c,j)           = 0._r8
+              Nimp_e2l(c,j)           = 0._r8
+              Nmin_e2l(c,j)           = 0._r8
+              plantNO3uptake_e2l(c,j) = plantNdemand_l2e(c,j)/2.0
+              plantNH4uptake_e2l(c,j) = plantNdemand_l2e(c,j)/2.0
+
+           end do
+
+           hr_e2l(c)           = 0._r8
+           methaneflux_e2l(c)  = 0._r8
+           n2oflux_e2l(c)      = 0._r8
+           n2flux_e2l(c)       = 0._r8
+           NO3runoff_e2l(c)    = 0._r8
+           DONrunoff_e2l(c)    = 0._r8
+           DOCrunoff_e2l(c)    = 0._r8
+           DICrunoff_e2l(c)    = 0._r8
+       enddo ! Column loop
+
     !
-    ! !ARGUMENTS
-    class(em_alquimia_type)              :: this
-    real(r8)             , intent(in)    :: dt ! s
-    integer              , intent(in)    :: nstep
-    integer              , intent(in)    :: clump_rank
-    class(emi_data_list) , intent(in)    :: l2e_list
-    class(emi_data_list) , intent(inout) :: e2l_list
-    type(bounds_type)    , intent (in)   :: bounds_clump
-  
-    call endrun(msg='ERROR: Attempting to run with alquimia when model not compiled with USE_ALQUIMIA_LIB')
+    else
+
+       call endrun(msg='ERROR: Attempting to run with alquimia when model not compiled with USE_ALQUIMIA_LIB')
+
+    endif
 
 #endif
 !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

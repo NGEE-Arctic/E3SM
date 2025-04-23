@@ -7756,6 +7756,7 @@ contains
     ! !DESCRIPTION:
     ! column-level carbon flux summary calculations
     !
+    use elm_varctl      , only : alquimia_pf_coupled
     !
     ! !ARGUMENTS:
     class(column_carbon_flux)              :: this
@@ -7815,7 +7816,7 @@ contains
 
     if ( (.not. is_active_betr_bgc           ) .and. &
          (.not. (use_pflotran .and. pf_cmode)) .and. &
-         (.not. use_alquimia) ) then
+         (.not. (use_alquimia .and. alquimia_pf_coupled)) ) then
 
        ! vertically integrate HR and decomposition cascade fluxes
        do k = 1, ndecomp_cascade_transitions
@@ -7852,7 +7853,8 @@ contains
        this%somhr(c)              = 0._r8
        this%lithr(c)              = 0._r8
        this%decomp_cascade_hr(c,1:ndecomp_cascade_transitions)= 0._r8
-       if (.not. ((use_pflotran .and. pf_cmode) .or. use_alquimia)) then
+       if (.not.(use_pflotran .and. pf_cmode) .and. &
+           .not.(use_alquimia .and. alquimia_pf_coupled) ) then
        ! pflotran has returned 'hr_vr(begc:endc,1:nlevdecomp)' to ALM before this subroutine is called in CNEcosystemDynNoLeaching2
        ! thus 'hr_vr_col' should NOT be set to 0
             this%hr_vr(c,1:nlevdecomp) = 0._r8
@@ -7900,7 +7902,7 @@ contains
 
     ! total heterotrophic respiration, vertically resolved (HR)
 
-   if(.not. use_alquimia) then ! hr_vr was already calculated in alquimia
+   if(.not. (use_alquimia .and. alquimia_pf_coupled)) then ! hr_vr was already calculated in alquimia
     do k = 1, ndecomp_cascade_transitions
        do j = 1,nlevdecomp
           do fc = 1,num_soilc
@@ -8167,6 +8169,7 @@ contains
     ! summarize column-level fluxes for methane calculation
     !
     ! !USES:
+    use elm_varctl      , only : alquimia_pf_coupled
     !
     ! !ARGUMENTS:
     class(column_carbon_flux)     :: this
@@ -8188,7 +8191,8 @@ contains
        this%somhr(c)              = 0._r8
        this%lithr(c)              = 0._r8
        this%decomp_cascade_hr(c,1:ndecomp_cascade_transitions)= 0._r8
-       if (.not. (use_pflotran .and. pf_cmode) .and. .not. use_alquimia) then
+       if (.not. (use_pflotran .and. pf_cmode) .and. &
+           .not. (use_alquimia .and. alquimia_pf_coupled)) then
        ! pflotran has returned 'hr_vr(begc:endc,1:nlevdecomp)' to ALM before this subroutine is called in CNEcosystemDynNoLeaching2
        ! thus 'hr_vr_col' should NOT be set to 0
             this%hr_vr(c,1:nlevdecomp) = 0._r8
@@ -8197,7 +8201,7 @@ contains
 
     if ( (.not. is_active_betr_bgc           ) .and. &
          (.not. (use_pflotran .and. pf_cmode)) .and. &
-         (.not. use_alquimia           ) ) then
+         (.not. (use_alquimia .and. alquimia_pf_coupled)) ) then
       ! vertically integrate HR and decomposition cascade fluxes
       do k = 1, ndecomp_cascade_transitions
 
