@@ -1,0 +1,19 @@
+fsurdat = '$DIN_LOC_ROOT/lnd/clm2/surfdata_map/surfdata_42_FLUXNETSITES_simyr1850_c170912.nc'
+
+! when EMI-alquimia codes ready, then comment the following line out.
+! use_alquimia = .true.
+use_alquimia = .true.
+
+! P cycle not available in elm-alquimia-PFLOTRANbgc. So the following variables output are N/A.
+! if not excluding from I/O, ELM pio may crash.
+ hist_fexcl1 = 'CWDP','LABILEP','LITR1P','LITR2P','LITR3P','SOIL1P','SOIL2P','SOIL3P','SOIL4P',
+               'SMINP','SOLUTIONP','SECONDP','OCCLP','PRIMP','TOTCOLP','TOTECOSYSP','TOTLITP',
+               'TOTLITP_1m','TOTSOMP','TOTSOMP_1m', 
+               'CWDP_vr','LABILEP_vr','LITR1P_vr','LITR2P_vr','LITR3P_vr',
+               'SOIL1P_vr','SOIL2P_vr','SOIL3P_vr','SOIL4P_vr',
+               'SMINP_vr','SOLUTIONP_vr','SECONDP_vr','OCCLP_vr','PRIMP_vr'
+
+! when alquimia and pflotran bgc are coupled into ELM, add the following file (saved here).
+! otherwise, 'use_alquimia = .true.' would only test EMI interface with data passing. 
+! alquimia_inputfile = '$DIN_LOC_ROOT/lnd/clm2/pflotran/CTC_alquimia_forELM_O2consuming.in'
+alquimia_inputfile = '$DIN_LOC_ROOT/lnd/clm2/pflotran/CTC_alquimia_forELM_O2consuming.in'
