@@ -1,0 +1,10 @@
+fsurdat = '$DIN_LOC_ROOT/lnd/clm2/surfdata_map/surfdata_42_FLUXNETSITES_simyr1850_c170912.nc'
+
+! when EMI-alquimia codes ready, then comment the following line out.
+! use_alquimia = .true.
+use_alquimia = .true.
+
+! when alquimia and pflotran bgc are coupled into ELM, add the following file (saved here).
+! otherwise, 'use_alquimia = .true.' would only test EMI interface with data passing. 
+! alquimia_inputfile = '$DIN_LOC_ROOT/lnd/clm2/pflotran/CTC_alquimia_forELM_O2consuming.in'
+alquimia_inputfile = '$DIN_LOC_ROOT/lnd/clm2/pflotran/CTC_alquimia_forELM_O2consuming.in'
