@@ -240,8 +240,18 @@ contains
         if (atm2lnd_vars%loaded_bypassdata == 0) then
           !meteorological forcing
           if (index(metdata_type, 'qian') .gt. 0) then 
+<<<<<<< HEAD
             atm2lnd_vars%metsource = 0   
           else if (index(metdata_type,'cru') .gt. 0 .and. index(metdata_type,'jra') .le. 0) then
+=======
+            atm2lnd_vars%metsource = 0
+          else if (index(metdata_type,'crujra') .gt. 0) then
+            ! add crujra.trendy metsource flag
+            ! note this needs to be here, above just "cru"
+            ! to prevent setting the flag to base cru (1)
+            atm2lnd_vars%metsource = 6     
+          else if (index(metdata_type,'cru') .gt. 0) then
+>>>>>>> 0f86691d89 (Extended lnd_import_export.F90 for using CRUJCRA.trendy met files)
             atm2lnd_vars%metsource = 1  
           else if (index(metdata_type,'site') .gt. 0) then 
             atm2lnd_vars%metsource = 2
@@ -322,6 +332,9 @@ contains
             atm2lnd_vars%endyear_met_trans = 2012 
           else if (atm2lnd_vars%metsource == 4) then 
             atm2lnd_vars%endyear_met_trans  = 2014
+           else if (atm2lnd_vars%metsource == 6) then 
+            ! added for crujra.trendy
+            atm2lnd_vars%endyear_met_trans = 2024
           else if (atm2lnd_vars%metsource == 5) then
             atm2lnd_vars%startyear_met      = 566 !76
             atm2lnd_vars%endyear_met_spinup = 590 !100
@@ -446,6 +459,9 @@ contains
                 else if (use_daymet .and. ztoget .ge. 16 .and. ztoget .le. 20) then 
                     metdata_fname = 'GSWP3_Daymet3_' // trim(metvars(v)) // '_1980-2010_z' // zst(2:3) // '.nc' 
                 end if
+            else if (atm2lnd_vars%metsource == 6) then
+              ! added for crujra.trendy
+              metdata_fname = 'elmforc.TRENDY.c2025_0.5x0.5_' // trim(metvars(v)) // '_1901-2024_z' // zst(2:3) // '.nc'
             else if (atm2lnd_vars%metsource == 5) then 
                     !metdata_fname = 'WCYCL1850S.ne30_' // trim(metvars(v)) // '_0076-0100_z' // zst(2:3) // '.nc'
                     metdata_fname = 'CBGC1850S.ne30_' // trim(metvars(v)) // '_0566-0590_z' // zst(2:3) // '.nc'
