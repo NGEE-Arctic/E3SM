@@ -4,6 +4,11 @@ module ActiveLayerMod
   ! !DESCRIPTION:
   ! Module holding routines for calculation of active layer dynamics
   !
+  ! NOTE (Implementation Update): Excess ice melting is now handled thermodynamically
+  ! in PhaseChange_beta (SoilTemperatureMod.F90) rather than geometrically in this module.
+  ! The geometric melting approach and associated frac_melted tracking have been removed.
+  ! Active layer depth calculations remain unchanged for diagnostic purposes.
+  !
   ! !USES:
   use shr_kind_mod    , only : r8 => shr_kind_r8
   use shr_const_mod   , only : SHR_CONST_TKFRZ
