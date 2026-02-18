@@ -836,7 +836,7 @@ contains
     use elm_varcon      , only : denh2o, denice, tfrz, tkwat, tkice, tkair, cpice,  cpliq, thk_bedrock
     use landunit_varcon , only : istice, istice_mec, istwet
     use column_varcon   , only : icol_roof, icol_sunwall, icol_shadewall, icol_road_perv, icol_road_imperv
-    use elm_varctl      , only : iulog, use_T_rho_dependent_snowthk
+    use elm_varctl      , only : iulog, use_T_rho_dependent_snowthk, use_polygonal_tundra
     !
     ! !ARGUMENTS:
     type(bounds_type)      , intent(in)    :: bounds
@@ -895,6 +895,7 @@ contains
          h2osno       =>    col_ws%h2osno            , & ! Input:  [real(r8) (:)   ]  snow water (mm H2O)
          h2osoi_liq   =>    col_ws%h2osoi_liq   , & ! Input:  [real(r8) (:,:) ]  liquid water (kg/m2)
          h2osoi_ice   =>    col_ws%h2osoi_ice   , & ! Input:  [real(r8) (:,:) ]  ice lens (kg/m2)
+         excess_ice   =>    col_ws%excess_ice   , & ! Input:  [real(r8) (:,:) ]  excess ice (kg/m2)
          bw           =>    col_ws%bw        , & ! Output: [real(r8) (:,:) ]  partial density of water in the snow pack (ice + liquid) [kg/m3]
 
          tkmg         =>    soilstate_vars%tkmg_col          , & ! Input:  [real(r8) (:,:) ]  thermal conductivity, soil minerals  [W/m-K]
@@ -928,7 +929,13 @@ contains
                     .AND. col_pp%itype(c) /= icol_sunwall .AND. col_pp%itype(c) /= icol_shadewall .AND. &
                     col_pp%itype(c) /= icol_roof) then
 
-                  satw = (h2osoi_liq(c,j)/denh2o + h2osoi_ice(c,j)/denice)/(dz(c,j)*watsat(c,j))
+                  ! Add excess ice to saturation calculation for polygonal tundra
+                  if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
+                     satw = (h2osoi_liq(c,j)/denh2o + h2osoi_ice(c,j)/denice + &
+                             excess_ice(c,j)/denice) / (dz(c,j)*watsat(c,j))
+                  else
+                     satw = (h2osoi_liq(c,j)/denh2o + h2osoi_ice(c,j)/denice)/(dz(c,j)*watsat(c,j))
+                  end if
                   satw = min(1._r8, satw)
                   if (satw > .1e-6_r8) then
                      if (t_soisno(c,j) >= tfrz) then       ! Unfrozen soil
@@ -938,6 +945,14 @@ contains
                      end if
                      fl = (h2osoi_liq(c,j)/(denh2o*dz(c,j))) / (h2osoi_liq(c,j)/(denh2o*dz(c,j)) + &
                           h2osoi_ice(c,j)/(denice*dz(c,j)))
+                     
+                     ! Update liquid fraction for polygonal tundra to include excess ice
+                     if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
+                        fl = (h2osoi_liq(c,j)/(denh2o*dz(c,j))) / &
+                             (h2osoi_liq(c,j)/(denh2o*dz(c,j)) + &
+                              h2osoi_ice(c,j)/(denice*dz(c,j)) + &
+                              excess_ice(c,j)/(denice*dz(c,j)))
+                     end if
                      dksat = tkmg(c,j)*tkwat**(fl*watsat(c,j))*tkice**((1._r8-fl)*watsat(c,j))
                      thk(c,j) = dke*dksat + (1._r8-dke)*tkdry(c,j)
                   else
@@ -1055,6 +1070,11 @@ contains
                  .AND. col_pp%itype(c) /= icol_sunwall .AND. col_pp%itype(c) /= icol_shadewall .AND. &
                  col_pp%itype(c) /= icol_roof) then
                cv(c,j) = csol(c,j)*(1._r8-watsat(c,j))*dz(c,j) + (h2osoi_ice(c,j)*cpice + h2osoi_liq(c,j)*cpliq)
+               
+               ! Add excess ice heat capacity for soil layers in polygonal tundra
+               if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
+                  cv(c,j) = cv(c,j) + excess_ice(c,j)*cpice
+               end if
             else if (lun_pp%itype(l) == istwet) then
                cv(c,j) = (h2osoi_ice(c,j)*cpice + h2osoi_liq(c,j)*cpliq)
                if (j > nlevbed) cv(c,j) = csol(c,j)*dz(c,j)
@@ -1320,8 +1340,9 @@ contains
     ! !USES:
       !$acc routine seq
     use elm_varpar       , only : nlevsno, nlevgrnd,nlevurb
-    use elm_varctl       , only : iulog
-    use elm_varcon       , only : tfrz, hfus, grav
+    use elm_varctl       , only : iulog, use_polygonal_tundra
+    use elm_varcon       , only : tfrz, hfus, grav, denice
+    use clm_time_manager , only : get_curr_date
     use column_varcon    , only : icol_roof, icol_sunwall, icol_shadewall, icol_road_perv
     use landunit_varcon  , only : istsoil, istcrop, istice_mec,istice
     !
@@ -1346,6 +1367,9 @@ contains
     real(r8) :: wice0 (bounds%begc:bounds%endc,-nlevsno+1:nlevgrnd)!initial mass of ice (kg/m2)
     real(r8) :: wliq0 (bounds%begc:bounds%endc,-nlevsno+1:nlevgrnd)!initial mass of liquid (kg/m2)
     real(r8) :: propor                             !proportionality constant (-)
+    real(r8) :: wexice0(bounds%begc:bounds%endc,-nlevsno+1:nlevgrnd) ! initial excess ice (kg/m2)
+    real(r8) :: xm2(bounds%begc:bounds%endc,-nlevsno+1:nlevgrnd)     ! excess melt for excess ice (kg/m2)
+    integer  :: year, mon, day, sec                ! for subsidence tracking since 1989
     
     character(len=64) :: event 
     !-----------------------------------------------------------------------
@@ -1369,6 +1393,8 @@ contains
          h2osoi_ice       =>    col_ws%h2osoi_ice      , & ! Output: [real(r8) (:,:) ] ice lens (kg/m2) (new)
          smp_i            =>    col_ws%smp_i           , & ! Output: [real(r8) (:,:) ] frozen water potential (mm)
          supercool        =>    col_ws%supercool       , & ! Output: [real(r8) (:,:) ] supercooled water (kg/m2)
+         excess_ice       =>    col_ws%excess_ice      , & ! InOut:  [real(r8) (:,:) ] excess ice (kg/m2)
+         iwp_subsidence   =>    col_ws%iwp_subsidence  , & ! InOut:  [real(r8) (:)   ] cumulative subsidence (m)
 
          qflx_snow_melt   =>    col_wf%qflx_snow_melt   , & ! Output: [real(r8) (:)   ] net snow melt
          qflx_snofrz_lyr  =>    col_wf%qflx_snofrz_lyr  , & ! Output: [real(r8) (:,:) ] snow freezing rate (positive definite) (col,lyr) [kg m-2 s-1]
@@ -1379,10 +1405,12 @@ contains
          qflx_glcice_melt_diag =>    col_wf%qflx_glcice_melt_diag , & ! Output: [real(r8) (:)   ] ice melt (positive definite) (mm H2O/s)
          qflx_snomelt     =>    col_wf%qflx_snomelt     , & ! Output: [real(r8) (:)   ] snow melt (mm H2O /s)
          qflx_snomelt_lyr     =>    col_wf%qflx_snomelt_lyr     , & ! Output: [real(r8) (:)   ] snow melt (mm H2O /s)
+         qflx_exice_melt  =>    col_wf%qflx_exice_melt_col  , & ! Output: [real(r8) (:,:) ] excess ice melt rate (kg/m2/s)
 
          eflx_snomelt     =>    col_ef%eflx_snomelt    , & ! Output: [real(r8) (:)   ] snow melt heat flux (W/m**2)
          eflx_snomelt_r   =>    col_ef%eflx_snomelt_r  , & ! Output: [real(r8) (:)   ] rural snow melt heat flux (W/m**2)
          eflx_snomelt_u   =>    col_ef%eflx_snomelt_u  , & ! Output: [real(r8) (:)   ] urban snow melt heat flux (W/m**2)
+         eflx_exice_melt  =>    col_ef%eflx_exice_melt_col  , & ! Output: [real(r8) (:)   ] excess ice latent heat (W/m2)
 
          xmf              =>    col_ef%xmf            , &
          fact             =>    col_es%fact                         , &
@@ -1406,6 +1434,8 @@ contains
          qflx_glcice_melt(c) = 0._r8
          qflx_glcice_melt_diag(c) = 0._r8
          qflx_snow_melt(c) = 0._r8
+         qflx_exice_melt(c,:) = 0._r8
+         eflx_exice_melt(c) = 0._r8
       end do
 
       do j = -nlevsno+1,nlevgrnd       ! all layers
@@ -1418,9 +1448,20 @@ contains
                tinc(c,j)     = 0._r8
                hm(c,j) = 0._r8
                xm(c,j) = 0._r8
+               xm2(c,j) = 0._r8
                wice0(c,j) = h2osoi_ice(c,j)
                wliq0(c,j) = h2osoi_liq(c,j)
-               wmass0(c,j) = h2osoi_ice(c,j) + h2osoi_liq(c,j)
+               wexice0(c,j) = 0._r8
+               
+               ! Store initial excess ice for soil layers
+               if (j >= 1 .and. use_polygonal_tundra) then
+                  l = col_pp%landunit(c)
+                  if (lun_pp%ispolygon(l)) then
+                     wexice0(c,j) = excess_ice(c,j)
+                  end if
+               end if
+               
+               wmass0(c,j) = h2osoi_ice(c,j) + h2osoi_liq(c,j) + wexice0(c,j)
             endif   ! end of snow layer if-block
          end do   ! end of column-loop
       enddo   ! end of level-loop
@@ -1582,23 +1623,65 @@ contains
                      endif
 
                      heatr = 0._r8
-                     if (xm(c,j) > 0._r8) then
-                        h2osoi_ice(c,j) = max(0._r8, wice0(c,j)-xm(c,j))
-                        heatr = hm(c,j) - hfus*(wice0(c,j)-h2osoi_ice(c,j))/dtime
-                     else if (xm(c,j) < 0._r8) then
+                     if (xm(c,j) > 0._r8) then  ! Melting
+                        ! First melt pore ice
+                        h2osoi_ice(c,j) = max(0._r8, wice0(c,j) - xm(c,j))
+                        
+                        ! Calculate surplus heat after melting pore ice
+                        xm2(c,j) = max(0._r8, xm(c,j) - wice0(c,j))
+                        
+                        ! For soil layers with excess ice, use surplus heat to melt excess ice
+                        if (j >= 1 .and. use_polygonal_tundra) then
+                           l = col_pp%landunit(c)
+                           if (lun_pp%ispolygon(l) .and. excess_ice(c,j) > 0._r8 .and. xm2(c,j) > 0._r8) then
+                              excess_ice(c,j) = max(0._r8, wexice0(c,j) - xm2(c,j))
+                           end if
+                           
+                           ! Heat residual including both pore ice and excess ice latent heat
+                           heatr = hm(c,j) - hfus * (wexice0(c,j) - excess_ice(c,j) + &
+                                                      wice0(c,j) - h2osoi_ice(c,j)) / dtime
+                        else
+                           ! Standard calculation (snow or non-polygonal soil)
+                           heatr = hm(c,j) - hfus * (wice0(c,j) - h2osoi_ice(c,j)) / dtime
+                        endif
+                        
+                     else if (xm(c,j) < 0._r8) then  ! Freezing
+                        ! Excess ice does NOT refreeze
                         if (j <= 0) then
                            h2osoi_ice(c,j) = min(wmass0(c,j), wice0(c,j)-xm(c,j))  ! snow
                         else
-                           if (wmass0(c,j) < supercool(c,j)) then
-                              h2osoi_ice(c,j) = 0._r8
+                           if (use_polygonal_tundra) then
+                              l = col_pp%landunit(c)
+                              if (lun_pp%ispolygon(l)) then
+                                 ! Exclude excess ice from freezable water
+                                 if (wmass0(c,j) - wexice0(c,j) < supercool(c,j)) then
+                                    h2osoi_ice(c,j) = 0._r8
+                                 else
+                                    h2osoi_ice(c,j) = min(wmass0(c,j) - wexice0(c,j) - supercool(c,j), &
+                                                           wice0(c,j) - xm(c,j))
+                                 end if
+                              else
+                                 ! Standard freezing for non-polygonal
+                                 if (wmass0(c,j) < supercool(c,j)) then
+                                    h2osoi_ice(c,j) = 0._r8
+                                 else
+                                    h2osoi_ice(c,j) = min(wmass0(c,j) - supercool(c,j), wice0(c,j)-xm(c,j))
+                                 end if
+                              end if
                            else
-                              h2osoi_ice(c,j) = min(wmass0(c,j) - supercool(c,j),wice0(c,j)-xm(c,j))
-                           endif
+                              ! Standard freezing
+                              if (wmass0(c,j) < supercool(c,j)) then
+                                 h2osoi_ice(c,j) = 0._r8
+                              else
+                                 h2osoi_ice(c,j) = min(wmass0(c,j) - supercool(c,j),wice0(c,j)-xm(c,j))
+                              endif
+                           end if
                         endif
                         heatr = hm(c,j) - hfus*(wice0(c,j)-h2osoi_ice(c,j))/dtime
                      endif
 
-                     h2osoi_liq(c,j) = max(0._r8,wmass0(c,j)-h2osoi_ice(c,j))
+                     ! Update liquid water including melted excess ice
+                     h2osoi_liq(c,j) = max(0._r8,wmass0(c,j)-h2osoi_ice(c,j)-excess_ice(c,j))
 
                      if (abs(heatr) > 0._r8) then
                         if (j == snl(c)+1) then
@@ -1629,8 +1712,24 @@ contains
                      endif  ! end of heatr > 0 if-block
 
                      if (j >= 1) then
-                        xmf(c) = xmf(c) + hfus*(wice0(c,j)-h2osoi_ice(c,j))/dtime
+                        ! Calculate melt fluxes including excess ice
+                        if (use_polygonal_tundra) then
+                           l = col_pp%landunit(c)
+                           if (lun_pp%ispolygon(l)) then
+                              ! Excess ice melt flux (kg/m2/s)
+                              qflx_exice_melt(c,j) = max(0._r8, (wexice0(c,j) - excess_ice(c,j)) / dtime)
+                              
+                              ! Total latent heat flux (pore ice + excess ice)
+                              xmf(c) = xmf(c) + hfus*(wice0(c,j) - h2osoi_ice(c,j))/dtime + &
+                                                hfus*(wexice0(c,j) - excess_ice(c,j))/dtime
+                           else
+                              xmf(c) = xmf(c) + hfus*(wice0(c,j)-h2osoi_ice(c,j))/dtime
+                           end if
+                        else
+                           xmf(c) = xmf(c) + hfus*(wice0(c,j)-h2osoi_ice(c,j))/dtime
+                        end if
                      else
+                        ! Snow layers
                         xmf(c) = xmf(c) + hfus*(wice0(c,j)-h2osoi_ice(c,j))/dtime
                      endif
 
@@ -1692,6 +1791,34 @@ contains
             eflx_snomelt_u(c) = eflx_snomelt(c)
          else if (col_pp%is_soil(c) .or. col_pp%is_crop(c)) then
             eflx_snomelt_r(c) = eflx_snomelt(c)
+         end if
+      end do
+      
+      ! Calculate excess ice energy flux (following snow melt pattern)
+      ! and update cumulative subsidence since 1989
+      call get_curr_date(year, mon, day, sec)
+      
+      do fc = 1,num_nolakec
+         c = filter_nolakec(fc)
+         
+         ! Column-integrated excess ice latent heat flux (W/m2)
+         eflx_exice_melt(c) = 0._r8
+         
+         if (use_polygonal_tundra) then
+            l = col_pp%landunit(c)
+            if (lun_pp%ispolygon(l)) then
+               ! Sum across all layers for energy flux
+               do j = 1, nlevgrnd
+                  eflx_exice_melt(c) = eflx_exice_melt(c) + qflx_exice_melt(c,j) * hfus
+                  
+                  ! Update cumulative subsidence since 1989
+                  ! (volume change = mass / density)
+                  if (year >= 1989 .and. wexice0(c,j) > excess_ice(c,j)) then
+                     iwp_subsidence(c) = iwp_subsidence(c) + &
+                                         (wexice0(c,j) - excess_ice(c,j)) / denice
+                  end if
+               end do
+            end if
          end if
       end do
 
