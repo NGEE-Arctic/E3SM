@@ -176,11 +176,12 @@ module ColumnDataType
     real(r8), pointer :: iwp_exclvol      (:) => null() ! ice wedge polygon excluded volume (m)
     real(r8), pointer :: iwp_ddep         (:) => null() ! ice wedge polygon depression depth (m)
     real(r8), pointer :: iwp_subsidence   (:) => null() ! ice wedge polygon ground subsidence (m)
-    real(r8), pointer :: excess_ice     (:,:) => null() ! excess ground ice in column (1:nlevgrnd) (0 to 1)
-    real(r8), pointer :: frac_melted    (:,:) => null() ! fraction of layer that has ever thawed (for tracking excess ice removal) (0 to 1)
-    real(r8), pointer :: h2osfc_p         (:) => null() ! h2osfc from previous timestep (inundation fraction is calculated based on this var)
     real(r8), pointer :: supercool      (:,:) => null() ! supercooled liquid water in soil (kg/m2)
     real(r8), pointer :: smp_i          (:,:) => null() ! frozen water potential
+    real(r8), pointer :: excess_ice          (:,:) => null() ! excess ground ice mass (kg/m2) (1:nlevgrnd)
+    real(r8), pointer :: excess_ice_volfrac  (:,:) => null() ! excess ice volumetric fraction (0 to 1) (1:nlevgrnd)
+    real(r8), pointer :: h2osfc_p         (:) => null() !!! DEBUG
+
   contains
     procedure, public :: Init    => col_ws_init
     procedure, public :: Restart => col_ws_restart
@@ -1478,8 +1479,8 @@ contains
       allocate(this%iwp_exclvol        (begc:endc))                   ; this%iwp_exclvol      (:) = spval
       allocate(this%iwp_ddep           (begc:endc))                   ; this%iwp_ddep         (:) = spval
       allocate(this%iwp_subsidence     (begc:endc))                   ; this%iwp_subsidence   (:) = spval
-      allocate(this%frac_melted        (begc:endc,1:nlevgrnd))        ; this%frac_melted    (:,:) = spval
       allocate(this%excess_ice         (begc:endc,1:nlevgrnd))        ; this%excess_ice     (:,:) = spval
+      allocate(this%excess_ice_volfrac (begc:endc,1:nlevgrnd))        ; this%excess_ice_volfrac(:,:) = spval
     end if
 
     !-----------------------------------------------------------------------
@@ -1521,14 +1522,17 @@ contains
       this%iwp_ddep(begc:endc)          = spval
       this%iwp_exclvol(begc:endc)       = spval
       this%iwp_microrel(begc:endc)      = spval
-      this%frac_melted(begc:endc,:)     = spval
       this%excess_ice(begc:endc,:)      = spval
+      this%excess_ice_volfrac(begc:endc,:) = spval
 
-      call hist_addfld2d (fname='EXCESS_ICE', units = '1', type2d='levgrnd', &
-           avgflag='A', long_name='Excess ground ice (0 to 1)', &
+      ! History output for excess ice mass per layer (for debugging)
+      call hist_addfld2d (fname='EXCESS_ICE', units='kg/m2', type2d='levgrnd', &
+           avgflag='A', long_name='excess ground ice mass per layer', &
            ptr_col=this%excess_ice, l2g_scale_type='veg')
+      
+      ! Cumulative subsidence since 1989
       call hist_addfld1d (fname="SUBSIDENCE", units='m', avgflag='A', &
-            long_name='ground subsidence (m)', ptr_col=this%iwp_subsidence)
+            long_name='cumulative ground subsidence since 1989', ptr_col=this%iwp_subsidence)
       call hist_addfld1d (fname="DEPRESS_DEPTH", units='m', avgflag='A', &
             long_name='microtopographic depression depth (m)', ptr_col=this%iwp_ddep)
       call hist_addfld1d (fname="EXCLUDED_VOL", units='m', avgflag='A', &
@@ -1536,9 +1540,6 @@ contains
             ptr_col=this%iwp_exclvol)
       call hist_addfld1d (fname="MICROREL", units='m', avgflag='A', &
             long_name='microtopographic relief (m)', ptr_col=this%iwp_microrel)
-      call hist_addfld2d (fname="FRAC_MELTED", units='-', type2d='levgrnd', &
-            avgflag='A', long_name='fraction of layer that has melted (-)', &
-            ptr_col=this%frac_melted, l2g_scale_type='veg')
     endif
     !/polygonal tundra
 
@@ -1883,10 +1884,31 @@ contains
 
        this%h2osoi_liq_old(c,:) = this%h2osoi_liq(c,:)
        this%h2osoi_ice_old(c,:) = this%h2osoi_ice(c,:)
-       if (use_polygonal_tundra) then
-         this%excess_ice(c,:) = 0.36_r8
+       if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
+         ! Initialize volumetric fraction to 36%
+         this%excess_ice_volfrac(c,:) = 0.36_r8
+         
+         ! Convert to mass (kg/m2)
+         do j = 1, nlevgrnd
+            this%excess_ice(c,j) = this%excess_ice_volfrac(c,j) * col_pp%dz(c,j) * denice
+         end do
+         
          this%iwp_subsidence(c) = 0._r8
-         this%frac_melted(c,:)  = 0._r8
+         
+         ! set initial microtopographic parameters
+         if (lun_pp%polygontype(l) .eq. ilowcenpoly) then
+            this%iwp_microrel(c) = 0.4_r8
+            this%iwp_exclvol(c) = 0.2_r8
+            this%iwp_ddep(c) = 0.15_r8
+         else if (lun_pp%polygontype(l) .eq. iflatcenpoly) then
+            this%iwp_microrel(c) = 0.1_r8
+            this%iwp_exclvol(c) = 0.05_r8
+            this%iwp_ddep(c) = 0.01_r8
+         else if (lun_pp%polygontype(l) .eq. ihighcenpoly) then
+            this%iwp_microrel(c) = 0.4_r8
+            this%iwp_exclvol(c) = 0.2_r8
+            this%iwp_ddep(c) = 0.05_r8
+         endif
        end if
     end do
 
@@ -1942,13 +1964,54 @@ contains
          interpinic_flag='interp', readvar=readvar, data=this%h2osoi_ice)
 
     if (use_polygonal_tundra) then
-      call restartvar(ncid=ncid, flag=flag, varname='EXCESS_ICE', xtype=ncd_double, &
+      ! Write/read volumetric fraction with new name
+      call restartvar(ncid=ncid, flag=flag, varname='EXCESS_ICE_FRAC', xtype=ncd_double, &
            dim1name='column', dim2name='levgrnd', switchdim=.true., &
-           long_name='excess ground ice (0 to 1)', units='1', &
-           interpinic_flag='interp', readvar=readvar, data=this%excess_ice)
+           long_name='excess ground ice volumetric fraction (0 to 1)', units='1', &
+           interpinic_flag='interp', readvar=readvar, data=this%excess_ice_volfrac)
+      
+      ! Convert between volumetric and mass
+      if (flag == 'read') then
+          ! Backward compatibility: try old name if new name fails
+          if (.not. readvar) then
+              call restartvar(ncid=ncid, flag=flag, varname='EXCESS_ICE', xtype=ncd_double, &
+                   dim1name='column', dim2name='levgrnd', switchdim=.true., &
+                   long_name='excess ground ice (old format)', units='1', &
+                   interpinic_flag='interp', readvar=readvar, data=this%excess_ice_volfrac)
+              if (readvar) then
+                  write(iulog,*) 'Read EXCESS_ICE from old format, converted to EXCESS_ICE_FRAC'
+              end if
+          end if
+          
+          ! Convert from volumetric to mass
+          do c = bounds%begc, bounds%endc
+              l = col_pp%landunit(c)
+              if (lun_pp%ispolygon(l)) then
+                  do j = 1, nlevgrnd
+                      this%excess_ice(c,j) = this%excess_ice_volfrac(c,j) * col_pp%dz(c,j) * denice
+                  end do
+              end if
+          end do
+      else if (flag == 'write') then
+          ! Convert from mass to volumetric before writing
+          do c = bounds%begc, bounds%endc
+              l = col_pp%landunit(c)
+              if (lun_pp%ispolygon(l)) then
+                  do j = 1, nlevgrnd
+                      if (col_pp%dz(c,j) > 0._r8) then
+                          this%excess_ice_volfrac(c,j) = this%excess_ice(c,j) / (col_pp%dz(c,j) * denice)
+                      else
+                          this%excess_ice_volfrac(c,j) = 0._r8
+                      end if
+                  end do
+              end if
+          end do
+      end if
+      
+      ! SUBSIDENCE - cumulative tracking since 1989
       call restartvar(ncid=ncid, flag=flag, varname='SUBSIDENCE', xtype=ncd_double, &
            dim1name='column', &
-           long_name='ground subsidence', units='m', &
+           long_name='cumulative ground subsidence since 1989', units='m', &
            interpinic_flag='interp', readvar=readvar, data=this%iwp_subsidence)
       call restartvar(ncid=ncid, flag=flag, varname='DEPRESS_DEPTH', xtype=ncd_double, &
            dim1name='column', &
@@ -1962,10 +2025,6 @@ contains
            dim1name='column', &
            long_name='microtopographic relief', units='m', &
            interpinic_flag='interp', readvar=readvar, data=this%iwp_microrel)
-      call restartvar(ncid=ncid, flag=flag, varname='FRAC_MELTED', xtype=ncd_double, &
-           dim1name='column', dim2name='levgrnd', switchdim=.true., &
-           long_name='fraction of layer that has ever melted', units='-', &
-           interpinic_flag='interp', readvar=readvar, data=this%frac_melted)
     end if
 
     call restartvar(ncid=ncid, flag=flag, varname='SOILP', xtype=ncd_double,  &
