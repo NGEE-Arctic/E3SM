@@ -20,6 +20,7 @@ module initVerticalMod
   use elm_varctl     , only : use_vancouver, use_mexicocity, use_vertsoilc, use_extralakelayers, use_extrasnowlayers
   use elm_varctl     , only : use_erosion, use_polygonal_tundra
   use elm_varcon     , only : zlak, dzlak, zsoi, dzsoi, zisoi, dzsoi_decomp, spval, grlnd
+  use histFileMod    , only : hist_addfld2d
   use column_varcon  , only : icol_roof, icol_sunwall, icol_shadewall, icol_road_perv, icol_road_imperv
   use landunit_varcon, only : istdlak, istice_mec
   use fileutils      , only : getfil
@@ -82,10 +83,11 @@ contains
     real(r8), allocatable :: dzurb_roof(:,:)   ! roof (layer thickness)
     real(r8), allocatable :: ziurb_wall(:,:)   ! wall (layer interface)
     real(r8), allocatable :: ziurb_roof(:,:)   ! roof (layer interface)
-    real(r8)              :: depthratio        ! ratio of lake depth to standard deep lake depth 
+    real(r8)              :: depthratio        ! ratio of lake depth to standard deep lake depth
     integer               :: begc, endc
     integer               :: begl, endl
     character(len=256), dimension(ndtbname) :: dtbname ! List of possible names for depth to bedrock
+    real(r8), pointer     :: data2dptr(:,:)    ! temp. pointer for slicing snow+soil arrays
     !------------------------------------------------------------------------
 
     begc = bounds%begc; endc= bounds%endc
@@ -380,11 +382,13 @@ contains
              col_pp%z(c,1:nlevgrnd)  = zsoi(1:nlevgrnd)
              col_pp%zi(c,0:nlevgrnd) = zisoi(0:nlevgrnd)
              col_pp%dz(c,1:nlevgrnd) = dzsoi(1:nlevgrnd)
+             col_pp%dz_ref(c,1:nlevgrnd) = dzsoi(1:nlevgrnd)
           end if
        else if (lun_pp%itype(l) /= istdlak) then
           col_pp%z(c,1:nlevgrnd)  = zsoi(1:nlevgrnd)
           col_pp%zi(c,0:nlevgrnd) = zisoi(0:nlevgrnd)
           col_pp%dz(c,1:nlevgrnd) = dzsoi(1:nlevgrnd)
+          col_pp%dz_ref(c,1:nlevgrnd) = dzsoi(1:nlevgrnd)
        end if
     end do
 
@@ -510,6 +514,7 @@ contains
           col_pp%z(c,1:nlevgrnd)  = zsoi(1:nlevgrnd)
           col_pp%zi(c,0:nlevgrnd) = zisoi(0:nlevgrnd)
           col_pp%dz(c,1:nlevgrnd) = dzsoi(1:nlevgrnd)
+          col_pp%dz_ref(c,1:nlevgrnd) = dzsoi(1:nlevgrnd)
        end if
     end do
 
@@ -766,6 +771,14 @@ contains
          slope0 = slopemax**(-1._r8/slopebeta)
          col_pp%micro_sigma(c) = (col_pp%topo_slope(c) + slope0)**(-slopebeta)
       end do
+
+    !-----------------------------------------------
+    ! Register history field for deformed soil layer thickness
+    !-----------------------------------------------
+    data2dptr => col_pp%dz(:,1:nlevgrnd)
+    call hist_addfld2d (fname='DZ_SOIL', units='m', type2d='levgrnd', avgflag='A', &
+         long_name='Soil layer thickness (deformed by excess ice where present)', &
+         ptr_col=data2dptr, l2g_scale_type='veg', default='inactive')
 
     call ncd_pio_closefile(ncid)
 
