@@ -1345,6 +1345,7 @@ contains
     use elm_time_manager , only : get_curr_date
     use column_varcon    , only : icol_roof, icol_sunwall, icol_shadewall, icol_road_perv
     use landunit_varcon  , only : istsoil, istcrop, istice_mec,istice
+    use ExcessIceMod     , only : recompute_layer_geometry
     !
     ! !ARGUMENTS:
     type(bounds_type)      , intent(in)    :: bounds
@@ -1823,6 +1824,17 @@ contains
             end if
          end if
       end do
+
+      ! Update layer geometry for polygon tundra columns after excess ice change
+      if (use_polygonal_tundra) then
+         do fc = 1, num_nolakec
+            c = filter_nolakec(fc)
+            l = col_pp%landunit(c)
+            if (lun_pp%ispolygon(l)) then
+               call recompute_layer_geometry(c)
+            end if
+         end do
+      end if
 
       call t_stop_lnd( event )
       do j = -nlevsno+1,0
