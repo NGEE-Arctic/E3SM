@@ -426,6 +426,7 @@ module ColumnDataType
     real(r8), pointer :: eflx_snomelt            (:)   => null() ! snow melt heat flux (W/m**2)
     real(r8), pointer :: eflx_snomelt_r          (:)   => null() ! rural snow melt heat flux (W/m2)
     real(r8), pointer :: eflx_snomelt_u          (:)   => null() ! urban snow melt heat flux (W/m2)
+    real(r8), pointer :: eflx_exice_melt         (:)   => null() ! excess ice melt latent heat flux (W/m2)
     real(r8), pointer :: eflx_bot                (:)   => null() ! heat flux from beneath the soil or ice column (W/m2)
     real(r8), pointer :: eflx_fgr12              (:)   => null() ! ground heat flux between soil layers 1 and 2 (W/m2)
     real(r8), pointer :: eflx_fgr                (:,:) => null() ! (rural) soil downward heat flux (W/m2) (1:nlevgrnd)  (pos upward; usually eflx_bot >= 0)
@@ -508,6 +509,7 @@ module ColumnDataType
     real(r8), pointer :: qflx_snomelt         (:)   => null() ! snow melt (mm H2O /s)
     real(r8), pointer :: qflx_snow_melt       (:)   => null() ! snow melt (net)
     real(r8), pointer :: qflx_snomelt_lyr     (:,:) => null() ! snow melt (net)
+    real(r8), pointer :: qflx_exice_melt      (:,:) => null() ! excess ice melt (kg/m2/s) per layer
     real(r8), pointer :: qflx_qrgwl           (:)   => null() ! qflx_surf at glaciers, wetlands, lakes
     real(r8), pointer :: qflx_runoff          (:)   => null() ! total runoff (qflx_drain+qflx_surf+qflx_qrgwl) (mm H2O /s)
     real(r8), pointer :: qflx_runoff_r        (:)   => null() ! Rural total runoff (qflx_drain+qflx_surf+qflx_qrgwl) (mm H2O /s)
@@ -1777,9 +1779,6 @@ contains
                    else
                       this%h2osoi_vol(c,j) = 0.15_r8
                    endif
-                   if (use_polygonal_tundra) then
-                     this%frac_melted(c,j) = 0._r8
-                   end if
                 endif
              end do
           else if (lun_pp%urbpoi(l)) then
@@ -5747,6 +5746,7 @@ contains
     allocate(this%eflx_snomelt         (begc:endc))              ; this%eflx_snomelt         (:)   = spval
     allocate(this%eflx_snomelt_r       (begc:endc))              ; this%eflx_snomelt_r       (:)   = spval
     allocate(this%eflx_snomelt_u       (begc:endc))              ; this%eflx_snomelt_u       (:)   = spval
+    allocate(this%eflx_exice_melt      (begc:endc))              ; this%eflx_exice_melt      (:)   = spval
     allocate(this%eflx_bot             (begc:endc))              ; this%eflx_bot             (:)   = spval
     allocate(this%eflx_fgr12           (begc:endc))              ; this%eflx_fgr12           (:)   = spval
     allocate(this%eflx_fgr             (begc:endc, 1:nlevgrnd))  ; this%eflx_fgr             (:,:) = spval
@@ -5791,7 +5791,10 @@ contains
      call hist_addfld1d (fname='FSM_U',  units='W/m^2',  &
           avgflag='A', long_name='Urban snow melt heat flux', &
            ptr_col=this%eflx_snomelt_u, c2l_scale_type='urbanf', set_nourb=spval)
-
+    this%eflx_exice_melt(begc:endc) = spval
+     call hist_addfld1d (fname='EXICE_MELT_COL',  units='W/m^2',  &
+          avgflag='A', long_name='Excess ice melt latent heat flux', &
+           ptr_col=this%eflx_exice_melt, c2l_scale_type='urbanf', set_nourb=spval)
     this%eflx_building_heat(begc:endc) = spval
      call hist_addfld1d (fname='BUILDHEAT', units='W/m^2',  &
           avgflag='A', long_name='heat flux from urban building interior to walls and roof', &
@@ -5962,6 +5965,7 @@ contains
     allocate(this%qflx_snomelt           (begc:endc))             ; this%qflx_snomelt         (:)   = spval
     allocate(this%qflx_snomelt_lyr       (begc:endc,-nlevsno+1:0)) ; this%qflx_snomelt_lyr    (:,:) = spval
     allocate(this%qflx_snow_melt         (begc:endc))             ; this%qflx_snow_melt       (:)   = spval
+    allocate(this%qflx_exice_melt        (begc:endc,1:nlevgrnd))  ; this%qflx_exice_melt      (:,:) = spval
     allocate(this%qflx_qrgwl             (begc:endc))             ; this%qflx_qrgwl           (:)   = spval
     allocate(this%qflx_runoff            (begc:endc))             ; this%qflx_runoff          (:)   = spval
     allocate(this%qflx_runoff_r          (begc:endc))             ; this%qflx_runoff_r        (:)   = spval
