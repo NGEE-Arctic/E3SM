@@ -1682,9 +1682,18 @@ contains
                         heatr = hm(c,j) - hfus*(wice0(c,j)-h2osoi_ice(c,j))/dtime
                      endif
 
-                     ! Update liquid water including melted excess ice
-                     h2osoi_liq(c,j) = max(0._r8,wmass0(c,j)-h2osoi_ice(c,j)-excess_ice(c,j))
-                     
+                     ! Update liquid water, subtracting excess ice only for polygon tundra soil layers
+                     if (j >= 1 .and. use_polygonal_tundra) then
+                        l = col_pp%landunit(c)
+                        if (lun_pp%ispolygon(l)) then
+                           h2osoi_liq(c,j) = max(0._r8,wmass0(c,j)-h2osoi_ice(c,j)-excess_ice(c,j))
+                        else
+                           h2osoi_liq(c,j) = max(0._r8,wmass0(c,j)-h2osoi_ice(c,j))
+                        end if
+                     else
+                        h2osoi_liq(c,j) = max(0._r8,wmass0(c,j)-h2osoi_ice(c,j))
+                     end if
+
                      if (abs(heatr) > 0._r8) then
                         if (j == snl(c)+1) then
 
