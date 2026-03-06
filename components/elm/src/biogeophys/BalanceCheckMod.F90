@@ -237,6 +237,7 @@ contains
           qflx_to_downhill           =>    col_wf%qflx_to_downhill        , & ! Input:  [real(r8) (:)   ]  sent to downhill topounit
           qflx_h2osfc_surf           =>    col_wf%qflx_h2osfc_surf        , & ! Input:  [real(r8) (:)   ]  surface water runoff (mm/s)
           qflx_snow_melt             =>    col_wf%qflx_snow_melt          , & ! Input:  [real(r8) (:)   ]  snow melt (net)
+          qflx_exice_melt             =>   col_wf%qflx_exice_melt         , & ! Input:  [real(r8) (:,:)   ]  excess ice melt (kg/m2/s)
           qflx_surf                  =>    col_wf%qflx_surf               , & ! Input:  [real(r8) (:)   ]  surface runoff (mm H2O /s)
           qflx_qrgwl                 =>    col_wf%qflx_qrgwl              , & ! Input:  [real(r8) (:)   ]  qflx_surf at glaciers, wetlands, lakes
           qflx_drain                 =>    col_wf%qflx_drain              , & ! Input:  [real(r8) (:)   ]  sub-surface runoff (mm H2O /s)
@@ -442,6 +443,7 @@ contains
              write(iulog,*)'qflx_glcice_frz            = ',qflx_glcice_frz(indexc)
              write(iulog,*)'qflx_lateral               = ',qflx_lateral(indexc)
              write(iulog,*)'qflx_lnd2ocn               = ',qflx_lnd2ocn(indexc)
+             write(iulog,*)'qflx_exice_melt            = ',qflx_exice_melt(indexc,:)
              write(iulog,*)'total_plant_stored_h2o_col = ',total_plant_stored_h2o_col(indexc)
              write(iulog,*)'qflx_h2orof_drain          = ',qflx_h2orof_drain(indexc)
              write(iulog,*)'qflx_ice_runoff_xs         = ',qflx_ice_runoff_xs(indexc)

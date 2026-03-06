@@ -79,9 +79,8 @@ module WaterfluxType
      real(r8), pointer :: qflx_deficit_col         (:)   ! col water deficit to keep non-negative liquid water content (mm H2O)   
      real(r8), pointer :: qflx_floodc_col          (:)   ! col flood water flux at column level
      real(r8), pointer :: qflx_sl_top_soil_col     (:)   ! col liquid water + ice from layer above soil to top soil layer or sent to qflx_qrgwl (mm H2O/s)
-      real(r8), pointer :: qflx_snomelt_col         (:)   ! col snow melt (mm H2O /s)
-      real(r8), pointer :: qflx_exice_melt_col      (:,:) ! col excess ice melt rate (kg/m2/s) per layer
-      real(r8), pointer :: qflx_snow_melt_col       (:)   ! col snow melt (net)
+     real(r8), pointer :: qflx_snomelt_col         (:)   ! col snow melt (mm H2O /s)
+     real(r8), pointer :: qflx_snow_melt_col       (:)   ! col snow melt (net)
      real(r8), pointer :: qflx_qrgwl_col           (:)   ! col qflx_surf at glaciers, wetlands, lakes
      real(r8), pointer :: qflx_runoff_col          (:)   ! col total runoff (qflx_drain+qflx_surf+qflx_qrgwl) (mm H2O /s)
      real(r8), pointer :: qflx_runoff_r_col        (:)   ! col Rural total runoff (qflx_drain+qflx_surf+qflx_qrgwl) (mm H2O /s)
@@ -250,7 +249,6 @@ contains
     allocate(this%qflx_h2osfc_surf_col     (begc:endc))              ; this%qflx_h2osfc_surf_col     (:)   = nan
     allocate(this%qflx_snow_h2osfc_col     (begc:endc))              ; this%qflx_snow_h2osfc_col     (:)   = nan
     allocate(this%qflx_snomelt_col         (begc:endc))              ; this%qflx_snomelt_col         (:)   = nan
-    allocate(this%qflx_exice_melt_col      (begc:endc,1:nlevgrnd)) ; this%qflx_exice_melt_col      (:,:) = nan
     allocate(this%qflx_snow_melt_col       (begc:endc))              ; this%qflx_snow_melt_col       (:)   = nan
     allocate(this%qflx_snofrz_col          (begc:endc))              ; this%qflx_snofrz_col          (:)   = nan
     allocate(this%qflx_snofrz_lyr_col      (begc:endc,-nlevsno+1:0)) ; this%qflx_snofrz_lyr_col      (:,:) = nan

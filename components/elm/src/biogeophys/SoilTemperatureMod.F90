@@ -1342,7 +1342,7 @@ contains
     use elm_varpar       , only : nlevsno, nlevgrnd,nlevurb
     use elm_varctl       , only : iulog, use_polygonal_tundra
     use elm_varcon       , only : tfrz, hfus, grav, denice
-    use clm_time_manager , only : get_curr_date
+    use elm_time_manager , only : get_curr_date
     use column_varcon    , only : icol_roof, icol_sunwall, icol_shadewall, icol_road_perv
     use landunit_varcon  , only : istsoil, istcrop, istice_mec,istice
     !
@@ -1405,12 +1405,12 @@ contains
          qflx_glcice_melt_diag =>    col_wf%qflx_glcice_melt_diag , & ! Output: [real(r8) (:)   ] ice melt (positive definite) (mm H2O/s)
          qflx_snomelt     =>    col_wf%qflx_snomelt     , & ! Output: [real(r8) (:)   ] snow melt (mm H2O /s)
          qflx_snomelt_lyr     =>    col_wf%qflx_snomelt_lyr     , & ! Output: [real(r8) (:)   ] snow melt (mm H2O /s)
-         qflx_exice_melt  =>    col_wf%qflx_exice_melt_col  , & ! Output: [real(r8) (:,:) ] excess ice melt rate (kg/m2/s)
+         qflx_exice_melt  =>    col_wf%qflx_exice_melt  , & ! Output: [real(r8) (:,:) ] excess ice melt rate (kg/m2/s)
 
          eflx_snomelt     =>    col_ef%eflx_snomelt    , & ! Output: [real(r8) (:)   ] snow melt heat flux (W/m**2)
          eflx_snomelt_r   =>    col_ef%eflx_snomelt_r  , & ! Output: [real(r8) (:)   ] rural snow melt heat flux (W/m**2)
          eflx_snomelt_u   =>    col_ef%eflx_snomelt_u  , & ! Output: [real(r8) (:)   ] urban snow melt heat flux (W/m**2)
-         eflx_exice_melt  =>    col_ef%eflx_exice_melt_col  , & ! Output: [real(r8) (:)   ] excess ice latent heat (W/m2)
+         eflx_exice_melt  =>    col_ef%eflx_exice_melt  , & ! Output: [real(r8) (:)   ] excess ice latent heat (W/m2)
 
          xmf              =>    col_ef%xmf            , &
          fact             =>    col_es%fact                         , &
