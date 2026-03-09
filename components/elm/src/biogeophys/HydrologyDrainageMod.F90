@@ -50,7 +50,7 @@ contains
     use landunit_varcon  , only : istice, istwet, istsoil, istice_mec, istcrop, istice
     use column_varcon    , only : icol_roof, icol_road_imperv, icol_road_perv, icol_sunwall, icol_shadewall
     use elm_varcon       , only : denh2o, denice, secspday, frac_to_downhill
-    use elm_varctl       , only : glc_snow_persistence_max_days, use_vichydro, use_betr
+    use elm_varctl       , only : glc_snow_persistence_max_days, use_vichydro, use_betr, use_polygonal_tundra
     !use domainMod        , only : ldomain
     use elm_varsur         , only : f_surf
     use TopounitType       , only : top_pp
@@ -104,6 +104,7 @@ contains
          begwb                  => col_ws%begwb                  , & ! Input:  [real(r8) (:)   ]  water mass begining of the time step
          endwb                  => col_ws%endwb                  , & ! Output: [real(r8) (:)   ]  water mass end of the time step
          h2osoi_ice             => col_ws%h2osoi_ice             , & ! Output: [real(r8) (:,:) ]  ice lens (kg/m2)
+         excess_ice             => col_ws%excess_ice             , & ! Output? RPF [real(r8) (:,:) ] excess ice (kg/m2)
          h2osoi_liq             => col_ws%h2osoi_liq             , & ! Output: [real(r8) (:,:) ]  liquid water (kg/m2)
          h2osoi_vol             => col_ws%h2osoi_vol             , & ! Output: [real(r8) (:,:) ]  volumetric soil water (0<=h2osoi_vol<=watsat) [m3/m3]
          snow_persistence       => col_ws%snow_persistence       , & ! Output: [real(r8) (:)   ]  counter for length of time snow-covered
@@ -190,13 +191,20 @@ contains
       do j = 1, nlevgrnd
          do fc = 1, num_nolakec
             c = filter_nolakec(fc)
+            l = col_pp%landunit(c)
             if ((ctype(c) == icol_sunwall .or. ctype(c) == icol_shadewall &
                  .or. ctype(c) == icol_roof) .and. j > nlevurb) then
 
             else
-               endwb(c) = endwb(c) + h2osoi_ice(c,j) + h2osoi_liq(c,j)
-               h2osoi_liq_depth_intg(c) = h2osoi_liq_depth_intg(c) + h2osoi_liq(c,j)
-               h2osoi_ice_depth_intg(c) = h2osoi_ice_depth_intg(c) + h2osoi_ice(c,j)
+               if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
+                  endwb(c) = endwb(c) + h2osoi_ice(c,j) + h2osoi_liq(c,j) + excess_ice(c,j)
+                  h2osoi_liq_depth_intg(c) = h2osoi_liq_depth_intg(c) + h2osoi_liq(c,j)
+                  h2osoi_ice_depth_intg(c) = h2osoi_ice_depth_intg(c) + h2osoi_ice(c,j) + excess_ice(c,j)
+               else
+                  endwb(c) = endwb(c) + h2osoi_ice(c,j) + h2osoi_liq(c,j)
+                  h2osoi_liq_depth_intg(c) = h2osoi_liq_depth_intg(c) + h2osoi_liq(c,j)
+                  h2osoi_ice_depth_intg(c) = h2osoi_ice_depth_intg(c) + h2osoi_ice(c,j)
+               end if
             end if
          end do
       end do

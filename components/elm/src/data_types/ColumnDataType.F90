@@ -509,7 +509,8 @@ module ColumnDataType
     real(r8), pointer :: qflx_snomelt         (:)   => null() ! snow melt (mm H2O /s)
     real(r8), pointer :: qflx_snow_melt       (:)   => null() ! snow melt (net)
     real(r8), pointer :: qflx_snomelt_lyr     (:,:) => null() ! snow melt (net)
-    real(r8), pointer :: qflx_exice_melt      (:,:) => null() ! excess ice melt (kg/m2/s) per layer
+    real(r8), pointer :: qflx_exice_melt      (:)   => null() ! excess ice melt (mm H2O/s)
+    real(r8), pointer :: qflx_exice_melt_lyr  (:,:) => null() ! excess ice melt (kg/m2/s) per layer
     real(r8), pointer :: qflx_qrgwl           (:)   => null() ! qflx_surf at glaciers, wetlands, lakes
     real(r8), pointer :: qflx_runoff          (:)   => null() ! total runoff (qflx_drain+qflx_surf+qflx_qrgwl) (mm H2O /s)
     real(r8), pointer :: qflx_runoff_r        (:)   => null() ! Rural total runoff (qflx_drain+qflx_surf+qflx_qrgwl) (mm H2O /s)
@@ -1524,8 +1525,8 @@ contains
       this%iwp_ddep(begc:endc)          = spval
       this%iwp_exclvol(begc:endc)       = spval
       this%iwp_microrel(begc:endc)      = spval
-      this%excess_ice(begc:endc,:)      = spval
-      this%excess_ice_volfrac(begc:endc,:) = spval
+      this%excess_ice(begc:endc,:)      = 0._r8 ! specify as zero to avoid any excess ice in non-polygonal tundra cells
+      this%excess_ice_volfrac(begc:endc,:) = 0._r8
 
       ! History output for excess ice mass per layer (for debugging)
       call hist_addfld2d (fname='EXCESS_ICE', units='kg/m2', type2d='levgrnd', &
@@ -1772,10 +1773,8 @@ contains
                 if (j > nlevbed) then
                    this%h2osoi_vol(c,j) = 0.0_r8
                 else
-		             if (use_fates .or. use_hydrstress) then
+		             if (use_fates .or. use_hydrstress .or. use_arctic_init) then
                       this%h2osoi_vol(c,j) = 0.70_r8*watsat_input(c,j) !0.15_r8 to avoid very dry conditions that cause errors in FATES
-                   else if (use_arctic_init) then
-                      this%h2osoi_vol(c,j) = watsat_input(c,j) ! start saturated for arctic
                    else
                       this%h2osoi_vol(c,j) = 0.15_r8
                    endif
@@ -5965,7 +5964,8 @@ contains
     allocate(this%qflx_snomelt           (begc:endc))             ; this%qflx_snomelt         (:)   = spval
     allocate(this%qflx_snomelt_lyr       (begc:endc,-nlevsno+1:0)) ; this%qflx_snomelt_lyr    (:,:) = spval
     allocate(this%qflx_snow_melt         (begc:endc))             ; this%qflx_snow_melt       (:)   = spval
-    allocate(this%qflx_exice_melt        (begc:endc,1:nlevgrnd))  ; this%qflx_exice_melt      (:,:) = spval
+    allocate(this%qflx_exice_melt        (begc:endc))             ; this%qflx_exice_melt      (:)   = spval
+    allocate(this%qflx_exice_melt_lyr    (begc:endc,1:nlevgrnd))  ; this%qflx_exice_melt_lyr  (:,:) = spval
     allocate(this%qflx_qrgwl             (begc:endc))             ; this%qflx_qrgwl           (:)   = spval
     allocate(this%qflx_runoff            (begc:endc))             ; this%qflx_runoff          (:)   = spval
     allocate(this%qflx_runoff_r          (begc:endc))             ; this%qflx_runoff_r        (:)   = spval
@@ -6091,6 +6091,16 @@ contains
           avgflag='A', long_name='snow melt per snow layer', &
            ptr_col=this%qflx_snomelt_lyr,no_snow_behavior=no_snow_normal, c2l_scale_type='urbanf')
 
+    this%qflx_exice_melt(begc:endc) = spval
+     call hist_addfld1d (fname='QEXCESSICE',  units='mm/s',  &
+          avgflag='A', long_name='excess ice melt', &
+           ptr_col=this%qflx_exice_melt, c2l_scale_type='urbanf')
+
+    this%qflx_exice_melt_lyr(begc:endc,1:nlevgrnd) = spval
+     call hist_addfld2d (fname='QEXCESSICE_LYR',  units='mm/s',type2d='levgrnd',&
+          avgflag='A', long_name='excess ice per soil layer', &
+           ptr_col=this%qflx_exice_melt_lyr, c2l_scale_type='urbanf')
+
     this%qflx_qrgwl(begc:endc) = spval
      call hist_addfld1d (fname='QRGWL',  units='mm/s',  &
           avgflag='A', long_name='surface runoff at glaciers (liquid only), wetlands, lakes', &
@@ -6188,7 +6198,8 @@ contains
     this%qflx_dew_snow (begc:endc) = 0.0_r8
 
     this%qflx_h2osfc_surf(begc:endc) = 0._r8
-    this%qflx_snow_melt  (begc:endc)   = 0._r8
+    this%qflx_snow_melt  (begc:endc) = 0._r8
+    this%qflx_exice_melt (begc:endc) = 0._r8
 
     this%dwb(begc:endc) = 0._r8
     this%qflx_surf_irrig(begc:endc) = 0._r8
