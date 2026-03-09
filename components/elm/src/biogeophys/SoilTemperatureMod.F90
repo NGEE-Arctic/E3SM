@@ -1405,7 +1405,8 @@ contains
          qflx_glcice_melt_diag =>    col_wf%qflx_glcice_melt_diag , & ! Output: [real(r8) (:)   ] ice melt (positive definite) (mm H2O/s)
          qflx_snomelt     =>    col_wf%qflx_snomelt     , & ! Output: [real(r8) (:)   ] snow melt (mm H2O /s)
          qflx_snomelt_lyr     =>    col_wf%qflx_snomelt_lyr     , & ! Output: [real(r8) (:)   ] snow melt (mm H2O /s)
-         qflx_exice_melt  =>    col_wf%qflx_exice_melt  , & ! Output: [real(r8) (:,:) ] excess ice melt rate (kg/m2/s)
+         qflx_exice_melt_lyr  =>    col_wf%qflx_exice_melt_lyr  , & ! Output: [real(r8) (:,:) ] excess ice melt rate (kg/m2/s)
+         qflx_exice_melt  =>    col_wf%qflx_exice_melt,    & ! Output: [real(r8) (:) ] integrated excess ice melt (mm H2O/s)
 
          eflx_snomelt     =>    col_ef%eflx_snomelt    , & ! Output: [real(r8) (:)   ] snow melt heat flux (W/m**2)
          eflx_snomelt_r   =>    col_ef%eflx_snomelt_r  , & ! Output: [real(r8) (:)   ] rural snow melt heat flux (W/m**2)
@@ -1434,8 +1435,8 @@ contains
          qflx_glcice_melt(c) = 0._r8
          qflx_glcice_melt_diag(c) = 0._r8
          qflx_snow_melt(c) = 0._r8
-         qflx_exice_melt(c,:) = 0._r8
-         eflx_exice_melt(c) = 0._r8
+         qflx_exice_melt_lyr(c,:) = 0._r8
+         qflx_exice_melt(c) = 0._r8
       end do
 
       do j = -nlevsno+1,nlevgrnd       ! all layers
@@ -1633,7 +1634,7 @@ contains
                         ! For soil layers with excess ice, use surplus heat to melt excess ice
                         if (j >= 1 .and. use_polygonal_tundra) then
                            l = col_pp%landunit(c)
-                           if (lun_pp%ispolygon(l) .and. excess_ice(c,j) > 0._r8 .and. xm2(c,j) > 0._r8) then
+                           if (lun_pp%ispolygon(l) .and. excess_ice(c,j) > 0._r8 .and. xm2(c,j) > 0._r8) then 
                               excess_ice(c,j) = max(0._r8, wexice0(c,j) - xm2(c,j))
                            end if
                            
@@ -1682,7 +1683,7 @@ contains
 
                      ! Update liquid water including melted excess ice
                      h2osoi_liq(c,j) = max(0._r8,wmass0(c,j)-h2osoi_ice(c,j)-excess_ice(c,j))
-
+                     
                      if (abs(heatr) > 0._r8) then
                         if (j == snl(c)+1) then
 
@@ -1717,8 +1718,9 @@ contains
                            l = col_pp%landunit(c)
                            if (lun_pp%ispolygon(l)) then
                               ! Excess ice melt flux (kg/m2/s)
-                              qflx_exice_melt(c,j) = max(0._r8, (wexice0(c,j) - excess_ice(c,j)) / dtime)
-                              
+                              qflx_exice_melt_lyr(c,j) = max(0._r8, (wexice0(c,j) - excess_ice(c,j)) / dtime)
+                              qflx_exice_melt(c) = qflx_exice_melt(c) + max(0._r8, (wexice0(c,j) - excess_ice(c,j)) / dtime)
+
                               ! Total latent heat flux (pore ice + excess ice)
                               xmf(c) = xmf(c) + hfus*(wice0(c,j) - h2osoi_ice(c,j))/dtime + &
                                                 hfus*(wexice0(c,j) - excess_ice(c,j))/dtime
@@ -1809,7 +1811,7 @@ contains
             if (lun_pp%ispolygon(l)) then
                ! Sum across all layers for energy flux
                do j = 1, nlevgrnd
-                  eflx_exice_melt(c) = eflx_exice_melt(c) + qflx_exice_melt(c,j) * hfus
+                  eflx_exice_melt(c) = eflx_exice_melt(c) + qflx_exice_melt_lyr(c,j) * hfus
                   
                   ! Update cumulative subsidence since 1989
                   ! (volume change = mass / density)
