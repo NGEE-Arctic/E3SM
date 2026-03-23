@@ -33,8 +33,9 @@ module landunit_varcon
   integer, parameter, public :: istlowcenpoly  = 10 ! low centered polygon landunit type
   integer, parameter, public :: istflatcenpoly = 11 ! flat cenetered polygon landunit type
   integer, parameter, public :: isthighcenpoly = 12 ! high centered polygon landunit type
+  integer, parameter, public :: istunifiedpoly = 13 ! unified polygon landunit type (temporary while phasing over to new parameterization)
 
-  integer, parameter, public :: max_lunit  = 12  !maximum value that lun_pp%itype can have
+  integer, parameter, public :: max_lunit  = 13  !maximum value that lun_pp%itype can have
                                         !(i.e., largest value in the above list)
   integer, parameter, public :: max_non_poly_lunit = 9 ! maximum non-polygonal tundra land unit
 
@@ -45,8 +46,9 @@ module landunit_varcon
   integer, parameter, public :: ilowcenpoly     = 1     ! low-centered polygons
   integer, parameter, public :: iflatcenpoly    = 2     ! flat-centered polygons
   integer, parameter, public :: ihighcenpoly    = 3     ! high-centered polygons
+  integer, parameter, public :: iunifiedpoly    = 4     ! unified polygons (temporary while phasing over to new parameterization)
 
-  integer, parameter, public :: max_polygon = 3  !maximum value that lun_pp%polygontype can have
+  integer, parameter, public :: max_polygon = 4  !maximum value that lun_pp%polygontype can have
                                                  !(i.e., largest value in the above list)
 
   integer, parameter, public                   :: polygon_name_length = 40  ! max length of landunit names
@@ -135,6 +137,7 @@ contains
     polygon_names(ilowcenpoly) = 'low_centered_polygons'
     polygon_names(iflatcenpoly) = 'flat_centered_polygons'
     polygon_names(ihighcenpoly) = 'high_centered_polygons'
+    polygon_names(iunifiedpoly) = 'unified_polygons'
 
     if (any(polygon_names == not_set)) then
        call shr_sys_abort(trim(subname)//': Not all polygon names set')
@@ -157,7 +160,11 @@ contains
     !-----------------------------------------------------------------------
 
     if (use_polygonal_tundra) then
-      allocate(landunit_names(max_lunit))
+      if (unified_polygonal_tundra) then
+        allocate(landunit_names(max_lunit))
+      else
+        allocate(landunit_names(max_lunit - 1))
+      end if
     else
       allocate(landunit_names(max_non_poly_lunit))
     end if
@@ -177,6 +184,9 @@ contains
       landunit_names(istlowcenpoly) = 'low_centered_polygon'
       landunit_names(istflatcenpoly) = 'flat_centered_polygon'
       landunit_names(isthighcenpoly) = 'high_centered_polygon'
+      if (unified_polygonal_tundra) then
+        landunit_names(istunifiedpoly) = 'unified_polygon'
+      end if
     end if
 
     if (any(landunit_names == not_set)) then

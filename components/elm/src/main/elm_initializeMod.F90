@@ -98,8 +98,8 @@ contains
     use filterMod                 , only: allocFilters
     use reweightMod               , only: reweight_wrapup
     use topounit_varcon           , only: max_topounits, has_topounit, topounit_varcon_init
-    use elm_varctl                , only: use_top_solar_rad, use_polygonal_tundra
     use shr_log_mod               , only: errMsg => shr_log_errMsg
+    use elm_varctl                , only: use_top_solar_rad, use_polygonal_tundra, unified_polygonal_tundra
     !
     ! !LOCAL VARIABLES:
     integer           :: ier                     ! error status
@@ -304,7 +304,11 @@ contains
     ! Allocate surface grid dynamic memory (just gridcell bounds dependent)
 
     if (use_polygonal_tundra) then
-      allocate (wt_lunit     (begg:endg,1:max_topounits, max_lunit           ))
+      if (unified_polygonal_tundra) then
+         allocate (wt_lunit     (begg:endg,1:max_topounits, max_lunit           ))
+      else
+         allocate (wt_lunit     (begg:endg,1:max_topounits, max_lunit - 1       ))
+      endif
     else
       allocate (wt_lunit     (begg:endg,1:max_topounits, max_non_poly_lunit  ))
     end if

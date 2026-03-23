@@ -414,7 +414,7 @@ contains
 
    ! NGEE Arctic options
    namelist /elm_inparm/ &
-         use_polygonal_tundra, use_arctic_init
+         use_polygonal_tundra, unified_polygonal_tundra, use_arctic_init
     ! ----------------------------------------------------------------------
     ! Default values
     ! ----------------------------------------------------------------------

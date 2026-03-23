@@ -1128,6 +1128,14 @@ contains
          dim1name=grlnd, readvar=readvar)
       if (.not. readvar) call endrun( msg=' ERROR: use_polygonal_tundra = .true., but PCT_LCP NOT on surfdata file'//errMsg(__FILE__, __LINE__))
       wt_polygon(begg:endg,1:max_topounits,ilowcenpoly) = arrayl(begg:endg,1:max_topounits)
+      if (unified_polygonal_tundra) then
+         wt_polygon(begg:endg,1:max_topounits,iunifiedpoly) = wt_polygon(begg:endg,1:max_topounits,ihighcenpoly) + &
+              wt_polygon(begg:endg,1:max_topounits,iflatcenpoly) + &
+              wt_polygon(begg:endg,1:max_topounits,ilowcenpoly)
+         wt_polygon(begg:endg,1:max_topounits,ihighcenpoly) = 0._r8
+         wt_polygon(begg:endg,1:max_topounits,iflatcenpoly) = 0._r8
+         wt_polygon(begg:endg,1:max_topounits,ilowcenpoly) = 0._r8
+      endif
     else
       wt_polygon(begg:endg,1:max_topounits,ilowcenpoly:ihighcenpoly) = 0._r8
     endif
