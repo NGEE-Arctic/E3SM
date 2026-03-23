@@ -70,14 +70,21 @@ contains
     ! !LOCAL VARIABLES:
     integer  :: j
     real(r8) :: zi_bot
+    real(r8) :: dz_orig ! input dz prior to any compression, used to calculate volrat.
     !-----------------------------------------------------------------------
 
     zi_bot = 0._r8
+    col_pp%volrat(c,:) = 1._r8 ! This should always be 1 unless the layer currently is shrinking in this timestep.
     do j = 1, nlevgrnd
+       dz_orig = col_pp%dz(c,j)
        col_pp%dz(c,j) = col_pp%dz_ref(c,j) + col_ws%excess_ice(c,j) / denice
        col_pp%z(c,j)  = zi_bot + 0.5_r8 * col_pp%dz(c,j)
        col_pp%zi(c,j) = zi_bot + col_pp%dz(c,j)
        zi_bot = col_pp%zi(c,j)
+       ! calculate volume ratio to scale molar concentrations of BGC species
+       ! (i.e., layer compression decreases volume but doesn't remove chemical speices,
+       ! so it should increase molar concentrations)
+       col_pp%volrat(c,j) = dz_orig/col_pp%dz(c,j)
     end do
     col_pp%zi(c,0) = 0._r8   ! surface interface (always 0)
 
