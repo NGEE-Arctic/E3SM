@@ -93,6 +93,7 @@ contains
          vexc                 =>    col_ws%iwp_exclvol                   ,      & ! Output:  [real(r8) (:)   ]  ice wedge polygon excluded volume (m)
          ddep                 =>    col_ws%iwp_ddep                      ,      & ! Output:  [real(r8) (:)   ]  ice wedge polygon depression depth (m)
          subsidence           =>    col_ws%iwp_subsidence                       & ! Input/output:[real(r8)(:)]  ice wedge polygon subsidence (m)
+         degradation_index    =>    col_ws%degradation_index                    ! Input/output:[real(r8)(:)]  degradation index (0 to 1) based on cumulative subsidence
          )
 
       ! on a set annual timestep, update annual maxima
@@ -267,6 +268,7 @@ contains
              elseif (lun_pp%polygontype(col_pp%landunit(c)) .eq. iunifiedpoly) then
                rmax(c) = 0.4_r8
                vexc(c) = 0.2_r8
+               ! RPF - what to do with the microtopography parameters here?
                ddep(c) = min(0.05_r8, 0.01_r8 + 0.1_r8*subsidence(c))
              else
                !call endrun !<- TODO: needed? Potential way to prevent unintended updating of microtopography

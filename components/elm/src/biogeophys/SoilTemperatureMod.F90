@@ -1396,6 +1396,7 @@ contains
          supercool        =>    col_ws%supercool       , & ! Output: [real(r8) (:,:) ] supercooled water (kg/m2)
          excess_ice       =>    col_ws%excess_ice      , & ! InOut:  [real(r8) (:,:) ] excess ice (kg/m2)
          iwp_subsidence   =>    col_ws%iwp_subsidence  , & ! InOut:  [real(r8) (:)   ] cumulative subsidence (m)
+         degradation_index=>    col_ws%degradation_index, & ! InOut:  [real(r8) (:)   ] degradation index (0 to 1)
 
          qflx_snow_melt   =>    col_wf%qflx_snow_melt   , & ! Output: [real(r8) (:)   ] net snow melt
          qflx_snofrz_lyr  =>    col_wf%qflx_snofrz_lyr  , & ! Output: [real(r8) (:,:) ] snow freezing rate (positive definite) (col,lyr) [kg m-2 s-1]
@@ -1828,8 +1829,11 @@ contains
                   if (year >= 1989 .and. wexice0(c,j) > excess_ice(c,j)) then
                      iwp_subsidence(c) = iwp_subsidence(c) + &
                                          (wexice0(c,j) - excess_ice(c,j)) / denice
+
                   end if
                end do
+               ! update degradation index
+               degradation_index(c) = iwp_subsidence(c) / 0.4_r8
             end if
          end if
       end do
