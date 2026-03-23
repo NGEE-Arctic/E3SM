@@ -1485,6 +1485,9 @@ contains
       allocate(this%iwp_subsidence     (begc:endc))                   ; this%iwp_subsidence   (:) = spval
       allocate(this%excess_ice         (begc:endc,1:nlevgrnd))        ; this%excess_ice     (:,:) = spval
       allocate(this%excess_ice_volfrac (begc:endc,1:nlevgrnd))        ; this%excess_ice_volfrac(:,:) = spval
+      if (universal_polygonal_tundra) then
+         allocate(this%degradation_index  (begc:endc))                   ; this%degredation_index(:) = spval
+      end if   
     end if
 
     !-----------------------------------------------------------------------
@@ -1528,6 +1531,9 @@ contains
       this%iwp_microrel(begc:endc)      = spval
       this%excess_ice(begc:endc,:)      = 0._r8 ! specify as zero to avoid any excess ice in non-polygonal tundra cells
       this%excess_ice_volfrac(begc:endc,:) = 0._r8
+      if (universal_polygonal_tundra) then
+         this%degradation_index(begc:endc) = spval
+      end if   
 
       ! History output for excess ice mass per layer (for debugging)
       call hist_addfld2d (fname='EXCESS_ICE', units='kg/m2', type2d='levgrnd', &
@@ -1544,6 +1550,10 @@ contains
             ptr_col=this%iwp_exclvol)
       call hist_addfld1d (fname="MICROREL", units='m', avgflag='A', &
             long_name='microtopographic relief (m)', ptr_col=this%iwp_microrel)
+      if (universal_polygonal_tundra) then
+         call hist_addfld1d (fname="DEGRAD_INDEX", units='1', avgflag='A', &
+               long_name='polygonal tundra degradation index (0-1)', ptr_col=this%degradation_index)
+      endif
     endif
     !/polygonal tundra
 
@@ -1907,7 +1917,13 @@ contains
             this%iwp_microrel(c) = 0.4_r8
             this%iwp_exclvol(c) = 0.2_r8
             this%iwp_ddep(c) = 0.05_r8
+         else if (lun_pp%polygontype(l) .eq. iuniversalpoly) then
+            ! set as low-cen polygon for now
+            this%iwp_microrel(c) = 0.4_r8
+            this%iwp_exclvol(c) = 0.2_r8
+            this%iwp_ddep(c) = 0.15_r8
          endif
+
        end if
     end do
 
@@ -2027,7 +2043,12 @@ contains
            dim1name='column', &
            long_name='microtopographic relief', units='m', &
            interpinic_flag='interp', readvar=readvar, data=this%iwp_microrel)
-    end if
+      if (universal_polygonal_tundra) then
+         call restartvar(ncid=ncid, flag=flag, varname='DEGRAD_INDEX', xtype=ncd_double, &
+              dim1name='column', &
+              long_name='polygonal tundra degradation index (0-1)', units='1', &
+              interpinic_flag='interp', readvar=readvar, data=this%degradation_index)
+      end if
 
     call restartvar(ncid=ncid, flag=flag, varname='SOILP', xtype=ncd_double,  &
          dim1name='column', dim2name='levgrnd', switchdim=.true., &
