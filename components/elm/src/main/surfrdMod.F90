@@ -1071,6 +1071,7 @@ contains
     use elm_varpar      , only : surfpft_lb, surfpft_ub, surfpft_size, cft_lb, cft_ub, cft_size
     use elm_varpar      , only : crop_prog
     use elm_varsur      , only : wt_lunit, wt_nat_patch, wt_cft, fert_cft, fert_p_cft, wt_polygon
+    use ColumnDataType  , only : col_ws ! temporary!
     use landunit_varcon , only : istsoil, istcrop
     use landunit_varcon , only : istlowcenpoly, ilowcenpoly, istflatcenpoly, iflatcenpoly, isthighcenpoly, ihighcenpoly
     use pftvarcon       , only : nc3crop, nc3irrig, npcropmin
@@ -1129,6 +1130,12 @@ contains
       if (.not. readvar) call endrun( msg=' ERROR: use_polygonal_tundra = .true., but PCT_LCP NOT on surfdata file'//errMsg(__FILE__, __LINE__))
       wt_polygon(begg:endg,1:max_topounits,ilowcenpoly) = arrayl(begg:endg,1:max_topounits)
       if (unified_polygonal_tundra) then
+
+         call ncd_io(ncid=ncid, varname='DEGRADATION_INDEX', flag='read', data=arrayl, &
+            dim1name=grlnd, readvar=readvar)
+         if (.not. readvar) write(iulog,*) "WARNING: no input degradation index, so setting to weighted average of polygon types as: 0*PCT_LCP + 0.5*PCT_FCP + 1.0*PCT_HCP"
+         col_ws%degradation_index(begg:endg) = (0.5_r8*wt_polygon(begg:endg,1:max_topounits,iflatcenpoly) + &
+              wt_polygon(begg:endg,1:max_topounits,ihighcenpoly))/100_r8
          wt_polygon(begg:endg,1:max_topounits,iunifiedpoly) = wt_polygon(begg:endg,1:max_topounits,ihighcenpoly) + &
               wt_polygon(begg:endg,1:max_topounits,iflatcenpoly) + &
               wt_polygon(begg:endg,1:max_topounits,ilowcenpoly)
