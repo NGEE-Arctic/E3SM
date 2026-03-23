@@ -304,7 +304,7 @@ contains
      use elm_varcon       , only : denh2o, denice, roverg, wimp, mu, tfrz
      use elm_varcon       , only : pondmx, watmin
      use column_varcon    , only : icol_roof, icol_road_imperv, icol_sunwall, icol_shadewall, icol_road_perv
-     use landunit_varcon  , only : istsoil, istcrop, ilowcenpoly, iflatcenpoly, ihighcenpoly
+     use landunit_varcon  , only : istsoil, istcrop, ilowcenpoly, iunifiedpoly
      use elm_time_manager , only : get_step_size, get_nstep
      use atm2lndType      , only : atm2lnd_type ! land river two way coupling
      use ocn2lndType      , only : ocn2lnd_type
@@ -355,6 +355,7 @@ contains
      real(r8) :: vdep                                       ! temporary, ice wedge polygon volumetric depression depth (m)
      real(r8) :: phi_eff                                    ! temporary, polygonal ground effective subsidence (maxes out at 0.4) (m)
      real(r8) :: swc                                        ! temporary, polygonal surface water content in m
+     real(r8) :: a, b, b0, b1
      ! in top VIC layers for runoff calculation
      real(r8) :: rsurf_vic                                  ! temp VIC surface runoff
      real(r8) :: top_moist(bounds%begc:bounds%endc)         ! temporary, soil moisture in top VIC layers
@@ -390,6 +391,7 @@ contains
           iwp_exclvol          =>    col_ws%iwp_exclvol          , & ! Input:  [real(r8) (:)   ]  ice wedge polygon excluded volume (m)
           iwp_ddep             =>    col_ws%iwp_ddep             , & ! Input:  [real(r8) (:)   ]  ice wedge polygon depression depth (m)
           iwp_subsidence       =>    col_ws%iwp_subsidence       , & ! Input:  [real(r8) (:)   ]  ice wedge polygon ground subsidence (m)
+          degradation_index    =>    col_ws%degradation_index    , & ! Input:  [real(r8) (:)   ]  degradation index (0 to 1)
 
           qflx_ev_soil         =>    col_wf%qflx_ev_soil         , & ! Input:  [real(r8) (:)   ]  evaporation flux from soil (W/m**2) [+ to atm]
           qflx_evap_soi        =>    col_wf%qflx_evap_soi        , & ! Input:  [real(r8) (:)   ]  ground surface evaporation rate (mm H2O/s) [+]
@@ -577,7 +579,7 @@ contains
                 endif
              endif
 
-             if (lun_pp%ispolygon(col_pp%landunit(c))) then
+             if (lun_pp%ispolygon(col_pp%landunit(c)) .and. .not. lun_pp%polygontype(col_pp%landunit(c)) == iunifiedpoly) then
                 vdep = (2_r8*iwp_exclvol(c) - iwp_microrel(c)) * (iwp_ddep(c)/iwp_microrel(c))**3_r8 &
                        + (2_r8*iwp_microrel(c) - 3_r8*iwp_exclvol(c)) * (iwp_ddep(c)/iwp_microrel(c))**2_r8
                 phi_eff = min(iwp_subsidence(c), 0.4_r8)
@@ -595,7 +597,15 @@ contains
                 else
                    qflx_h2osfc_surf(c) = 0._r8
                 endif
-                
+             else if (lun_pp%polygontype(col_pp%landunit(c)) == iunifiedpoly .and. lun_pp%ispolygon(col_pp%landunit(c)) .and. unified_polygonal_tundra) then
+                  swc = h2osfc(c)/1000_r8 ! convert to m
+                  ! Per SLP 260323: delta can be left out since we're evaluating numerically 
+                  ! rather than determining analytical solution
+                  a = 3.5_r8 + (2._r8 - 3.5_r8) * degradation_index(c)
+                  b0 = 0.014_r8 * meangradz(c) ** (-0.37_r8)
+                  b1 = 0.0017_r8 * meangradz(c) ** (-0.37_r8)
+                  b = b0 + (b1 - b0) * degradation_index(c)
+                  qflx_h2osfc_surf(c) = 0.014_r8 * ((swc/b) ** 0.37_r8) * (0.5_r8 * (1 + (swc/b) ** (1_r8))**((0.4_r8-a)))
              else
                 ! limit runoff to value of storage above S(pc)
                 if(h2osfc(c) >= h2osfc_thresh(c) .and. h2osfcflag/=0) then
