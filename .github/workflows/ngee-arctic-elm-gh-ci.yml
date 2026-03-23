@@ -74,10 +74,16 @@ concurrency:
 jobs:
 
   ci:
-    # Restrict execution to the NGEE-Arctic repository.
-    # This restricts context to that project and avoids running this workflow
-    # on E3SM-Project/E3SM.
-    if: ${{ github.repository == 'NGEE-Arctic/E3SM' }}
+    # Restrict execution to the NGEE-Arctic/E3SM repository on the develop
+    # branch. The pull_request trigger already limits branches via its
+    # 'branches:' filter. For schedule and workflow_dispatch (which GitHub
+    # always runs on the repository's default branch and cannot be restricted
+    # by 'branches:'), we add an explicit ref check here so the job is skipped
+    # when triggered from any branch other than develop.
+    if: >-
+      ${{ github.repository == 'NGEE-Arctic/E3SM' &&
+          (github.event_name == 'pull_request' ||
+           github.ref == 'refs/heads/develop') }}
     name: ELM CIME / ${{ matrix.test }}
     runs-on: ubuntu-latest
     permissions:
