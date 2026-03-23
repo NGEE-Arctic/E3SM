@@ -19,7 +19,7 @@ module ActiveLayerMod
   use ColumnType      , only : col_pp
   use ColumnDataType  , only : col_es, col_ws
   use LandunitType    , only : lun_pp
-  use landunit_varcon , only : ilowcenpoly, iflatcenpoly, ihighcenpoly
+  use landunit_varcon , only : ilowcenpoly, iflatcenpoly, ihighcenpoly, iunifiedpoly
   !
   implicit none
   save
@@ -264,6 +264,10 @@ contains
                rmax(c) = 0.4_r8
                vexc(c) = 0.2_r8
                ddep(c) = 0.05_r8
+             elseif (lun_pp%polygontype(col_pp%landunit(c)) .eq. iunifiedpoly) then
+               rmax(c) = 0.4_r8
+               vexc(c) = 0.2_r8
+               ddep(c) = min(0.05_r8, 0.01_r8 + 0.1_r8*subsidence(c))
              else
                !call endrun !<- TODO: needed? Potential way to prevent unintended updating of microtopography
                ! if polygonal ground is misspecified on surface file.
