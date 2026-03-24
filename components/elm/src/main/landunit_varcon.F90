@@ -6,7 +6,7 @@ module landunit_varcon
   !
   ! !USES:
 #include "shr_assert.h"
-    use elm_varctl, only : use_polygonal_tundra
+    use elm_varctl, only : use_polygonal_tundra, unified_polygonal_tundra
   !
   !
   ! !PUBLIC TYPES:

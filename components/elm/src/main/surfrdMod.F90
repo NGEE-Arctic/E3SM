@@ -1066,14 +1066,19 @@ contains
     ! Determine weight arrays for non-dynamic landuse mode
     !
     ! !USES:
-    use elm_varctl      , only : create_crop_landunit, use_fates, use_polygonal_tundra
+    use elm_varctl      , only : create_crop_landunit, use_fates, use_polygonal_tundra, unified_polygonal_tundra
     use elm_varctl      , only : irrigate
     use elm_varpar      , only : surfpft_lb, surfpft_ub, surfpft_size, cft_lb, cft_ub, cft_size
     use elm_varpar      , only : crop_prog
     use elm_varsur      , only : wt_lunit, wt_nat_patch, wt_cft, fert_cft, fert_p_cft, wt_polygon
     use ColumnDataType  , only : col_ws ! temporary!
+    use GridCellType    , only : grc_pp
+    use TopounitType    , only : top_pp
+    use LandUnitType    , only : lun_pp
+    use ColumnType      , only : col_pp
     use landunit_varcon , only : istsoil, istcrop
     use landunit_varcon , only : istlowcenpoly, ilowcenpoly, istflatcenpoly, iflatcenpoly, isthighcenpoly, ihighcenpoly
+    use landunit_varcon , only : istunifiedpoly, iunifiedpoly
     use pftvarcon       , only : nc3crop, nc3irrig, npcropmin
     use pftvarcon       , only : ncorn, ncornirrig, nsoybean, nsoybeanirrig
     use pftvarcon       , only : nscereal, nscerealirrig, nwcereal, nwcerealirrig
@@ -1090,7 +1095,7 @@ contains
     integer          ,intent(in)    :: ntpu(:)
     !
     ! !LOCAL VARIABLES:
-    integer  :: nl, t                             ! index
+    integer  :: nl, t, c, l, g                 ! indices
     integer  :: dimid,varid                    ! netCDF id's
     integer  :: ier                            ! error status	
     integer  :: cftsize                        ! size of CFT's
@@ -1101,6 +1106,7 @@ contains
     real(r8),pointer :: arrayNF(:,:,:)
     real(r8),pointer :: arrayPF(:,:,:)
     character(len=32) :: subname = 'surfrd_veg_all'  ! subroutine name
+    integer :: begc, endc
 !-----------------------------------------------------------------------
 
     call check_dim(ncid, 'lsmpft', numpft+1)
@@ -1134,8 +1140,19 @@ contains
          call ncd_io(ncid=ncid, varname='DEGRADATION_INDEX', flag='read', data=arrayl, &
             dim1name=grlnd, readvar=readvar)
          if (.not. readvar) write(iulog,*) "WARNING: no input degradation index, so setting to weighted average of polygon types as: 0*PCT_LCP + 0.5*PCT_FCP + 1.0*PCT_HCP"
-         col_ws%degradation_index(begg:endg) = (0.5_r8*wt_polygon(begg:endg,1:max_topounits,iflatcenpoly) + &
-              wt_polygon(begg:endg,1:max_topounits,ihighcenpoly))/100_r8
+         do g = begg, endg
+            do c = grc_pp%coli(g), grc_pp%colf(g)
+               ! initialize to zero rather than spval
+               col_ws%degradation_index(c) = 0._r8
+               l = col_pp%landunit(c)
+               t = col_pp%topounit(c)
+               if (l .eq. iflatcenpoly) then
+                  col_ws%degradation_index(c) = 0.5_r8*wt_polygon(g,t,iflatcenpoly)/100._r8
+               else if (l .eq. ihighcenpoly) then
+                  col_ws%degradation_index(c) = col_ws%degradation_index(c) + wt_polygon(g,t,ihighcenpoly)/100_r8
+               endif
+            enddo
+         enddo
          wt_polygon(begg:endg,1:max_topounits,iunifiedpoly) = wt_polygon(begg:endg,1:max_topounits,ihighcenpoly) + &
               wt_polygon(begg:endg,1:max_topounits,iflatcenpoly) + &
               wt_polygon(begg:endg,1:max_topounits,ilowcenpoly)

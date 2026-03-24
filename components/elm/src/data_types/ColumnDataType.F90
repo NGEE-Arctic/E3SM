@@ -28,7 +28,7 @@ module ColumnDataType
   use elm_varctl      , only : hist_wrtch4diag, use_century_decomp
   use elm_varctl      , only : get_carbontag, override_bgc_restart_mismatch_dump
   use elm_varctl      , only : pf_hmode, nu_com
-  use elm_varctl      , only : use_extrasnowlayers, use_polygonal_tundra
+  use elm_varctl      , only : use_extrasnowlayers, use_polygonal_tundra, unified_polygonal_tundra
   use elm_varctl      , only : use_fan
   use elm_varctl      , only : use_ocn_lnd_one_way
   use ch4varcon       , only : allowlakeprod
@@ -37,7 +37,7 @@ module ColumnDataType
   use elm_time_manager, only : is_restart, get_nstep
   use elm_time_manager, only : is_first_step, get_step_size, is_first_restart_step
   use landunit_varcon , only : istice, istwet, istsoil, istdlak, istcrop, istice_mec, istlowcenpoly, isthighcenpoly
-  use landunit_varcon , only : ilowcenpoly, iflatcenpoly, ihighcenpoly
+  use landunit_varcon , only : ilowcenpoly, iflatcenpoly, ihighcenpoly, iunifiedpoly
   use column_varcon   , only : icol_road_perv, icol_road_imperv, icol_roof, icol_sunwall, icol_shadewall
   use histFileMod     , only : hist_addfld1d, hist_addfld2d, no_snow_normal
   use histFileMod     , only : hist_addfld_decomp
@@ -182,6 +182,7 @@ module ColumnDataType
     real(r8), pointer :: smp_i          (:,:) => null() ! frozen water potential
     real(r8), pointer :: excess_ice          (:,:) => null() ! excess ground ice mass (kg/m2) (1:nlevgrnd)
     real(r8), pointer :: excess_ice_volfrac  (:,:) => null() ! excess ice volumetric fraction (0 to 1) (1:nlevgrnd)
+    real(r8), pointer :: degradation_index (:) => null() ! polygon degredation index (0 to 1)
 
   contains
     procedure, public :: Init    => col_ws_init
@@ -1485,8 +1486,8 @@ contains
       allocate(this%iwp_subsidence     (begc:endc))                   ; this%iwp_subsidence   (:) = spval
       allocate(this%excess_ice         (begc:endc,1:nlevgrnd))        ; this%excess_ice     (:,:) = spval
       allocate(this%excess_ice_volfrac (begc:endc,1:nlevgrnd))        ; this%excess_ice_volfrac(:,:) = spval
-      if (universal_polygonal_tundra) then
-         allocate(this%degradation_index  (begc:endc))                   ; this%degredation_index(:) = spval
+      if (unified_polygonal_tundra) then
+         allocate(this%degradation_index  (begc:endc))                ; this%degradation_index(:) = spval
       end if   
     end if
 
@@ -1531,7 +1532,7 @@ contains
       this%iwp_microrel(begc:endc)      = spval
       this%excess_ice(begc:endc,:)      = 0._r8 ! specify as zero to avoid any excess ice in non-polygonal tundra cells
       this%excess_ice_volfrac(begc:endc,:) = 0._r8
-      if (universal_polygonal_tundra) then
+      if (unified_polygonal_tundra) then
          this%degradation_index(begc:endc) = spval
       end if   
 
@@ -1550,7 +1551,7 @@ contains
             ptr_col=this%iwp_exclvol)
       call hist_addfld1d (fname="MICROREL", units='m', avgflag='A', &
             long_name='microtopographic relief (m)', ptr_col=this%iwp_microrel)
-      if (universal_polygonal_tundra) then
+      if (unified_polygonal_tundra) then
          call hist_addfld1d (fname="DEGRAD_INDEX", units='1', avgflag='A', &
                long_name='polygonal tundra degradation index (0-1)', ptr_col=this%degradation_index)
       endif
@@ -1917,7 +1918,7 @@ contains
             this%iwp_microrel(c) = 0.4_r8
             this%iwp_exclvol(c) = 0.2_r8
             this%iwp_ddep(c) = 0.05_r8
-         else if (lun_pp%polygontype(l) .eq. iuniversalpoly) then
+         else if (lun_pp%polygontype(l) .eq. iunifiedpoly) then
             ! set as low-cen polygon for now
             this%iwp_microrel(c) = 0.4_r8
             this%iwp_exclvol(c) = 0.2_r8
@@ -1936,7 +1937,7 @@ contains
     ! Read/Write column water state information to/from restart file.
     !
     ! !USES:
-    use elm_varctl, only : use_lake_wat_storage, do_budgets
+    use elm_varctl, only : use_lake_wat_storage, do_budgets, unified_polygonal_tundra
     !
     ! !ARGUMENTS:
     class(column_water_state) :: this
@@ -2043,12 +2044,13 @@ contains
            dim1name='column', &
            long_name='microtopographic relief', units='m', &
            interpinic_flag='interp', readvar=readvar, data=this%iwp_microrel)
-      if (universal_polygonal_tundra) then
+      if (unified_polygonal_tundra) then
          call restartvar(ncid=ncid, flag=flag, varname='DEGRAD_INDEX', xtype=ncd_double, &
               dim1name='column', &
               long_name='polygonal tundra degradation index (0-1)', units='1', &
               interpinic_flag='interp', readvar=readvar, data=this%degradation_index)
       end if
+   end if
 
     call restartvar(ncid=ncid, flag=flag, varname='SOILP', xtype=ncd_double,  &
          dim1name='column', dim2name='levgrnd', switchdim=.true., &

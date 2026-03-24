@@ -597,7 +597,7 @@ contains
                 else
                    qflx_h2osfc_surf(c) = 0._r8
                 endif
-             else if (lun_pp%polygontype(col_pp%landunit(c)) == iunifiedpoly .and. lun_pp%ispolygon(col_pp%landunit(c)) .and. unified_polygonal_tundra) then
+             else if (lun_pp%polygontype(col_pp%landunit(c)) == iunifiedpoly .and. lun_pp%ispolygon(col_pp%landunit(c))) then
                   swc = h2osfc(c)/1000_r8 ! convert to m
                   ! Per SLP 260323: delta can be left out since we're evaluating numerically 
                   ! rather than determining analytical solution

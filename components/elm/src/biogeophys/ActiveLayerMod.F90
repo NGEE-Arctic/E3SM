@@ -92,8 +92,8 @@ contains
          rmax                 =>    col_ws%iwp_microrel                  ,      & ! Output:  [real(r8) (:)   ]  ice wedge polygon microtopographic relief (m)
          vexc                 =>    col_ws%iwp_exclvol                   ,      & ! Output:  [real(r8) (:)   ]  ice wedge polygon excluded volume (m)
          ddep                 =>    col_ws%iwp_ddep                      ,      & ! Output:  [real(r8) (:)   ]  ice wedge polygon depression depth (m)
-         subsidence           =>    col_ws%iwp_subsidence                       & ! Input/output:[real(r8)(:)]  ice wedge polygon subsidence (m)
-         degradation_index    =>    col_ws%degradation_index                    ! Input/output:[real(r8)(:)]  degradation index (0 to 1) based on cumulative subsidence
+         subsidence           =>    col_ws%iwp_subsidence                ,      & ! Input/output:[real(r8)(:)]  ice wedge polygon subsidence (m)
+         degradation_index    =>    col_ws%degradation_index                    & ! Input/output:[real(r8)(:)]  degradation index (0 to 1) based on cumulative subsidence
          )
 
       ! on a set annual timestep, update annual maxima
