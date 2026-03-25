@@ -1537,7 +1537,7 @@ contains
       end if   
 
       ! History output for excess ice mass per layer (for debugging)
-      call hist_addfld2d (fname='EXCESS_ICE', units='kg/m2', type2d='levgrnd', &
+      call hist_addfld2d (fname='EXCESS_ICE', units='kg/m2', type2d='levsoi', &
            avgflag='A', long_name='excess ground ice mass per layer', &
            ptr_col=this%excess_ice, l2g_scale_type='veg')
       
@@ -1896,10 +1896,10 @@ contains
        this%h2osoi_ice_old(c,:) = this%h2osoi_ice(c,:)
        if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
          ! Initialize volumetric fraction to 36%
-         this%excess_ice_volfrac(c,:) = 0.36_r8
+         this%excess_ice_volfrac(c,1:nlevsoi) = 0.36_r8
          
          ! Convert to mass (kg/m2), using reference (mineral soil) layer thickness
-         do j = 1, nlevgrnd
+         do j = 1, nlevsoi
             this%excess_ice(c,j) = this%excess_ice_volfrac(c,j) * col_pp%dz_ref(c,j) * denice
          end do
          

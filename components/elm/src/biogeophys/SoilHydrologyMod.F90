@@ -9,7 +9,7 @@ module SoilHydrologyMod
   use decompMod         , only : bounds_type
   use elm_varctl        , only : iulog, use_vichydro
   use elm_varctl        , only : use_lnd_rof_two_way, lnd_rof_coupling_nstep
-  use elm_varctl        , only : use_modified_infil, use_ocn_lnd_one_way
+  use elm_varctl        , only : use_modified_infil, use_ocn_lnd_one_way, unified_polygonal_tundra
   use elm_varcon        , only : e_ice, denh2o, denice, rpi
   use EnergyFluxType    , only : energyflux_type
   use SoilHydrologyType , only : soilhydrology_type
@@ -601,11 +601,15 @@ contains
                   swc = h2osfc(c)/1000_r8 ! convert to m
                   ! Per SLP 260323: delta can be left out since we're evaluating numerically 
                   ! rather than determining analytical solution
-                  a = 3.5_r8 + (2._r8 - 3.5_r8) * degradation_index(c)
-                  b0 = 0.014_r8 * meangradz(c) ** (-0.37_r8)
-                  b1 = 0.0017_r8 * meangradz(c) ** (-0.37_r8)
-                  b = b0 + (b1 - b0) * degradation_index(c)
-                  qflx_h2osfc_surf(c) = 0.014_r8 * ((swc/b) ** 0.37_r8) * (0.5_r8 * (1 + (swc/b) ** (1_r8))**((0.4_r8-a)))
+                  if (unified_polygonal_tundra) then
+                     a = 3.5_r8 + (2._r8 - 3.5_r8) * degradation_index(c)
+                     b0 = 0.014_r8 * meangradz(c) ** (-0.37_r8)
+                     b1 = 0.0017_r8 * meangradz(c) ** (-0.37_r8)
+                     b = b0 + (b1 - b0) * degradation_index(c)
+                     qflx_h2osfc_surf(c) = 0.014_r8 * ((swc/b) ** 0.37_r8) * (0.5_r8 * (1 + (swc/b) ** (1_r8))**((0.4_r8-a)))
+                  else
+                     qflx_h2osfc_surf(c) = 0._r8
+                  endif
              else
                 ! limit runoff to value of storage above S(pc)
                 if(h2osfc(c) >= h2osfc_thresh(c) .and. h2osfcflag/=0) then

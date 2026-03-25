@@ -12,7 +12,7 @@ module ExcessIceMod
   !
   ! !USES:
   use shr_kind_mod   , only : r8 => shr_kind_r8
-  use elm_varpar     , only : nlevgrnd
+  use elm_varpar     , only : nlevsoi
   use elm_varcon     , only : denice
   use elm_varctl     , only : use_polygonal_tundra
   use decompMod      , only : bounds_type
@@ -75,7 +75,7 @@ contains
 
     zi_bot = 0._r8
     col_pp%volrat(c,:) = 1._r8 ! This should always be 1 unless the layer currently is shrinking in this timestep.
-    do j = 1, nlevgrnd
+    do j = 1, nlevsoi
        dz_orig = col_pp%dz(c,j)
        col_pp%dz(c,j) = col_pp%dz_ref(c,j) + col_ws%excess_ice(c,j) / denice
        col_pp%z(c,j)  = zi_bot + 0.5_r8 * col_pp%dz(c,j)

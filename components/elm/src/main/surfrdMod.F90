@@ -1141,16 +1141,18 @@ contains
             dim1name=grlnd, readvar=readvar)
          if (.not. readvar) write(iulog,*) "WARNING: no input degradation index, so setting to weighted average of polygon types as: 0*PCT_LCP + 0.5*PCT_FCP + 1.0*PCT_HCP"
          do g = begg, endg
-            do c = grc_pp%coli(g), grc_pp%colf(g)
-               ! initialize to zero rather than spval
-               col_ws%degradation_index(c) = 0._r8
-               l = col_pp%landunit(c)
-               t = col_pp%topounit(c)
-               if (l .eq. iflatcenpoly) then
-                  col_ws%degradation_index(c) = 0.5_r8*wt_polygon(g,t,iflatcenpoly)/100._r8
-               else if (l .eq. ihighcenpoly) then
-                  col_ws%degradation_index(c) = col_ws%degradation_index(c) + wt_polygon(g,t,ihighcenpoly)/100_r8
-               endif
+            do t = grc_pp%topi(g), grc_pp%topf(g)
+               do l = max_non_poly_landunit, max_lunit
+                  do c = lun_pp%coli(l),lun_pp%colf(l)
+                     ! initialize to zero rather than spval
+                     col_ws%degradation_index(c) = 0._r8
+                     if (l .eq. iflatcenpoly) then
+                        col_ws%degradation_index(c) = 0.5_r8*wt_polygon(g,t,iflatcenpoly)/100._r8
+                     else if (l .eq. ihighcenpoly) then
+                        col_ws%degradation_index(c) = wt_polygon(g,t,ihighcenpoly)/100_r8
+                     endif
+                  end do
+               end do
             enddo
          enddo
          wt_polygon(begg:endg,1:max_topounits,iunifiedpoly) = wt_polygon(begg:endg,1:max_topounits,ihighcenpoly) + &
@@ -1323,7 +1325,8 @@ contains
           wt_lunit(nl,t,istlowcenpoly) = wt_lunit(nl,t,istsoil) * wt_polygon(nl,t,ilowcenpoly)
           wt_lunit(nl,t,istflatcenpoly) = wt_lunit(nl,t,istsoil) * wt_polygon(nl,t,iflatcenpoly)
           wt_lunit(nl,t,isthighcenpoly) = wt_lunit(nl,t,istsoil) * wt_polygon(nl,t,ihighcenpoly)
-          wt_lunit(nl,t,istsoil) = wt_lunit(nl,t,istsoil) - sum(wt_lunit(nl,t,istlowcenpoly:isthighcenpoly))
+          wt_lunit(nl,t,istunifiedpoly) = wt_lunit(nl,t,istsoil) * wt_polygon(nl,t,iunifiedpoly)
+          wt_lunit(nl,t,istsoil) = wt_lunit(nl,t,istsoil) - sum(wt_lunit(nl,t,istlowcenpoly:istunifiedpoly))
           ! check to make sure istsoil weight is still positive:
           if (wt_lunit(nl,t,istsoil) .lt. 0_r8) then
             call endrun(msg='ERROR:Polygonal tundra fraction > 100% in surface file'//&
