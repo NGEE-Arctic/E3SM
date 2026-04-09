@@ -10,7 +10,7 @@ module surfrdMod
   use shr_log_mod     , only : errMsg => shr_log_errMsg
   use abortutils      , only : endrun
   use elm_varpar      , only : nlevsoifl, numpft, numcft
-  use landunit_varcon , only : numurbl
+  use landunit_varcon , only : numurbl, max_lunit, max_non_poly_lunit
   use elm_varcon      , only : grlnd
   use elm_varctl      , only : iulog, scmlat, scmlon, single_column, firrig_data
   use elm_varctl      , only : create_glacier_mec_landunit
@@ -1143,7 +1143,7 @@ contains
          if (.not. readvar) write(iulog,*) "WARNING: no input degradation index, so setting to weighted average of polygon types as: 0*PCT_LCP + 0.5*PCT_FCP + 1.0*PCT_HCP"
          do g = begg, endg
             do t = grc_pp%topi(g), grc_pp%topf(g)
-               do l = max_non_poly_landunit, max_lunit
+               do l = max_non_poly_lunit, max_lunit
                   do c = lun_pp%coli(l),lun_pp%colf(l)
                      ! initialize to zero rather than spval
                      col_ws%degradation_index(c) = 0._r8
