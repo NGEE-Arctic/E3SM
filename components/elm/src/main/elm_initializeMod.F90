@@ -265,7 +265,7 @@ contains
     ! that will call surfrd_get_special which in turn calls check_urban
 
     call UrbanInput(begg, endg, mode='initialize')
-
+    
     ! Allocate surface grid dynamic memory (just gridcell bounds dependent)
 
     if (use_polygonal_tundra) then
@@ -277,6 +277,9 @@ contains
     else
       allocate (wt_lunit     (begg:endg,1:max_topounits, max_non_poly_lunit  ))
     end if
+
+    wt_lunit(:,:,:) = 0._r8
+
     allocate (urban_valid  (begg:endg,1:max_topounits                      ))
     !allocate (wt_nat_patch (begg:endg,1:max_topounits, surfpft_lb:surfpft_ub ))
     !allocate (wt_cft       (begg:endg,1:max_topounits, cft_lb:cft_ub       ))
@@ -290,6 +293,7 @@ contains
        allocate (topo_glc_mec(1,1,1))
     endif
     allocate (wt_polygon (begg:endg,1:max_topounits, max_polygon))
+    wt_polygon(:,:,:) = 0._r8
     allocate (wt_tunit  (begg:endg,1:max_topounits  ))
     allocate (elv_tunit (begg:endg,1:max_topounits  ))
     allocate (slp_tunit (begg:endg,1:max_topounits  ))
@@ -307,6 +311,7 @@ contains
     !
     ! a few arrays allocation previously done above is moved here i.e. after this 'pftconrd' call
     allocate (wt_nat_patch (begg:endg,1:max_topounits, surfpft_lb:surfpft_ub ))
+    wt_nat_patch(:,:,:) = 0._r8
     allocate (wt_cft       (begg:endg,1:max_topounits, cft_lb:cft_ub       ))
     allocate (fert_cft     (begg:endg,1:max_topounits, cft_lb:cft_ub       ))
     allocate (fert_p_cft   (begg:endg,1:max_topounits, cft_lb:cft_ub       ))

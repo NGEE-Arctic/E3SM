@@ -233,6 +233,7 @@ contains
        ! Fill in subgrid datatypes
 
        call elm_ptrs_compdown(bounds_clump)
+       call set_unified_polygon_degradation(bounds_clump)
 
        ! By putting this check within the loop over clumps, we ensure that (for example)
        ! if a clump is responsible for landunit L, then that same clump is also
@@ -457,6 +458,7 @@ contains
     use column_varcon   , only : icemec_class_to_col_itype
     use subgridMod      , only : subgrid_get_topounitinfo
     use pftvarcon       , only : noveg
+    use elm_varctl      , only : unified_polygonal_tundra
 
     !
     ! !ARGUMENTS:    
@@ -501,14 +503,19 @@ contains
 
     wtlunit2topounit = wt_lunit(gi,topo_ind, ltype)
 
-    if (npfts > 0) then
+    if (npfts > 0 .or. &
+         (ltype == istdlak .and. unified_polygonal_tundra .and. wtlunit2topounit > 0._r8)) then
 
-       if (npfts /=1 .and. ltype /= istice_mec) then
-          write(iulog,*)' set_landunit_wet_ice_lake: landunit must'// &
-               ' have one pft '
-          write(iulog,*)' current value of npfts=',npfts
-          write(iulog,*)' landunit type = ',ltype
-          call endrun(msg=errMsg(__FILE__, __LINE__))
+       if (ltype /= istice_mec) then
+          if (ltype == istdlak .and. unified_polygonal_tundra) then
+             ! For unified-polygon runs, allow lake creation based on weight even if
+             ! subgrid_get_topounitinfo returns nlake = 0.
+          else if (npfts /= 1) then
+             write(iulog,*)' set_landunit_wet_ice_lake: landunit must have one pft '
+             write(iulog,*)' current value of npfts=',npfts
+             write(iulog,*)' landunit type = ',ltype
+             call endrun(msg=errMsg(__FILE__, __LINE__))
+          end if
        end if
 
        if (ltype==istice_mec) then   ! multiple columns per landunit
@@ -538,14 +545,14 @@ contains
 
           ! Currently assume that each landunit only has only one column 
           ! and that each column has its own pft
-       
+
           call add_landunit(li=li, ti=ti, ltype=ltype, wttopounit=wtlunit2topounit)
           call add_column(ci=ci, li=li, ctype=ltype, wtlunit=1.0_r8)
           call add_patch(pi=pi, ci=ci, ptype=noveg, wtcol=1.0_r8)
 
        end if   ! ltype = istice_mec
     endif       ! npfts > 0       
-
+    
   end subroutine set_landunit_wet_ice_lake
 
   !------------------------------------------------------------------------
@@ -1343,5 +1350,40 @@ contains
   end subroutine CheckGhostSubgridHierarchy
 #endif
 !^ifdef USE_PETSC_LIB
+
+  subroutine set_unified_polygon_degradation(bounds)
+   use shr_kind_mod   , only : r8 => shr_kind_r8
+    use elm_varctl     , only : use_polygonal_tundra, unified_polygonal_tundra
+    use elm_varsur     , only : wt_polygon
+    use landunit_varcon, only : istsoil, istunifiedpoly
+    use landunit_varcon, only : istunifiedpoly, iflatcenpoly, ihighcenpoly
+    use ColumnDataType , only : col_ws
+    use LandunitType   , only : lun_pp
+    use decompMod      , only : bounds_type
+
+    implicit none
+
+    type(bounds_type), intent(in) :: bounds
+    integer :: l, c
+    real(r8) :: degval
+
+    if (.not. use_polygonal_tundra) return
+    if (.not. unified_polygonal_tundra) return
+
+    do l = bounds%begl, bounds%endl
+       if (lun_pp%itype(l) == istunifiedpoly) then
+
+          ! Current fallback behavior matches earlier intent:
+          ! 0*LCP + 0.5*FCP + 1.0*HCP
+          degval = 0.5_r8 * wt_polygon(lun_pp%gridcell(l), lun_pp%topounit(l), iflatcenpoly) + &
+                   1.0_r8 * wt_polygon(lun_pp%gridcell(l), lun_pp%topounit(l), ihighcenpoly)
+
+          do c = lun_pp%coli(l), lun_pp%colf(l)
+             col_ws%degradation_index(c) = degval
+          end do
+       end if
+    end do
+
+  end subroutine set_unified_polygon_degradation
 
 end module initGridCellsMod

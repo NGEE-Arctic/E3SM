@@ -607,7 +607,7 @@ contains
     call ncd_io(ncid=ncid, varname= 'PFTDATA_MASK', flag='read', data=ldomain%pftm, &
          dim1name=grlnd, readvar=readvar)
     if (.not. readvar) call endrun( msg=' ERROR: pftm NOT on surface dataset'//errMsg(__FILE__, __LINE__))
-	        
+	 
     !! Read the actual number of topounits per grid    
 	!call check_var(ncid=ncid, varname='topoPerGrid', vardesc=vardesc, readvar=readvar)
     !if (readvar) then
@@ -672,7 +672,7 @@ contains
     ! Obtain special landunit info
 
     call surfrd_special(begg, endg, ncid, ldomain%ns,ldomain%num_tunits_per_grd)
-    
+
     ! Obtain vegetated landunit info
 
     call surfrd_veg_all(begg, endg, ncid, ldomain%ns,ldomain%num_tunits_per_grd)
@@ -1120,13 +1120,13 @@ contains
          dim1name=grlnd, readvar=readvar)
     if (.not. readvar) call endrun( msg=' ERROR: PCT_NATVEG NOT on surfdata file'//errMsg(__FILE__, __LINE__))
     wt_lunit(begg:endg,1:max_topounits,istsoil) = arrayl(begg:endg,1:max_topounits)
-
+    
     if (use_polygonal_tundra) then
       call ncd_io(ncid=ncid, varname='PCT_HCP', flag='read', data=arrayl, &
          dim1name=grlnd, readvar=readvar)
       if (.not. readvar) call endrun( msg=' ERROR: use_polygonal_tundra = .true., but PCT_HCP NOT on surfdata file'//errMsg(__FILE__, __LINE__))
       wt_polygon(begg:endg,1:max_topounits,ihighcenpoly) = arrayl(begg:endg,1:max_topounits)
-
+      
       call ncd_io(ncid=ncid, varname='PCT_FCP', flag='read', data=arrayl, &
          dim1name=grlnd, readvar=readvar)
       if (.not. readvar) call endrun( msg=' ERROR: use_polygonal_tundra = .true., but PCT_FCP NOT on surfdata file'//errMsg(__FILE__, __LINE__))
@@ -1141,27 +1141,10 @@ contains
          call ncd_io(ncid=ncid, varname='DEGRADATION_INDEX', flag='read', data=arrayl, &
             dim1name=grlnd, readvar=readvar)
          if (.not. readvar) write(iulog,*) "WARNING: no input degradation index, so setting to weighted average of polygon types as: 0*PCT_LCP + 0.5*PCT_FCP + 1.0*PCT_HCP"
-         do g = begg, endg
-            do t = grc_pp%topi(g), grc_pp%topf(g)
-               do l = max_non_poly_lunit, max_lunit
-                  do c = lun_pp%coli(l),lun_pp%colf(l)
-                     ! initialize to zero rather than spval
-                     col_ws%degradation_index(c) = 0._r8
-                     if (l .eq. iflatcenpoly) then
-                        col_ws%degradation_index(c) = 0.5_r8*wt_polygon(g,t,iflatcenpoly)/100._r8
-                     else if (l .eq. ihighcenpoly) then
-                        col_ws%degradation_index(c) = wt_polygon(g,t,ihighcenpoly)/100_r8
-                     endif
-                  end do
-               end do
-            enddo
-         enddo
          wt_polygon(begg:endg,1:max_topounits,iunifiedpoly) = wt_polygon(begg:endg,1:max_topounits,ihighcenpoly) + &
               wt_polygon(begg:endg,1:max_topounits,iflatcenpoly) + &
               wt_polygon(begg:endg,1:max_topounits,ilowcenpoly)
-         wt_polygon(begg:endg,1:max_topounits,ihighcenpoly) = 0._r8
-         wt_polygon(begg:endg,1:max_topounits,iflatcenpoly) = 0._r8
-         wt_polygon(begg:endg,1:max_topounits,ilowcenpoly) = 0._r8
+     
       endif
     else
       wt_polygon(begg:endg,1:max_topounits,ilowcenpoly:ihighcenpoly) = 0._r8
@@ -1175,7 +1158,7 @@ contains
     wt_lunit(begg:endg,1:max_topounits,istcrop) = arrayl(begg:endg,1:max_topounits) 
 
     deallocate(arrayl)
-    
+
     ! Check the file format for CFT's and handle accordingly
     call ncd_inqdid(ncid, 'cft', dimid, cft_dim_exists)
     if ( cft_dim_exists .and. create_crop_landunit ) then
@@ -1323,11 +1306,25 @@ contains
       ! adjust wt_lunit(:,:,istsoil) for polygonal fraction:
       do nl = begg,endg
         do t = 1,max_topounits
-          wt_lunit(nl,t,istlowcenpoly) = wt_lunit(nl,t,istsoil) * wt_polygon(nl,t,ilowcenpoly)
-          wt_lunit(nl,t,istflatcenpoly) = wt_lunit(nl,t,istsoil) * wt_polygon(nl,t,iflatcenpoly)
-          wt_lunit(nl,t,isthighcenpoly) = wt_lunit(nl,t,istsoil) * wt_polygon(nl,t,ihighcenpoly)
-          wt_lunit(nl,t,istunifiedpoly) = wt_lunit(nl,t,istsoil) * wt_polygon(nl,t,iunifiedpoly)
-          wt_lunit(nl,t,istsoil) = wt_lunit(nl,t,istsoil) - sum(wt_lunit(nl,t,istlowcenpoly:istunifiedpoly))
+          if (unified_polygonal_tundra) then
+            wt_lunit(nl,t,istlowcenpoly)  = 0._r8
+            wt_lunit(nl,t,istflatcenpoly) = 0._r8
+            wt_lunit(nl,t,isthighcenpoly) = 0._r8
+            wt_lunit(nl,t,istunifiedpoly) = wt_lunit(nl,t,istsoil) * wt_polygon(nl,t,iunifiedpoly)
+
+            wt_lunit(nl,t,istsoil) = wt_lunit(nl,t,istsoil) - wt_lunit(nl,t,istunifiedpoly)
+          else
+            wt_lunit(nl,t,istlowcenpoly) = wt_lunit(nl,t,istsoil) * wt_polygon(nl,t,ilowcenpoly)
+            wt_lunit(nl,t,istflatcenpoly) = wt_lunit(nl,t,istsoil) * wt_polygon(nl,t,iflatcenpoly)
+            wt_lunit(nl,t,isthighcenpoly) = wt_lunit(nl,t,istsoil) * wt_polygon(nl,t,ihighcenpoly)
+            wt_lunit(nl,t,istunifiedpoly) = 0._r8
+
+            wt_lunit(nl,t,istsoil) = wt_lunit(nl,t,istsoil) - &
+             ( wt_lunit(nl,t,istlowcenpoly) + &
+               wt_lunit(nl,t,istflatcenpoly) + &
+               wt_lunit(nl,t,isthighcenpoly) )
+          end if
+          
           ! check to make sure istsoil weight is still positive:
           if (wt_lunit(nl,t,istsoil) .lt. 0_r8) then
             call endrun(msg='ERROR:Polygonal tundra fraction > 100% in surface file'//&

@@ -40,7 +40,7 @@ contains
     !
     ! !USES
     use elm_varpar  , only : natpft_size, cft_size, maxpatch_urb, maxpatch_glcmec
-    use elm_varctl  , only : create_crop_landunit, use_polygonal_tundra
+    use elm_varctl  , only : create_crop_landunit, use_polygonal_tundra, unified_polygonal_tundra
     use elm_varsur  , only : wt_lunit, urban_valid, wt_glc_mec
     use landunit_varcon  , only : istsoil, istcrop, istice, istice_mec, istdlak, istwet, &
                              isturb_tbd, isturb_hd, isturb_md
@@ -161,11 +161,20 @@ contains
 
        ! polygonal tundra
        if (use_polygonal_tundra) then
-         ilunits = ilunits + 3
-         icols = icols + 3
-         ipfts = ipfts + 3 * npfts_per_lunit
-         ! if (present(nveg)) nveg = nveg + 3 * npfts_per_lunit
+          if (unified_polygonal_tundra) then
+             ! Unified-polygon runs still build 4 polygon-related natural landunits/columns
+             ! in addition to the base natural soil landunit.
+             ilunits = ilunits + 4
+             icols   = icols + 4
+             ipfts   = ipfts + 4 * npfts_per_lunit
+          else
+             ilunits = ilunits + 3
+             icols   = icols + 3
+             ipfts   = ipfts + 3 * npfts_per_lunit
+          end if
+          ! if (present(nveg)) nveg = nveg + ...
        endif
+
        ! -------------------------------------------------------------------------
        ! Set urban landunits
        ! -------------------------------------------------------------------------
@@ -341,7 +350,7 @@ contains
     !
     ! !USES
     use elm_varpar  , only : natpft_size, cft_size, maxpatch_urb, maxpatch_glcmec
-    use elm_varctl  , only : create_crop_landunit, use_polygonal_tundra
+    use elm_varctl  , only : create_crop_landunit, use_polygonal_tundra, unified_polygonal_tundra
     use elm_varsur  , only : wt_lunit, urban_valid, wt_glc_mec
     use landunit_varcon  , only : istsoil, istcrop, istice, istice_mec, istdlak, istwet, &
                              isturb_tbd, isturb_hd, isturb_md
@@ -432,13 +441,19 @@ contains
 
     ! -----------------------------------------------------------------------
     ! polygonal tundra
-
-    ! polygonal tundra
     if (use_polygonal_tundra) then
-      ilunits = ilunits + 3
-      icols = icols + 3
-      ipfts = ipfts + 3 * npfts_per_lunit
-      ! if (present(nveg)) nveg = nveg + 3 * npfts_per_lunit
+       if (unified_polygonal_tundra) then
+          ! Unified-polygon runs still build 4 polygon-related natural landunits/columns
+          ! in addition to the base natural soil landunit.
+          ilunits = ilunits + 4
+          icols   = icols + 4
+          ipfts   = ipfts + 4 * npfts_per_lunit
+       else
+          ilunits = ilunits + 3
+          icols   = icols + 3
+          ipfts   = ipfts + 3 * npfts_per_lunit
+       end if
+       ! if (present(nveg)) nveg = nveg + 3 * npfts_per_lunit
     endif
 
     ! -------------------------------------------------------------------------
