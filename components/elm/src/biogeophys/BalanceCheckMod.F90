@@ -449,7 +449,7 @@ contains
              write(iulog,*)'qflx_glcice_frz            = ',qflx_glcice_frz(indexc)
              write(iulog,*)'qflx_lateral               = ',qflx_lateral(indexc)
              write(iulog,*)'qflx_lnd2ocn               = ',qflx_lnd2ocn(indexc)
-             write(iulog,*)'qflx_exice_melt            = ',qflx_exice_melt(indexc,:)
+             write(iulog,*)'qflx_exice_melt            = ',qflx_exice_melt(indexc)
              write(iulog,*)'total_plant_stored_h2o_col = ',total_plant_stored_h2o_col(indexc)
              write(iulog,*)'qflx_h2orof_drain          = ',qflx_h2orof_drain(indexc)
              write(iulog,*)'qflx_ice_runoff_xs         = ',qflx_ice_runoff_xs(indexc)
