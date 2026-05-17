@@ -401,6 +401,7 @@ contains
                abs(errh2o(indexc)) > 1.e-4_r8 .and. (nstep > 2) ) then
 
              write(iulog,*)'clm urban model is stopping - error is greater than 1e-4 (mm)'
+             write(iulog,*)'column type                = ',col_pp%itype(indexc)
              write(iulog,*)'nstep                      = ',nstep
              write(iulog,*)'errh2o                     = ',errh2o(indexc)
              write(iulog,*)'forc_rain                  = ',forc_rain_col(indexc)
