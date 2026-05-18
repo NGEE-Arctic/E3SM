@@ -1165,6 +1165,8 @@ contains
     else
       wt_polygon(begg:endg,1:max_topounits,ilowcenpoly:ihighcenpoly) = 0._r8
     endif
+      write(iulog,*) "fcp, lcp, hcp are: ", wt_polygon(begg:endg,1:max_topounits,iflatcenpoly),  wt_polygon(begg:endg,1:max_topounits,ilowcenpoly),  wt_polygon(begg:endg,1:max_topounits,ihighcenpoly)
+      write(iulog,*) "unified poly is: ", wt_polygon(begg:endg,1:max_topounits,iunifiedpoly)
 
     ! add two other types
 
