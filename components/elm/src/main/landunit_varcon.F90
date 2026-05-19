@@ -160,11 +160,7 @@ contains
     !-----------------------------------------------------------------------
 
     if (use_polygonal_tundra) then
-      if (unified_polygonal_tundra) then
-        allocate(landunit_names(max_lunit))
-      else
-        allocate(landunit_names(max_lunit - 1))
-      end if
+      allocate(landunit_names(max_lunit))
     else
       allocate(landunit_names(max_non_poly_lunit))
     end if
@@ -184,9 +180,7 @@ contains
       landunit_names(istlowcenpoly) = 'low_centered_polygon'
       landunit_names(istflatcenpoly) = 'flat_centered_polygon'
       landunit_names(isthighcenpoly) = 'high_centered_polygon'
-      if (unified_polygonal_tundra) then
-        landunit_names(istunifiedpoly) = 'unified_polygon'
-      end if
+      landunit_names(istunifiedpoly) = 'unified_polygon'
     end if
 
     if (any(landunit_names == not_set)) then

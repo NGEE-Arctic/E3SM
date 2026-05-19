@@ -304,11 +304,7 @@ contains
     ! Allocate surface grid dynamic memory (just gridcell bounds dependent)
 
     if (use_polygonal_tundra) then
-      if (unified_polygonal_tundra) then
-         allocate (wt_lunit     (begg:endg,1:max_topounits, max_lunit           ))
-      else
-         allocate (wt_lunit     (begg:endg,1:max_topounits, max_lunit - 1       ))
-      endif
+      allocate (wt_lunit     (begg:endg,1:max_topounits, max_lunit           ))
     else
       allocate (wt_lunit     (begg:endg,1:max_topounits, max_non_poly_lunit  ))
     end if

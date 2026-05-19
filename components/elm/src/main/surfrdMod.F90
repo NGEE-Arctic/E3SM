@@ -1135,6 +1135,7 @@ contains
          dim1name=grlnd, readvar=readvar)
       if (.not. readvar) call endrun( msg=' ERROR: use_polygonal_tundra = .true., but PCT_LCP NOT on surfdata file'//errMsg(__FILE__, __LINE__))
       wt_polygon(begg:endg,1:max_topounits,ilowcenpoly) = arrayl(begg:endg,1:max_topounits)
+
       if (unified_polygonal_tundra) then
 
          call ncd_io(ncid=ncid, varname='DEGRADATION_INDEX', flag='read', data=arrayl, &
@@ -1153,20 +1154,25 @@ contains
                      endif
                   end do
                end do
+               write(iulog,*) "g,t,topi,topf:", g, t, grc_pp%topi(g), grc_pp%topf(g)
+               write(iulog,*) "hcp,fcp,lcp pre-sum:", wt_polygon(g,t,ihighcenpoly), wt_polygon(g,t,iflatcenpoly), wt_polygon(g,t,ilowcenpoly) 
+               wt_polygon(g,t,iunifiedpoly) = wt_polygon(g,t,ihighcenpoly) + &
+                  wt_polygon(g,t,iflatcenpoly) + &
+                  wt_polygon(g,t,ilowcenpoly)
+               write(iulog,*) "post-sum unified:", wt_polygon(g,t,iunifiedpoly)
+               write(iulog,*) "hcp,fcp,lcp post-sum:", wt_polygon(g,t,ihighcenpoly), wt_polygon(g,t,iflatcenpoly), wt_polygon(g,t,ilowcenpoly) 
+               wt_polygon(g,t,ilowcenpoly:ihighcenpoly) = 0._r8 ! actually need to set them all to zero..
             enddo
          enddo
-         wt_polygon(begg:endg,1:max_topounits,iunifiedpoly) = wt_polygon(begg:endg,1:max_topounits,ihighcenpoly) + &
-              wt_polygon(begg:endg,1:max_topounits,iflatcenpoly) + &
-              wt_polygon(begg:endg,1:max_topounits,ilowcenpoly)
-         wt_polygon(begg:endg,1:max_topounits,ihighcenpoly) = 0._r8
-         wt_polygon(begg:endg,1:max_topounits,iflatcenpoly) = 0._r8
-         wt_polygon(begg:endg,1:max_topounits,ilowcenpoly) = 0._r8
+      else
+         wt_polygon(begg:endg,1:max_topounits,iunifiedpoly) = 0._r8
       endif
     else
       wt_polygon(begg:endg,1:max_topounits,ilowcenpoly:ihighcenpoly) = 0._r8
     endif
       write(iulog,*) "fcp, lcp, hcp are: ", wt_polygon(begg:endg,1:max_topounits,iflatcenpoly),  wt_polygon(begg:endg,1:max_topounits,ilowcenpoly),  wt_polygon(begg:endg,1:max_topounits,ihighcenpoly)
       write(iulog,*) "unified poly is: ", wt_polygon(begg:endg,1:max_topounits,iunifiedpoly)
+      write(iulog,*) "vector is:", wt_polygon(begg:endg,1:max_topounits,:)
 
     ! add two other types
 
@@ -1331,6 +1337,7 @@ contains
           wt_lunit(nl,t,istsoil) = wt_lunit(nl,t,istsoil) - sum(wt_lunit(nl,t,istlowcenpoly:istunifiedpoly))
           ! check to make sure istsoil weight is still positive:
           if (wt_lunit(nl,t,istsoil) .lt. 0_r8) then
+
             call endrun(msg='ERROR:Polygonal tundra fraction > 100% in surface file'//&
                                    errMsg(__FILE__, __LINE__))
           end if

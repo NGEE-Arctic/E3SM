@@ -1340,7 +1340,7 @@ contains
     ! !USES:
       !$acc routine seq
     use elm_varpar       , only : nlevsno, nlevgrnd,nlevurb
-    use elm_varctl       , only : iulog, use_polygonal_tundra
+    use elm_varctl       , only : iulog, use_polygonal_tundra, unified_polygonal_tundra
     use elm_varcon       , only : tfrz, hfus, grav, denice
     use elm_time_manager , only : get_curr_date
     use column_varcon    , only : icol_roof, icol_sunwall, icol_shadewall, icol_road_perv
@@ -1832,8 +1832,10 @@ contains
 
                   end if
                end do
-               ! update degradation index
-               degradation_index(c) = iwp_subsidence(c) / 0.4_r8
+               if (unified_polygonal_tundra) then
+                  ! update degradation index
+                  degradation_index(c) = iwp_subsidence(c) / 0.4_r8
+               endif 
             end if
          end if
       end do
