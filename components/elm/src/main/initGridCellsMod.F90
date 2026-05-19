@@ -437,6 +437,7 @@ contains
                      end if
                      call add_patch(pi=pi, ci=ci, ptype=m, wtcol=p_wt)
                   end do
+               end do 
             else
                do z = istlowcenpoly,isthighcenpoly
                   ! get new weight for wttopounit:
