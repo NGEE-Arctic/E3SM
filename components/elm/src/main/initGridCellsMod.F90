@@ -421,29 +421,12 @@ contains
                call add_patch(pi=pi, ci=ci, ptype=m, wtcol=p_wt, is_on_soil_col=.true.)
             end do
            end do
-         else
-            if (unified_polygonal_tundra) then
-               do z = istlowcenpoly,istunifiedpoly
-                  ! get new weight for wttopounit:
-                  wtpoly2lndunit = wt_lunit(gi, topo_ind, z) 
-                  call add_polygon_landunit(li=li, ti=ti, ltype=ltype, wttopounit=wtpoly2lndunit, polytype = z - max_non_poly_lunit)
-                  call add_column(ci=ci, li=li, ctype=1, wtlunit=1.0_r8)
-                  ! add patch:
-                  do m = natpft_lb,natpft_ub
-                     if(use_fates .and. .not.use_fates_sp) then
-                        p_wt = 1.0_r8/real(natpft_size,r8)
-                     else
-                        p_wt = wt_nat_patch(gi,topo_ind,m)
-                     end if
-                     call add_patch(pi=pi, ci=ci, ptype=m, wtcol=p_wt)
-                  end do
-               end do 
             else
                do z = istlowcenpoly,isthighcenpoly
                   ! get new weight for wttopounit:
                   wtpoly2lndunit = wt_lunit(gi, topo_ind, z) 
-                  call add_polygon_landunit(li=li, ti=ti, ltype=ltype, wttopounit=wtpoly2lndunit, polytype = z - (max_non_poly_lunit - 1))
-                  call add_column(ci=ci, li=li, ctype=1, wtlunit=1.0_r8)
+                  call add_polygon_landunit(li=li, ti=ti, ltype=ltype, wttopounit=wtpoly2lndunit, polytype = z - max_non_poly_lunit)
+                  call add_column(ci=ci, li=li, ctype=1, wtlunit=1.0_r8, is_soil=.true.)
                   ! add patch:
                   do m = natpft_lb,natpft_ub
                      if(use_fates .and. .not.use_fates_sp) then
@@ -451,7 +434,7 @@ contains
                      else
                         p_wt = wt_nat_patch(gi,topo_ind,m)
                      end if
-                     call add_patch(pi=pi, ci=ci, ptype=m, wtcol=p_wt)
+                     call add_patch(pi=pi, ci=ci, ptype=m, wtcol=p_wt, is_on_soil_col=.true.)
                   end do
                end do
             endif
