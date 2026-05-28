@@ -2243,7 +2243,7 @@ contains
             ! Add root respiration
             if (.not. lake) then
                !o2_decomp_depth(c,j) = o2_decomp_depth(c,j) + col_rr(c)*rootfr(c,j)/catomw/dz(c,j) ! mol/m^3/s
-               o2_decomp_depth(c,j) = o2_decomp_depth(c,j) + rr_vr(c,j)/catomw/(dz(c,j)*volrat(c,j)) ! mol/m^3/s - RPF
+               o2_decomp_depth(c,j) = o2_decomp_depth(c,j) + rr_vr(c,j)/catomw/dz(c,j) ! mol/m^3/s
                ! g C/m2/s ! gC/mol O2 ! m
             end if
 
@@ -2725,9 +2725,8 @@ contains
           k_h_cc = t_soisno(j) / k_h_inv * rgasLatm
           conc_ch4_wat = conc_ch4(j) / ( (watsat(j)-h2osoi_vol_min)/k_h_cc + h2osoi_vol_min)
 
-          ! RPF - think it is needed here.
-          tranloss(j) = conc_ch4_wat * rootr(j)*qflx_tran_veg / (dz(j)*volrat(j)) / 1000._r8
-          ! mol/m3/s    mol/m3                                   mm / s         m           mm/m
+          tranloss(j) = conc_ch4_wat * rootr(j)*qflx_tran_veg / dz(j) / 1000._r8
+          ! mol/m3/s    mol/m3                                   mm / s    m   mm/m
           ! Use rootr here for effective per-layer transpiration, which may not be the same as rootfr
           tranloss(j) = max(tranloss(j), 0._r8) ! in case transpiration is pathological
        else
@@ -2779,8 +2778,7 @@ contains
           ! Add in boundary layer resistance
           aerecond = 1._r8 / (1._r8/(aerecond+smallnumber) + 1._r8/(grnd_ch4_cond+smallnumber))
 
-          !RPF - both aere and oxaere I think need scaling
-          aere(j) = aerecond * (conc_ch4(j)/watsat(j)/k_h_cc - c_atm(1)) / (volrat(j)*dz(j)) ![mol/m3-total/s]
+          aere(j) = aerecond * (conc_ch4(j)/watsat(j)/k_h_cc - c_atm(1)) / dz(j) ![mol/m3-total/s]
           !ZS: Added watsat & Henry's const.
           aere(j) = max(aere(j), 0._r8) ! prevent backwards diffusion
 
@@ -2790,7 +2788,7 @@ contains
           oxdiffus = diffus_aere * d_con_g(2,1) / d_con_g(1,1) ! adjust for O2:CH4 molecular diffusion
           aerecond = area_tiller * rootfr(j) * oxdiffus / (z(j)*CH4ParamsInst%rob)
           aerecond = 1._r8 / (1._r8/(aerecond+smallnumber) + 1._r8/(grnd_ch4_cond+smallnumber))
-          oxaere(j) = -aerecond *(conc_o2(j)/watsat(j)/k_h_cc - c_atm(2)) / (volrat(j)*dz(j)) ![mol/m3-total/s]
+          oxaere(j) = -aerecond *(conc_o2(j)/watsat(j)/k_h_cc - c_atm(2)) / dz(j) ![mol/m3-total/s]
           oxaere(j) = max(oxaere(j), 0._r8)
           ! Diffusion in is positive; prevent backwards diffusion
           if ( .not. use_aereoxid_prog ) then ! fixed aere oxid proportion; will be done in ch4_tran

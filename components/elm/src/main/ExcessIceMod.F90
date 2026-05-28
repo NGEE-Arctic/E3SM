@@ -82,8 +82,9 @@ contains
        col_pp%zi(c,j) = zi_bot + col_pp%dz(c,j)
        zi_bot = col_pp%zi(c,j)
        ! calculate volume ratio to scale molar concentrations of BGC species
-       ! (i.e., layer compression decreases volume but doesn't remove chemical speices,
-       ! so it should increase molar concentrations)
+       ! (i.e., layer compression decreases volume but doesn't remove chemical species,
+       ! so it should increase molar concentrations). BGC pool concentrations are
+       ! adjusted in BGCLayerCompressionMod after vertical transport completes.
        col_pp%volrat(c,j) = dz_orig/col_pp%dz(c,j)
     end do
     col_pp%zi(c,0) = 0._r8   ! surface interface (always 0)

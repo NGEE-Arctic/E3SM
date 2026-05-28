@@ -45,6 +45,8 @@ module EcosystemDynMod
   use SolarAbsorbedType    , only : solarabs_type
   use FanUpdateMod,  only: fan_eval
 
+  ! BGC layer compression
+  use BGCLayerCompressionMod, only : adjust_bgc_for_layer_compression
 
   use timeinfoMod
   use perfMod_GPU
@@ -738,6 +740,10 @@ contains
    call SoilLittVertTransp( num_soilc, filter_soilc, &
             canopystate_vars, cnstate_vars )
        call t_stop_lnd(event)
+
+   ! Adjust BGC concentrations for layer compression from excess ice melt
+   call adjust_bgc_for_layer_compression(bounds)
+
    if(.not.use_fates)then
        event = 'CNGapMortality'
        call t_start_lnd(event)
