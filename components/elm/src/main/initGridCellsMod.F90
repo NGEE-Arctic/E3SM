@@ -439,9 +439,7 @@ contains
                end do
             endif
          endif
-       end if 
-
-    end if
+       end if
 
   end subroutine set_landunit_veg_compete
   
