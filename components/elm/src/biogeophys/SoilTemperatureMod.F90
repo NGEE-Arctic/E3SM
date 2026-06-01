@@ -1735,7 +1735,18 @@ contains
                               if (wmass0(c,j) < supercool(c,j)) then
                                  h2osoi_ice(c,j) = 0._r8
                               else
-                                 h2osoi_ice(c,j) = min(wmass0(c,j) - supercool(c,j),wice0(c,j)-xm(c,j))
+                                 ! For polygon columns with excess ice: wmass0 includes wexice0,
+                                 ! so subtract it to get pore ice only
+                                 if (j >= 1 .and. use_polygonal_tundra) then
+                                    l = col_pp%landunit(c)
+                                    if (lun_pp%ispolygon(l)) then
+                                       h2osoi_ice(c,j) = min(wmass0(c,j) - supercool(c,j) - wexice0(c,j),wice0(c,j)-xm(c,j))
+                                    else
+                                       h2osoi_ice(c,j) = min(wmass0(c,j) - supercool(c,j),wice0(c,j)-xm(c,j))
+                                    endif
+                                 else
+                                    h2osoi_ice(c,j) = min(wmass0(c,j) - supercool(c,j),wice0(c,j)-xm(c,j))
+                                 endif
                               endif
                            end if
                         endif
