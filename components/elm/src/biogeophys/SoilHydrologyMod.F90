@@ -606,7 +606,7 @@ contains
                      b0 = 0.014_r8 * meangradz(c) ** (-0.37_r8)
                      b1 = 0.0017_r8 * meangradz(c) ** (-0.37_r8)
                      b = b0 + (b1 - b0) * degradation_index(c)
-                     qflx_h2osfc_surf(c) = 0.014_r8 * ((swc/b) ** 0.37_r8) * (0.5_r8 * (1 + (swc/b) ** (1_r8))**((0.4_r8-a)))
+                     qflx_h2osfc_surf(c) = 0.014_r8 * ((swc/b) ** a) * (0.5_r8 * (1 + (swc/b) ** (1_r8))**((0.4_r8-a)))
                   else
                      qflx_h2osfc_surf(c) = 0._r8
                   endif
