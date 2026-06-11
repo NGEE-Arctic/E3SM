@@ -1576,7 +1576,7 @@ contains
     data2dptr => this%bw(:,-nlevsno+1:0)
      call hist_addfld2d (fname='SNO_BW', units='kg/m3', type2d='levsno', &
           avgflag='A', long_name='Partial density of water in the snow pack (ice + liquid)', &
-           ptr_col=data2dptr, no_snow_behavior=no_snow_normal, default='inactive')
+           ptr_col=data2dptr, no_snow_behavior=no_snow_normal, default='active')
 
     this%snw_rds(begc:endc,-nlevsno+1:0) = spval
     data2dptr => this%snw_rds(:,-nlevsno+1:0)
