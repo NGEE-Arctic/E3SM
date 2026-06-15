@@ -1035,6 +1035,8 @@ contains
                      ! Modify thk for excess ice using sum of resistances
                      thk(c,j) = 1._r8 / ((1._r8-f_exice)/thk(c,j) + f_exice/tkice)
                   endif
+                  ! Modify thk for excess ice using sum of resistances
+                  thk(c,j) = 1._r8 / ((1._r8-f_exice)/thk(c,j)) + f_exice/tkice
                   if (j > nlevbed) thk(c,j) = thk_bedrock
                else if (lun_pp%itype(l) == istice .OR. lun_pp%itype(l) == istice_mec) then
                   thk(c,j) = tkwat
