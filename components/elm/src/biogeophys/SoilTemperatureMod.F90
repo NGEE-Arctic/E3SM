@@ -863,6 +863,8 @@ contains
     real(r8) :: om_frac                   ! organic matter fraction for current layer
     real(r8) :: om_adj                    ! organic matter fraction for current layer relative to total solid volume
     real(r8) :: organic_max               ! organic matter (kg/m3) threshold
+    real(r8) :: f_exice                   ! fraction of layer that is excess ice
+    real(r8) :: dz_soil                   ! depth of layer subject to soil tk scheme
     character(len=64) :: event
     
     real(r8), parameter :: rho_ice     = 917._r8
@@ -940,14 +942,21 @@ contains
                else if (lun_pp%itype(l) /= istwet .AND. lun_pp%itype(l) /= istice .AND. lun_pp%itype(l) /= istice_mec &
                     .AND. col_pp%itype(c) /= icol_sunwall .AND. col_pp%itype(c) /= icol_shadewall .AND. &
                     col_pp%itype(c) /= icol_roof) then
-
-                  ! Add excess ice to saturation calculation for polygonal tundra
                   if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
-                     satw = (h2osoi_liq(c,j)/denh2o + h2osoi_ice(c,j)/denice + &
-                             excess_ice(c,j)/denice) / (dz(c,j)*watsat(c,j))
+                     if (excess_ice(c,j) .gt. 0._r8) then
+                        f_exice = excess_ice(c,j)/(denice*dz(c,j))
+                        f_exice = f_exice / (1._r8 + f_exice)
+                        f_exice = min(1._r8, max(0._r8, f_exice))
+                        dz_soil = dz(c,j) * (1._r8 - f_exice)
+                     else
+                        dz_soil = dz(c,j)
+                        f_exice = 0._r8
+                     endif
                   else
-                     satw = (h2osoi_liq(c,j)/denh2o + h2osoi_ice(c,j)/denice)/(dz(c,j)*watsat(c,j))
-                  end if
+                     dz_soil = dz(c,j)
+                     f_exice = 0._r8
+                  endif
+                  satw = (h2osoi_liq(c,j)/denh2o + h2osoi_ice(c,j)/denice)/(dz_soil*watsat(c,j))
                   satw = min(1._r8, satw)
 
                   if (trim(soil_thermal_conductivity_model) == 'farouki') then
