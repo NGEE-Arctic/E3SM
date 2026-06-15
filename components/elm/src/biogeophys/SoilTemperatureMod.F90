@@ -857,6 +857,8 @@ contains
     real(r8) :: fl                        ! volume fraction of liquid or unfrozen water to total water
     real(r8) :: satw                      ! relative total water content of soil.
     real(r8) :: zh2osfc
+    real(r8) :: f_exice                   ! fraction of layer that is excess ice
+    real(r8) :: dz_soil                   ! depth of layer subject to soil tk scheme
     character(len=64) :: event
     
     real(r8), parameter :: rho_ice     = 917._r8
@@ -928,14 +930,21 @@ contains
                else if (lun_pp%itype(l) /= istwet .AND. lun_pp%itype(l) /= istice .AND. lun_pp%itype(l) /= istice_mec &
                     .AND. col_pp%itype(c) /= icol_sunwall .AND. col_pp%itype(c) /= icol_shadewall .AND. &
                     col_pp%itype(c) /= icol_roof) then
-
-                  ! Add excess ice to saturation calculation for polygonal tundra
                   if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
-                     satw = (h2osoi_liq(c,j)/denh2o + h2osoi_ice(c,j)/denice + &
-                             excess_ice(c,j)/denice) / (dz(c,j)*watsat(c,j))
+                     if (excess_ice(c,j) .gt. 0._r8) then
+                        f_exice = excess_ice(c,j)/(denice*dz(c,j))
+                        f_exice = f_exice / (1._r8 + f_exice)
+                        f_exice = min(1._r8, max(0._r8, f_exice))
+                        dz_soil = dz(c,j) * (1._r8 - f_exice)
+                     else
+                        dz_soil = dz(c,j)
+                        f_exice = 0._r8
+                     endif
                   else
-                     satw = (h2osoi_liq(c,j)/denh2o + h2osoi_ice(c,j)/denice)/(dz(c,j)*watsat(c,j))
-                  end if
+                     dz_soil = dz(c,j)
+                     f_exice = 0._r8
+                  endif
+                  satw = (h2osoi_liq(c,j)/denh2o + h2osoi_ice(c,j)/denice)/(dz_soil*watsat(c,j))
                   satw = min(1._r8, satw)
                   if (satw > .1e-6_r8) then
                      if (t_soisno(c,j) >= tfrz) then       ! Unfrozen soil
@@ -943,21 +952,16 @@ contains
                      else                               ! Frozen soil
                         dke = satw
                      end if
-                     fl = (h2osoi_liq(c,j)/(denh2o*dz(c,j))) / (h2osoi_liq(c,j)/(denh2o*dz(c,j)) + &
-                          h2osoi_ice(c,j)/(denice*dz(c,j)))
-                     
-                     ! Update liquid fraction for polygonal tundra to include excess ice
-                     if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
-                        fl = (h2osoi_liq(c,j)/(denh2o*dz(c,j))) / &
-                             (h2osoi_liq(c,j)/(denh2o*dz(c,j)) + &
-                              h2osoi_ice(c,j)/(denice*dz(c,j)) + &
-                              excess_ice(c,j)/(denice*dz(c,j)))
-                     end if
+                     ! Fraction of liquid in pore space (so no adjustment for excess ice)
+                     fl = (h2osoi_liq(c,j)/(denh2o*dz_soil)) / (h2osoi_liq(c,j)/(denh2o*dz_soil) + &
+                          h2osoi_ice(c,j)/(denice*dz_soil))
                      dksat = tkmg(c,j)*tkwat**(fl*watsat(c,j))*tkice**((1._r8-fl)*watsat(c,j))
                      thk(c,j) = dke*dksat + (1._r8-dke)*tkdry(c,j)
                   else
                      thk(c,j) = tkdry(c,j)
                   endif
+                  ! Modify thk for excess ice using sum of resistances
+                  thk(c,j) = 1._r8 / ((1._r8-f_exice)/thk(c,j)) + f_exice/tkice
                   if (j > nlevbed) thk(c,j) = thk_bedrock
                else if (lun_pp%itype(l) == istice .OR. lun_pp%itype(l) == istice_mec) then
                   thk(c,j) = tkwat
