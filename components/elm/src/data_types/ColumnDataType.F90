@@ -181,7 +181,7 @@ module ColumnDataType
     real(r8), pointer :: smp_i          (:,:) => null() ! frozen water potential
     real(r8), pointer :: excess_ice          (:,:) => null() ! excess ground ice mass (kg/m2) (1:nlevgrnd)
     real(r8), pointer :: excess_ice_volfrac  (:,:) => null() ! excess ice volumetric fraction (0 to 1) (1:nlevgrnd)
-    real(r8), pointer :: h2osfc_p         (:) => null() !!! DEBUG
+    real(r8), pointer :: h2osfc_p          (:) => null() ! h2osfc from previous timestep (kg/m2)
 
   contains
     procedure, public :: Init    => col_ws_init
