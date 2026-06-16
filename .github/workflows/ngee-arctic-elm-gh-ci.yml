@@ -92,6 +92,19 @@ jobs:
           - ERS_Ld5_P4.ne4pg2_oQU480.F2010.ghci-oci_gnu.eam-wcprod_F2010
           - ERS_P4.ne4pg2_oQU480.A.ghci-oci_gnu
           - ERS_P4.ne4pg2_oQU480.I1850ELMCN.ghci-oci_gnu.elm-qian_1948
+          - ERS_Ld150.ELM_USRDAT.I1850CNPRDCTCBC.ghci-oci_gnu.elm-snowveg_arctic
+          - SMS_Ly2_P1x1.1x1_smallvilleIA.I20TRGSWCNPCROP.ghci-oci_gnu.elm-lulcc_sville
+          - ERS.f19_g16.I1850GSWCNPECACNTBC.ghci-oci_gnu.elm-eca_f19_g16_I1850GSWCNPECACNTBC
+          - ERS_D.f09_f09.IELM.ghci-oci_gnu.elm-koch_snowflake
+          - SMS.r05_r05.IELM.ghci-oci_gnu.elm-topounit_im2
+          - ERS.f19_g16.I1850CNECACTCBC.gchi-oci_gnu.elm-eca
+          - ERS.ELM_USRDAT.I1850CNPRDCTCBC.gchi-oci_gnu.elm-usrpft_default_I1850CNPRDCTCBC
+          - ERS.ELM_USRDAT.I1850CNPRDCTCBC.gchi-oci_gnu.elm-usrpft_codetest_I1850CNPRDCTCBC
+          - ERS.ELM_USRDAT.I1850CNPRDCTCBC.gchi-oci_gnu.elm-usrpft_arctic_codetest_I1850CNPRDCTCBC
+          - ERS.ELM_USRDAT.I1850CNPRDCTCBC.gchi-oci_gnu.elm-usrpft_arctic_onsetgdd_I1850CNPRDCTCBC
+          - ERS_Ly5.ELM_USRDAT.I1850CNPRDCTCBC.gchi-oci_gnu.elm-usrpft_arctic_maxpft12_I1850CNPRDCTCBC
+          - ERS.1x1_icycape.I1850GSWCNPRDCTCBC.gchi-oci_gnu.elm-polygonal_tundra
+          - SMS_Ly1.ELM_USRDAT.I1850CNPRDCTCBC.gchi-oci_gnu.elm-kilocraft
     # This container image provides the E3SM test environment used by
     # create_test, including the expected /projects/e3sm/scratch layout used by
     # the artifact collection paths below.
