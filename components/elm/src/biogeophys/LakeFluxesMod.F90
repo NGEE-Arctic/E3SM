@@ -9,6 +9,7 @@ module LakeFluxesMod
   use shr_kind_mod         , only : r8 => shr_kind_r8
   use shr_log_mod          , only : errMsg => shr_log_errMsg
   use decompMod            , only : bounds_type
+  use abortutils           , only : endrun
   use atm2lndType          , only : atm2lnd_type
   use EnergyFluxType       , only : energyflux_type
   use FrictionVelocityType , only : frictionvel_type
@@ -253,6 +254,12 @@ contains
          t = veg_pp%topounit(p)
          g = col_pp%gridcell(c)
 
+         ! Debug: log t_grnd at very start of lake loop
+         if (c == 17) then  ! Column 17 from previous run
+            write(iulog,*) 'DEBUG LakeFluxes START: c=', c, ' t_grnd(c)=', t_grnd(c), &
+                 ' t_lake(c,1)=', t_lake(c,1)
+         end if
+
          ! Set fetch for prognostic roughness length-- if not found in surface data.
          ! This is poorly constrained, and should eventually be based on global lake data
          ! For now, base on lake depth, assuming that small lakes are likely to be shallower
@@ -405,6 +412,14 @@ contains
             g = veg_pp%gridcell(p)
 
             tgbef(c) = t_grnd(c)
+
+            ! Debug: check t_grnd at loop entry
+            if (t_grnd(c) < 200._r8 .or. t_grnd(c) > 350._r8) then
+               write(iulog,*) 'DEBUG LakeFluxes: t_grnd already bad at loop entry'
+               write(iulog,*) '  column c=', c, ' patch p=', p, ' t_grnd(c)=', t_grnd(c)
+               write(iulog,*) '  t_lake(c,1)=', t_lake(c,1), ' snl(c)=', snl(c)
+            end if
+
             if (t_grnd(c) > tfrz .and. t_lake(c,1) > tfrz .and. snl(c) == 0) then
                tksur(c) = savedtke1(c)
                ! Set this to the eddy conductivity from the last
@@ -456,6 +471,29 @@ contains
             !Changed sabg(p) to betaprime(c)*sabg(p).
             bx  = 4._r8*stftg3(p) + forc_rho(t)*cpair/rah(p) &
                  + htvp(c)*forc_rho(t)/raw(p)*qsatgdT(c) + tksur(c)/dzsur(c)
+
+            ! Debug: check for bad inputs and log solver coefficients
+            if (abs(bx) < 1.e-10_r8) then
+               write(iulog,*) 'ERROR: bx near zero in lake t_grnd calculation'
+               write(iulog,*) '  column c=', c, ' bx=', bx
+               call endrun('Division by near-zero in lake temperature')
+            end if
+            if (tgbef(c) < 150._r8 .or. tgbef(c) > 400._r8) then
+               write(iulog,*) 'ERROR: tgbef out of range before t_grnd update'
+               write(iulog,*) '  column c=', c, ' tgbef(c)=', tgbef(c)
+               call endrun('Previous lake temperature already corrupted')
+            end if
+
+            ! Debug: log solver inputs when result will be bad
+            if (ax/bx < 200._r8 .or. ax/bx > 350._r8) then
+               write(iulog,*) 'DEBUG LakeFluxes: Temperature solver producing bad result'
+               write(iulog,*) '  column c=', c, ' patch p=', p
+               write(iulog,*) '  tgbef(c)=', tgbef(c), ' ax/bx=', ax/bx
+               write(iulog,*) '  ax=', ax, ' bx=', bx
+               write(iulog,*) '  sabg(p)=', sabg(p), ' betaprime(c)=', betaprime(c)
+               write(iulog,*) '  forc_lwrad(t)=', forc_lwrad(t), ' stftg3(p)=', stftg3(p)
+               write(iulog,*) '  tksur(c)=', tksur(c), ' tsur(c)=', tsur(c), ' dzsur(c)=', dzsur(c)
+            end if
 
             t_grnd(c) = ax/bx
             !prevent too large numerical step
@@ -610,6 +648,15 @@ contains
          ! eflx_lwrad_out(p) = (1._r8-emg_lake)*forc_lwrad(c) + stftg3(p)*(-3._r8*tgbef(c)+4._r8*t_grnd(c))
          ! What is tgbef doing in this equation? Can't it be exact now? --Zack Subin, 4/14/09
 
+         ! Debug: check for unreasonable temperatures
+         if (t_grnd(c) < 150._r8 .or. t_grnd(c) > 400._r8) then
+            write(iulog,*) 'ERROR LakeFluxes: Unreasonable t_grnd for lake'
+            write(iulog,*) '  patch p=', p, ' column c=', c
+            write(iulog,*) '  t_grnd(c)=', t_grnd(c), ' (should be ~273 K)'
+            write(iulog,*) '  This will cause huge eflx_lwrad_out'
+            call endrun('Lake ground temperature out of physical range')
+         end if
+
          eflx_lwrad_out(p) = (1._r8-emg_lake)*forc_lwrad(t) + emg_lake*sb*t_grnd(c)**4._r8
 
          ! Ground heat flux
@@ -691,6 +738,17 @@ contains
 
          t_veg(p) = forc_t(t)
          eflx_lwrad_net(p)  = eflx_lwrad_out(p) - forc_lwrad(t)
+
+         ! Debug: check if lwrad balance is satisfied
+         if (abs(eflx_lwrad_out(p) - eflx_lwrad_net(p) - forc_lwrad(t)) > 1.e-10_r8) then
+            write(iulog,*) 'DEBUG LakeFluxes: lwrad imbalance detected'
+            write(iulog,*) '  patch p=', p, ' column c=', c, ' topounit t=', t
+            write(iulog,*) '  eflx_lwrad_out=', eflx_lwrad_out(p)
+            write(iulog,*) '  eflx_lwrad_net=', eflx_lwrad_net(p)
+            write(iulog,*) '  forc_lwrad(t)=', forc_lwrad(t)
+            write(iulog,*) '  error=', eflx_lwrad_out(p) - eflx_lwrad_net(p) - forc_lwrad(t)
+         end if
+
          qflx_prec_grnd(p) = forc_rain(t) + forc_snow(t)
          qflx_dirct_rain(p) = 0._r8
          qflx_leafdrip(p) = 0._r8

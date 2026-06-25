@@ -46,7 +46,7 @@ contains
     !
     ! !USES:
       !$acc routine seq
-    use elm_varcon       , only : hvap, cpair, grav, vkc, tfrz, sb
+    use elm_varcon       , only : hvap, cpair, grav, vkc, tfrz, sb, spval
     use landunit_varcon  , only : istsoil, istcrop
     use column_varcon    , only : icol_roof, icol_sunwall, icol_shadewall, icol_road_perv
     use subgridAveMod    , only : p2c
@@ -310,6 +310,15 @@ contains
             ! interactions between urban columns.
 
             eflx_lwrad_del(p) = 4._r8*emg(c)*sb*t_grnd0(c)**3*tinc(c)
+
+            ! Check if eflx_lwrad_net was properly initialized by UrbanRadiation
+            if (abs(eflx_lwrad_net(p) - spval) < 0.1_r8 * spval) then
+               write(iulog,*) 'ERROR: eflx_lwrad_net not initialized for urban patch'
+               write(iulog,*) 'patch =', p, 'column =', c, 'landunit =', l
+               write(iulog,*) 'eflx_lwrad_net =', eflx_lwrad_net(p)
+               call endrun(msg='Urban longwave flux not initialized by UrbanRadiation. '// &
+                    'Check that urban landunits are in active filter.')
+            end if
 
             ! Include transpiration term because needed for pervious road
             ! and wasteheat and traffic flux

@@ -694,6 +694,20 @@ contains
              if ( (errlon(p) /= spval) .and. (abs(errlon(p)) > 1.e-7_r8) ) then
                 found = .true.
                 indexp = p
+
+                ! Debug: print detailed flux values for failing patch
+                c = veg_pp%column(indexp)
+                l = veg_pp%landunit(indexp)
+                t = veg_pp%topounit(indexp)
+                if (abs(errlon(p)) > 1.e-5_r8 .and. lun_pp%itype(l) == 5) then
+                   write(iulog,*) 'DEBUG BalanceCheck: Lake errlon > 1e-5'
+                   write(iulog,*) '  patch p=', p, ' topounit t=', t, ' col c=', c, ' lun l=', l
+                   write(iulog,*) '  eflx_lwrad_out=', eflx_lwrad_out(p)
+                   write(iulog,*) '  eflx_lwrad_net=', eflx_lwrad_net(p)
+                   write(iulog,*) '  forc_lwrad(t)=', forc_lwrad(t)
+                   write(iulog,*) '  errlon stored=', errlon(p)
+                   write(iulog,*) '  errlon recalc=', eflx_lwrad_out(p) - eflx_lwrad_net(p) - forc_lwrad(t)
+                end if
              end if
           end if
        end do

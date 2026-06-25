@@ -223,6 +223,7 @@ contains
       ! Net longwave radiation for road and both walls in urban canyon allowing for multiple re-emission
 
       if (num_urbanl > 0) then
+         write(iulog,*) 'UrbanRadiation: num_urbanl =', num_urbanl, ' num_urbanp =', num_urbanp
          call net_longwave (bounds,       &
               num_urbanl, filter_urbanl,  &
               canyon_hwr(begl:endl),      &
@@ -250,6 +251,9 @@ contains
               lwup_shadewall(begl:endl),  &
               lwup_canyon(begl:endl),     &
               urbanparams_vars)
+      else
+         write(iulog,*) 'UrbanRadiation: num_urbanl = 0, num_urbanp =', num_urbanp, &
+              ' - skipping net_longwave calculation'
       end if
 
       ! Determine variables needed for history output and communication with atm
