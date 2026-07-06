@@ -14,6 +14,7 @@ module initGridCellsMod
   use abortutils     , only : endrun
   use elm_varctl     , only : iulog
   use elm_varctl     , only : use_fates, use_fates_sp, use_polygonal_tundra
+  use elm_varctl     , only : use_separate_shrub_grass_columns !GAM
   use elm_varcon     , only : namep, namec, namel, nameg
   use decompMod      , only : bounds_type, ldecomp
   use GridcellType   , only : grc_pp
@@ -114,7 +115,7 @@ contains
     nclumps = get_proc_clumps()
 
     ! FIX(SPM,032414) add private vars for cohort and perhaps patch dimension
-    !$OMP PARALLEL DO PRIVATE (nc, bounds_clump, ti, li, ci, pi, gdc, topounit)
+    !$OMP PARALLEL DO PRIVATE (nc, bounds_clump, ti, li, ci, pi, gdc, topounit, topo_ind) !GAM
     do nc = 1, nclumps
 
        call get_clump_bounds(nc, bounds_clump)
@@ -360,6 +361,15 @@ contains
     real(r8) :: wtlunit2topounit                 ! landunit weight on topounit
     real(r8) :: p_wt                             ! patch weight (0-1)
     real(r8) :: wtpoly2lndunit                   ! weight of polygon type wrt nat. veg. landunit
+
+   !GAM add local variables
+    integer, parameter :: pft_boreal_shrub = 11   !GAM hard-coded PFT index; better as namelist later
+    integer, parameter :: pft_arctic_grass = 12   !GAM hard-coded PFT index; better as namelist later
+    real(r8), parameter :: min_wt = 1.0e-12_r8    !GAM minimum active area threshold
+    real(r8) :: f_shrub                           !GAM boreal shrub fraction on natural veg landunit
+    real(r8) :: f_grass                           !GAM Arctic C3 grass fraction on natural veg landunit
+    real(r8) :: f_other                           !GAM summed non-shrub/non-grass natural PFT fraction
+    integer  :: n_other_patches                   !GAM number of positive-weight non-target patches
     !------------------------------------------------------------------------
 
     ! Set decomposition properties
@@ -390,16 +400,57 @@ contains
       ! do standard veg landunit first
        call add_landunit(li=li, ti=ti, ltype=ltype, wttopounit=wtlunit2topounit)
        
-       ! Assume one column on the landunit
-       call add_column(ci=ci, li=li, ctype=1, wtlunit=1.0_r8, is_soil=.true.)
-       do m = natpft_lb,natpft_ub
-          if(use_fates .and. .not.use_fates_sp)then
-             p_wt = 1.0_r8/real(natpft_size,r8)
-          else
-             p_wt = wt_nat_patch(gi,topo_ind,m)
-          end if
-          call add_patch(pi=pi, ci=ci, ptype=m, wtcol=p_wt, is_on_soil_col=.true.)
-       end do
+      !GAM
+       if (use_separate_shrub_grass_columns) then
+
+            f_shrub = wt_nat_patch(gi,topo_ind,pft_boreal_shrub) 
+            f_grass = wt_nat_patch(gi,topo_ind,pft_arctic_grass)
+            !f_other = 1.0_r8 - f_grass - f_shrub
+            f_other = 0.0_r8
+            n_other_patches = 0
+            do m = natpft_lb,natpft_ub
+               if (m == pft_arctic_grass .or. m == pft_boreal_shrub) cycle
+               f_other = f_other + wt_nat_patch(gi,topo_ind,m)
+               if (wt_nat_patch(gi,topo_ind,m) > min_wt) n_other_patches = n_other_patches + 1
+            end do
+
+            if (f_shrub > min_wt) then
+               call add_column(ci=ci, li=li, ctype=1, wtlunit=f_shrub, is_soil=.true.)
+               call add_patch(pi=pi, ci=ci, ptype=pft_boreal_shrub, wtcol=1.0_r8, is_on_soil_col=.true.)
+            end if
+
+            if (f_grass > min_wt) then
+               call add_column(ci=ci, li=li, ctype=1, wtlunit=f_grass, is_soil=.true.)
+               call add_patch(pi=pi, ci=ci, ptype=pft_arctic_grass, wtcol=1.0_r8, is_on_soil_col=.true.)
+            end if
+
+            if (f_other > min_wt .and. n_other_patches > 0) then
+               call add_column(ci=ci, li=li, ctype=1, wtlunit=f_other, is_soil=.true.)
+
+               do m = natpft_lb,natpft_ub
+                  if (m == pft_arctic_grass .or. m == pft_boreal_shrub) cycle
+                  p_wt = wt_nat_patch(gi,topo_ind,m) / f_other
+                  if (p_wt > min_wt) then
+                     call add_patch(pi=pi, ci=ci, ptype=m, wtcol=p_wt, is_on_soil_col=.true.)
+                  end if
+               end do
+            end if
+
+       else
+         ! Assume one column on the landunit
+         call add_column(ci=ci, li=li, ctype=1, wtlunit=1.0_r8, is_soil=.true.)
+         do m = natpft_lb,natpft_ub
+            if(use_fates .and. .not.use_fates_sp)then
+               p_wt = 1.0_r8/real(natpft_size,r8)
+            else
+               p_wt = wt_nat_patch(gi,topo_ind,m)
+            end if
+            call add_patch(pi=pi, ci=ci, ptype=m, wtcol=p_wt, is_on_soil_col=.true.)
+         end do
+       end if
+
+      !GAM end
+
 
        ! add polygonal landunits and columns if feature turned on
        ! continue to assume one column per landunit.

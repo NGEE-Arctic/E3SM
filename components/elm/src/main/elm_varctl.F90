@@ -419,6 +419,9 @@ module elm_varctl
   logical, public :: prohibit_subsidence  = .false.
   logical, public :: use_arctic_init      = .false.
 
+  !GAM snow shrub redistribution
+  logical, public :: use_separate_shrub_grass_columns = .true. !GAM change this once in namelist
+
   !----------------------------------------------------------
   ! VSFM switches
   !----------------------------------------------------------

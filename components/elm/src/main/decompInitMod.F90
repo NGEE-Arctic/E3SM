@@ -11,7 +11,7 @@ module decompInitMod
   use shr_log_mod     , only : errMsg => shr_log_errMsg
   use spmdMod         , only : masterproc, iam, npes, mpicom, comp_id
   use abortutils      , only : endrun
-  use elm_varctl      , only : iulog, use_fates
+  use elm_varctl      , only : iulog, use_fates, use_separate_shrub_grass_columns !GAM
   use elm_varcon      , only : grlnd
   use GridcellType    , only : grc_pp
   use LandunitType    , only : lun_pp
@@ -1013,17 +1013,21 @@ contains
           if (present(glcmask)) then
              call subgrid_get_gcellinfo (ln, ntunits=itunits, nlunits=ilunits, ncols=icols, npfts=ipfts, &
                  ncohorts=icohorts, glcmask=glcmask(ln), num_tunits_per_grd= ldomain%num_tunits_per_grd(ln))
+                 call adjust_counts_for_separate_shrub_grass(ln, itunits, icols, ipfts) !GAM
           else
              call subgrid_get_gcellinfo (ln, ntunits=itunits, nlunits=ilunits, ncols=icols, npfts=ipfts, &
                  ncohorts=icohorts, num_tunits_per_grd= ldomain%num_tunits_per_grd(ln) )
+                 call adjust_counts_for_separate_shrub_grass(ln, itunits, icols, ipfts) !GAM
           endif
        else
           if (present(glcmask)) then
              call subgrid_get_gcellinfo (ln, ntunits=itunits, nlunits=ilunits, ncols=icols, npfts=ipfts, &
                  ncohorts=icohorts, glcmask=glcmask(ln))
+                 call adjust_counts_for_separate_shrub_grass(ln, itunits, icols, ipfts) !GAM
           else
              call subgrid_get_gcellinfo (ln, ntunits=itunits, nlunits=ilunits, ncols=icols, npfts=ipfts, &
                  ncohorts=icohorts )
+                 call adjust_counts_for_separate_shrub_grass(ln, itunits, icols, ipfts) !GAM
           endif
        endif
 
@@ -1353,17 +1357,21 @@ contains
           if (present(glcmask)) then
              call subgrid_get_gcellinfo (gi, ntunits=itunits, nlunits=ilunits, ncols=icols, npfts=ipfts, &
                  ncohorts=icohorts, glcmask=glcmask(gi), num_tunits_per_grd= ldomain%num_tunits_per_grd(gi) )
+                 call adjust_counts_for_separate_shrub_grass(gi, itunits, icols, ipfts) !GAM
           else
              call subgrid_get_gcellinfo (gi, ntunits=itunits, nlunits=ilunits, ncols=icols, npfts=ipfts, &
                   ncohorts=icohorts, num_tunits_per_grd= ldomain%num_tunits_per_grd(gi) )
+                  call adjust_counts_for_separate_shrub_grass(gi, itunits, icols, ipfts) !GAM
           endif
        else
           if (present(glcmask)) then
              call subgrid_get_gcellinfo (gi, ntunits=itunits, nlunits=ilunits, ncols=icols, npfts=ipfts, &
                  ncohorts=icohorts, glcmask=glcmask(gi))
+                 call adjust_counts_for_separate_shrub_grass(gi, itunits, icols, ipfts) !GAM
           else
              call subgrid_get_gcellinfo (gi, ntunits=itunits, nlunits=ilunits, ncols=icols, npfts=ipfts, &
                   ncohorts=icohorts )
+                  call adjust_counts_for_separate_shrub_grass(gi, itunits, icols, ipfts) !GAM
           endif
        endif
 
@@ -2450,17 +2458,21 @@ contains
              if (present(glcmask)) then
                 call subgrid_get_gcellinfo (ln, ntunits=itunits, nlunits=ilunits, ncols=icols, npfts=ipfts, &
                      ncohorts=icohorts, glcmask=glcmask(ln), num_tunits_per_grd= ldomain%num_tunits_per_grd(ln) )
+                     call adjust_counts_for_separate_shrub_grass(ln, itunits, icols, ipfts) !GAM
              else
                 call subgrid_get_gcellinfo (ln, ntunits=itunits, nlunits=ilunits, ncols=icols, npfts=ipfts, &
                      ncohorts=icohorts, num_tunits_per_grd= ldomain%num_tunits_per_grd(ln) )
+                     call adjust_counts_for_separate_shrub_grass(ln, itunits, icols, ipfts) !GAM
              endif
           else
              if (present(glcmask)) then
                 call subgrid_get_gcellinfo (ln, ntunits=itunits, nlunits=ilunits, ncols=icols, npfts=ipfts, &
                      ncohorts=icohorts, glcmask=glcmask(ln))
+                     call adjust_counts_for_separate_shrub_grass(ln, itunits, icols, ipfts) !GAM
              else
                 call subgrid_get_gcellinfo (ln, ntunits=itunits, nlunits=ilunits, ncols=icols, npfts=ipfts, &
                      ncohorts=icohorts )
+                     call adjust_counts_for_separate_shrub_grass(ln, itunits, icols, ipfts) !GAM
              endif
           endif
 
@@ -2558,17 +2570,21 @@ contains
              if (present(glcmask)) then
                 call subgrid_get_gcellinfo (ln, ntunits=itunits, nlunits=ilunits, ncols=icols, npfts=ipfts, &
                      ncohorts=icohorts, glcmask=glcmask(ln), num_tunits_per_grd= ldomain%num_tunits_per_grd(ln) )
+                     call adjust_counts_for_separate_shrub_grass(ln, itunits, icols, ipfts) !GAM
              else
                 call subgrid_get_gcellinfo (ln, ntunits=itunits, nlunits=ilunits, ncols=icols, npfts=ipfts, &
                      ncohorts=icohorts, num_tunits_per_grd= ldomain%num_tunits_per_grd(ln) )
+                     call adjust_counts_for_separate_shrub_grass(ln, itunits, icols, ipfts) !GAM
              endif
           else
              if (present(glcmask)) then
                 call subgrid_get_gcellinfo (ln, ntunits=itunits, nlunits=ilunits, ncols=icols, npfts=ipfts, &
                      ncohorts=icohorts, glcmask=glcmask(ln))
+                     call adjust_counts_for_separate_shrub_grass(ln, itunits, icols, ipfts) !GAM
              else
                 call subgrid_get_gcellinfo (ln, ntunits=itunits, nlunits=ilunits, ncols=icols, npfts=ipfts, &
                      ncohorts=icohorts )
+                     call adjust_counts_for_separate_shrub_grass(ln, itunits, icols, ipfts) !GAM
              endif
           endif
 
@@ -2628,5 +2644,108 @@ contains
     endif
 
   end subroutine decompInit_ghosts
+
+
+  !------------------------------------------------------------------------------
+  !GAM
+  subroutine adjust_counts_for_separate_shrub_grass(gi, ntunits, ncols, npfts)
+    !
+    ! !DESCRIPTION:
+    ! Adjust decomposition counts to match initGridCellsMod when natural vegetation
+    ! is split into separate shrub, grass, and other-PFT soil columns.
+    !
+    ! subgrid_get_gcellinfo counts the default natural-vegetation structure as
+    ! one soil column with natpft_size patches for each natural-vegetation
+    ! landunit.  When use_separate_shrub_grass_columns is true, initGridCellsMod
+    ! instead creates up to three soil columns and only positive-weight patches.
+    ! This routine applies the same delta to ncols and npfts before decomp bounds
+    ! are finalized.
+    !
+    ! !USES:
+    use elm_varpar, only : natpft_lb, natpft_ub, natpft_size
+    use elm_varsur, only : wt_nat_patch
+    !
+    ! !ARGUMENTS:
+    implicit none
+    integer, intent(in)    :: gi       ! local gridcell index
+    integer, intent(in)    :: ntunits  ! number of topounits on this gridcell
+    integer, intent(inout) :: ncols    ! column count from subgrid_get_gcellinfo
+    integer, intent(inout) :: npfts    ! patch count from subgrid_get_gcellinfo
+    !
+    ! !LOCAL VARIABLES:
+    integer  :: topo_ind
+    integer  :: m
+    integer  :: split_ncols
+    integer  :: split_npfts
+    integer :: n_other_patches
+    integer, parameter :: pft_boreal_shrub = 11
+    integer, parameter :: pft_arctic_grass = 12
+    real(r8), parameter :: min_wt = 1.0e-12_r8
+    real(r8) :: f_shrub
+    real(r8) :: f_grass
+    real(r8) :: f_other
+    real(r8) :: p_wt
+    logical  :: has_natveg
+    !------------------------------------------------------------------------------
+
+    if (.not. use_separate_shrub_grass_columns) return
+
+    do topo_ind = 1, ntunits
+
+       has_natveg = .false.
+       do m = natpft_lb, natpft_ub
+          if (wt_nat_patch(gi, topo_ind, m) > min_wt) then
+             has_natveg = .true.
+             exit
+          endif
+       enddo
+
+       if (has_natveg) then
+
+          f_shrub = wt_nat_patch(gi, topo_ind, pft_boreal_shrub)
+          f_grass = wt_nat_patch(gi, topo_ind, pft_arctic_grass)
+
+          f_other = 0.0_r8
+          n_other_patches = 0
+          do m = natpft_lb, natpft_ub
+            if (m == pft_arctic_grass .or. m == pft_boreal_shrub) cycle
+            f_other = f_other + wt_nat_patch(gi, topo_ind, m)
+            if (wt_nat_patch(gi, topo_ind, m) > min_wt) then
+               n_other_patches = n_other_patches + 1
+            endif
+          enddo
+
+          split_ncols = 0
+          split_npfts = 0
+
+          if (f_shrub > min_wt) then
+             split_ncols = split_ncols + 1
+             split_npfts = split_npfts + 1
+          endif
+
+          if (f_grass > min_wt) then
+             split_ncols = split_ncols + 1
+             split_npfts = split_npfts + 1
+          endif
+
+          if (f_other > min_wt .and. n_other_patches > 0) then
+             split_ncols = split_ncols + 1
+             do m = natpft_lb, natpft_ub
+                if (m == pft_arctic_grass .or. m == pft_boreal_shrub) cycle
+                p_wt = wt_nat_patch(gi, topo_ind, m) / f_other
+                if (p_wt > min_wt) split_npfts = split_npfts + 1
+             enddo
+          endif
+
+          ! Remove the default natural-vegetation column/patch count and add
+          ! the shrub/grass/other count created in initGridCellsMod.
+          ncols = ncols - 1 + split_ncols
+          npfts = npfts - natpft_size + split_npfts
+
+       endif
+    enddo
+
+  end subroutine adjust_counts_for_separate_shrub_grass
+  !GAM end
 
 end module decompInitMod
