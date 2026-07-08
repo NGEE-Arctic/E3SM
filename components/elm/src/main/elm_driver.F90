@@ -47,6 +47,8 @@ module elm_driver
   !
   use HydrologyNoDrainageMod , only : HydrologyNoDrainage ! (formerly Hydrology2Mod)
   use HydrologyDrainageMod   , only : HydrologyDrainage   ! (formerly Hydrology2Mod)
+  use ShrubSnowRedistributeMod, only : init_shrub_snow_factors                         !GAM
+  use ShrubSnowRedistributeMod, only : compute_shrub_snow_factors, snow_factor_col     !GAM
   use CanopyHydrologyMod     , only : CanopyHydrology     ! (formerly Hydrology1Mod)
   use LakeHydrologyMod       , only : LakeHydrology
   !
@@ -258,6 +260,7 @@ contains
     ! Determine processor bounds and clumps for this processor
 
     call get_proc_bounds(bounds_proc)
+    call init_shrub_snow_factors(bounds_proc)   !GAM
     nclumps = get_proc_clumps()
     nstep_mod = get_nstep()
     dtime_mod = real(get_step_size(),r8)
@@ -713,6 +716,7 @@ contains
        ! ============================================================================
 
        call t_startf('canhydro')
+       call compute_shrub_snow_factors(bounds_clump, snow_factor_col) !GAM
        call CanopyHydrology(bounds_clump, &
             filter(nc)%num_nolakec, filter(nc)%nolakec, &
             filter(nc)%num_nolakep, filter(nc)%nolakep, &

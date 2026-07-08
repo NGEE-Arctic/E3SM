@@ -109,7 +109,7 @@ module controlMod
                         use_vichydro, use_century_decomp, use_cn, use_crop, &
                         use_snicar_frc, use_snicar_ad, use_firn_percolation_and_compaction, &
                         use_extrasnowlayers, use_T_rho_dependent_snowthk, &
-                        use_vancouver, use_mexicocity, use_noio, use_finetop_rad
+                        use_vancouver, use_mexicocity, use_noio, use_finetop_rad, shrub_snow_redist_alpha !GAM
   !
   ! !PUBLIC TYPES:
   implicit none
@@ -356,7 +356,7 @@ contains
          use_nofire, use_lch4, use_vertsoilc, use_extralakelayers, &
          use_vichydro, use_century_decomp, use_cn, use_crop, use_snicar_frc, &
          use_snicar_ad, use_firn_percolation_and_compaction, use_extrasnowlayers,&
-         use_T_rho_dependent_snowthk, use_vancouver, use_mexicocity, use_noio
+         use_T_rho_dependent_snowthk, use_vancouver, use_mexicocity, use_noio, shrub_snow_redist_alpha !GAM
 
     ! cpl_bypass variables
     namelist /elm_inparm/ metdata_type, metdata_bypass, metdata_biases, &

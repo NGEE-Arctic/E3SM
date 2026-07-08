@@ -30,6 +30,7 @@ module CanopyHydrologyMod
   use pftvarcon         , only : irrigated
   use GridcellType      , only : grc_pp
   use timeinfoMod       , only : dtime_mod
+  use ShrubSnowRedistributeMod, only : snow_factor_col !GAM
   !
   ! !PUBLIC TYPES:
   implicit none
@@ -171,6 +172,9 @@ contains
      real(r8) :: newsnow(bounds%begc:bounds%endc)
      real(r8) :: snowmelt(bounds%begc:bounds%endc)
      integer  :: j
+     real(r8) :: forc_snow_eff !GAM
+     real(r8) :: forc_rain_eff !GAM
+     real(r8) :: forc_prec_eff !GAM
 	 
      !--------------------------------------------------- ! initializing variables used to adjust irrigation on local processer
      real(r8) :: qflx_irrig_grid(bounds%begg:bounds%endg)      ! irrigation at grid level [mm/s] 
@@ -275,6 +279,12 @@ contains
           l = plandunit(p)
           c = pcolumn(p)
 
+          !GAM redistribute snow from grass to shrubs 
+          forc_snow_eff = forc_snow(t) * snow_factor_col(c)
+          forc_rain_eff = forc_rain(t)
+          forc_prec_eff = forc_snow_eff + forc_rain_eff
+          !GAM end
+
           ! Canopy interception and precipitation onto ground surface
           ! Add precipitation to leaf water
 
@@ -290,12 +300,13 @@ contains
 
 
              if (ctype(c) /= icol_sunwall .and. ctype(c) /= icol_shadewall) then
-
-                if (frac_veg_nosno(p) == 1 .and. (forc_rain(t) + forc_snow(t)) > 0._r8) then
+               !GAM
+                if (frac_veg_nosno(p) == 1 .and. forc_prec_eff > 0._r8) then
 
                    ! determine fraction of input precipitation that is snow and rain
-                   fracsnow(p) = forc_snow(t)/(forc_snow(t) + forc_rain(t))
-                   fracrain(p) = forc_rain(t)/(forc_snow(t) + forc_rain(t))
+                   fracsnow(p) = forc_snow_eff / forc_prec_eff
+                   fracrain(p) = forc_rain_eff / forc_prec_eff
+                   !GAM end
 
                    ! The leaf water capacities for solid and liquid are different,
                    ! generally double for snow, but these are of somewhat less
@@ -309,11 +320,11 @@ contains
                    fpi = 0.25_r8*(1._r8 - exp(-0.5_r8*(elai(p) + esai(p))))
 
                    ! Direct throughfall
-                   qflx_through_snow(p) = forc_snow(t) * (1._r8-fpi)
-                   qflx_through_rain(p) = forc_rain(t) * (1._r8-fpi)
+                   qflx_through_snow(p) = forc_snow_eff * (1._r8-fpi) !GAM
+                   qflx_through_rain(p) = forc_rain_eff * (1._r8-fpi) !GAM
 
                    ! Intercepted precipitation [mm/s]
-                   qflx_prec_intr(p) = (forc_snow(t) + forc_rain(t)) * fpi
+                   qflx_prec_intr(p) = forc_prec_eff * fpi !GAM
 
                    ! Water storage of intercepted precipitation and dew
                    h2ocan(p) = max(0._r8, h2ocan(p) + dtime*qflx_prec_intr(p))
@@ -350,9 +361,9 @@ contains
 
           if (ctype(c) /= icol_sunwall .and. ctype(c) /= icol_shadewall) then
              if (frac_veg_nosno(p) == 0) then
-                qflx_prec_grnd_snow(p) = forc_snow(t)
-                qflx_prec_grnd_rain(p) = forc_rain(t)
-                qflx_dirct_rain(p) = forc_rain(t)
+                qflx_prec_grnd_snow(p) = forc_snow_eff
+                qflx_prec_grnd_rain(p) = forc_rain_eff
+                qflx_dirct_rain(p) = forc_rain_eff
                 qflx_leafdrip(p) = 0._r8
              else
                 qflx_prec_grnd_snow(p) = qflx_through_snow(p) + (qflx_candrip(p) * fracsnow(p))
@@ -452,6 +463,16 @@ contains
           endif
 
        end do ! (end pft loop)
+
+       !GAM
+       do f = 1, num_nolakec
+         c = filter_nolakec(f)
+         t = col_pp%topounit(c)
+
+         col_wf%snow_redis_factor(c) = snow_factor_col(c)
+         col_wf%qflx_snow_atm_col(c) = forc_snow(t) * snow_factor_col(c)
+       end do
+       !GAM end
 
        ! Determine the fraction of foliage covered by water and the
        ! fraction of foliage that is dry and transpiring.

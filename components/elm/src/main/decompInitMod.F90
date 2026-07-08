@@ -11,7 +11,7 @@ module decompInitMod
   use shr_log_mod     , only : errMsg => shr_log_errMsg
   use spmdMod         , only : masterproc, iam, npes, mpicom, comp_id
   use abortutils      , only : endrun
-  use elm_varctl      , only : iulog, use_fates, use_separate_shrub_grass_columns !GAM
+  use elm_varctl      , only : iulog, use_fates, shrub_snow_redist_alpha !GAM
   use elm_varcon      , only : grlnd
   use GridcellType    , only : grc_pp
   use LandunitType    , only : lun_pp
@@ -2656,7 +2656,7 @@ contains
     !
     ! subgrid_get_gcellinfo counts the default natural-vegetation structure as
     ! one soil column with natpft_size patches for each natural-vegetation
-    ! landunit.  When use_separate_shrub_grass_columns is true, initGridCellsMod
+    ! landunit.  When shrub_snow_redist_alpha is >= 0 , initGridCellsMod
     ! instead creates up to three soil columns and only positive-weight patches.
     ! This routine applies the same delta to ncols and npfts before decomp bounds
     ! are finalized.
@@ -2688,7 +2688,7 @@ contains
     logical  :: has_natveg
     !------------------------------------------------------------------------------
 
-    if (.not. use_separate_shrub_grass_columns) return
+    if (shrub_snow_redist_alpha < 0._r8) return
 
     do topo_ind = 1, ntunits
 

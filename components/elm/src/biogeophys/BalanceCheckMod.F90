@@ -26,6 +26,7 @@ module BalanceCheckMod
   use ColumnDataType     , only : col_ef, col_ws, col_wf
   use VegetationType     , only : veg_pp
   use VegetationDataType , only : veg_ef, veg_ws
+  use ShrubSnowRedistributeMod, only : snow_factor_col !GAM
 
   use timeinfoMod
   !
@@ -311,7 +312,7 @@ contains
              forc_snow_col(c) = 0.
           else
              forc_rain_col(c) = forc_rain(t)
-             forc_snow_col(c) = forc_snow(t)
+             forc_snow_col(c) = forc_snow(t) * snow_factor_col(c) !GAM
           end if
 
           ! update the topounit-level from_uphill water state

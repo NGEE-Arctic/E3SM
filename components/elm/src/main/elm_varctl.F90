@@ -420,7 +420,7 @@ module elm_varctl
   logical, public :: use_arctic_init      = .false.
 
   !GAM snow shrub redistribution
-  logical, public :: use_separate_shrub_grass_columns = .true. !GAM change this once in namelist
+  real(r8), public :: shrub_snow_redist_alpha = -1._r8 !GAM
 
   !----------------------------------------------------------
   ! VSFM switches

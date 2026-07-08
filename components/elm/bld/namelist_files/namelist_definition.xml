@@ -820,6 +820,15 @@ Toggle to turn on the VIC hydrologic parameterizations
 Toggle to turn on the prognostic crop model
 </entry>
 
+<entry id="shrub_snow_redist_alpha" type="real" category="elm_physics"
+       group="elm_inparm" valid_values="" value="-1.0">
+Shrub snow redistribution alpha.
+Negative values disable separate shrub/grass columns and snow redistribution.
+Zero enables separate shrub/grass columns without snow redistribution.
+Positive values enable separate shrub/grass columns and redistribute that
+fraction of grass-column snowfall to shrub columns.
+</entry>
+
 <entry id="use_snicar_frc" type="logical" category="physics"
        group="elm_inparm" valid_values="" value=".false.">
 Toggle to turn on calculation of SNow and Ice Aerosol Radiation model (SNICAR) radiative forcing

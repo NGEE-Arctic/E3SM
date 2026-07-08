@@ -14,7 +14,7 @@ module initGridCellsMod
   use abortutils     , only : endrun
   use elm_varctl     , only : iulog
   use elm_varctl     , only : use_fates, use_fates_sp, use_polygonal_tundra
-  use elm_varctl     , only : use_separate_shrub_grass_columns !GAM
+  use elm_varctl     , only : shrub_snow_redist_alpha !GAM
   use elm_varcon     , only : namep, namec, namel, nameg
   use decompMod      , only : bounds_type, ldecomp
   use GridcellType   , only : grc_pp
@@ -401,7 +401,7 @@ contains
        call add_landunit(li=li, ti=ti, ltype=ltype, wttopounit=wtlunit2topounit)
        
       !GAM
-       if (use_separate_shrub_grass_columns) then
+       if (shrub_snow_redist_alpha >= 0._r8) then
 
             f_shrub = wt_nat_patch(gi,topo_ind,pft_boreal_shrub) 
             f_grass = wt_nat_patch(gi,topo_ind,pft_arctic_grass)

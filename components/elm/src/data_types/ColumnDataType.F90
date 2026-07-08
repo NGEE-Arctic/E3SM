@@ -470,6 +470,8 @@ module ColumnDataType
     real(r8), pointer :: qflx_snow_grnd       (:)   => null() ! snow on ground after interception (mm H2O/s) [+]
     real(r8), pointer :: qflx_sub_snow        (:)   => null() ! sublimation rate from snow pack (mm H2O /s) [+]
     real(r8), pointer :: qflx_sub_snow_vol    (:)   => null() !
+    real(r8), pointer :: snow_redis_factor    (:)   => null() !GAM
+    real(r8), pointer :: qflx_snow_atm_col    (:)   => null() !GAM
     real(r8), pointer :: qflx_evap_soi        (:)   => null() ! soil evaporation (mm H2O/s) (+ = to atm)
     real(r8), pointer :: qflx_evap_veg        (:)   => null() ! vegetation evaporation (mm H2O/s) (+ = to atm)
     real(r8), pointer :: qflx_evap_can        (:)   => null() ! evaporation from leaves and stems (mm H2O/s) (+ = to atm)
@@ -5866,6 +5868,8 @@ contains
     allocate(this%qflx_snow_grnd         (begc:endc))             ; this%qflx_snow_grnd       (:)   = spval
     allocate(this%qflx_sub_snow          (begc:endc))             ; this%qflx_sub_snow        (:)   = spval
     allocate(this%qflx_sub_snow_vol      (begc:endc))             ; this%qflx_sub_snow_vol    (:)   = spval
+    allocate(this%snow_redis_factor      (begc:endc))             ; this%snow_redis_factor    (:)   = 1._r8 !GAM
+    allocate(this%qflx_snow_atm_col      (begc:endc))             ; this%qflx_snow_atm_col    (:)   = 0._r8 !GAM
     allocate(this%qflx_evap_soi          (begc:endc))             ; this%qflx_evap_soi        (:)   = spval
     allocate(this%qflx_evap_veg          (begc:endc))             ; this%qflx_evap_veg        (:)   = spval
     allocate(this%qflx_evap_can          (begc:endc))             ; this%qflx_evap_can        (:)   = spval
@@ -6022,6 +6026,18 @@ contains
      call hist_addfld1d (fname='QSNOMELT',  units='mm/s',  &
           avgflag='A', long_name='snow melt', &
            ptr_col=this%qflx_snow_melt, c2l_scale_type='urbanf')
+   
+    !GAM shrub-grass snow redistribution diagnostics
+    this%snow_redis_factor(begc:endc) = 1._r8
+    call hist_addfld1d (fname='SNOW_REDIS_FACTOR', units='1', &
+         avgflag='A', long_name='shrub grass snow redistribution factor', &
+         ptr_col=this%snow_redis_factor, default='inactive')
+
+    this%qflx_snow_atm_col(begc:endc) = 0._r8
+    call hist_addfld1d (fname='SNOW_ATM_COL', units='mm/s', &
+         avgflag='A', long_name='effective atmospheric snowfall forcing to column after shrub grass redistribution', &
+         ptr_col=this%qflx_snow_atm_col, default='inactive')
+    !GAM end
 
     this%qflx_snomelt_lyr(begc:endc,-nlevsno+1:0) = spval
      call hist_addfld2d (fname='QSNOMELT_LYR',  units='mm/s',type2d='levsno',&
