@@ -341,7 +341,7 @@ contains
     use elm_varsur, only : wt_lunit, wt_nat_patch, wt_polygon
     use subgridMod, only : subgrid_get_topounitinfo
     use elm_varpar, only : numpft, maxpatch_pft, numcft, natpft_lb, natpft_ub, natpft_size
-    use landunit_varcon, only: istlowcenpoly, istflatcenpoly, isthighcenpoly, istunifiedpoly, max_non_poly_lunit
+    use landunit_varcon, only: istpolygon, max_non_poly_lunit
     !
     ! !ARGUMENTS:    
     integer , intent(in)    :: ltype             ! landunit type
@@ -404,7 +404,7 @@ contains
        ! add polygonal landunits and columns if feature turned on
        ! continue to assume one column per landunit.
        if (use_polygonal_tundra) then
-         do z = istpolygon
+         do z = istpolygon,max_lunit
             ! get new weight for wttopounit:
             wtpoly2lndunit = wt_lunit(gi, topo_ind, z) 
             call add_polygon_landunit(li=li, ti=ti, ltype=ltype, wttopounit=wtpoly2lndunit, polytype = z - max_non_poly_lunit)
