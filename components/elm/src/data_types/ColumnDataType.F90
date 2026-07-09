@@ -28,7 +28,7 @@ module ColumnDataType
   use elm_varctl      , only : hist_wrtch4diag, use_century_decomp
   use elm_varctl      , only : get_carbontag, override_bgc_restart_mismatch_dump
   use elm_varctl      , only : pf_hmode, nu_com
-  use elm_varctl      , only : use_extrasnowlayers, use_polygonal_tundra, unified_polygonal_tundra
+  use elm_varctl      , only : use_extrasnowlayers, use_polygonal_tundra
   use elm_varctl      , only : use_fan
   use elm_varctl      , only : use_ocn_lnd_one_way
   use ch4varcon       , only : allowlakeprod
@@ -36,8 +36,8 @@ module ColumnDataType
   use soilorder_varcon, only : smax, ks_sorption
   use elm_time_manager, only : is_restart, get_nstep
   use elm_time_manager, only : is_first_step, get_step_size, is_first_restart_step
-  use landunit_varcon , only : istice, istwet, istsoil, istdlak, istcrop, istice_mec, istlowcenpoly, isthighcenpoly
-  use landunit_varcon , only : ilowcenpoly, iflatcenpoly, ihighcenpoly, iunifiedpoly
+  use landunit_varcon , only : istice, istwet, istsoil, istdlak, istcrop, istice_mec
+  use landunit_varcon , only : ipolygon, istpolygon
   use column_varcon   , only : icol_road_perv, icol_road_imperv, icol_roof, icol_sunwall, icol_shadewall
   use histFileMod     , only : hist_addfld1d, hist_addfld2d, no_snow_normal
   use histFileMod     , only : hist_addfld_decomp
@@ -173,16 +173,16 @@ module ColumnDataType
     real(r8), pointer :: frac_h2orof        (:)   => null() ! floodplain inundation fraction received from rof (-)
     real(r8), pointer :: frac_h2oocn        (:)   => null() ! coastal inundation fraction received from ocn (-)
    ! polygonal tundra (NGEE Arctic IM1)
-    real(r8), pointer :: iwp_microrel     (:) => null() ! ice wedge polygon microtopographic relief (m)
-    real(r8), pointer :: iwp_exclvol      (:) => null() ! ice wedge polygon excluded volume (m)
-    real(r8), pointer :: iwp_ddep         (:) => null() ! ice wedge polygon depression depth (m)
-    real(r8), pointer :: iwp_subsidence   (:) => null() ! ice wedge polygon ground subsidence (m)
-    real(r8), pointer :: h2osfc_p         (:) => null() ! h2osfc from previous timestep (inundation fraction is calculated based on this var)
-    real(r8), pointer :: supercool      (:,:) => null() ! supercooled liquid water in soil (kg/m2)
-    real(r8), pointer :: smp_i          (:,:) => null() ! frozen water potential
-    real(r8), pointer :: excess_ice          (:,:) => null() ! excess ground ice mass (kg/m2) (1:nlevgrnd)
-    real(r8), pointer :: excess_ice_volfrac  (:,:) => null() ! excess ice volumetric fraction (0 to 1) (1:nlevgrnd)
-    real(r8), pointer :: degradation_index (:) => null() ! polygon degredation index (0 to 1)
+    real(r8), pointer :: iwp_microrel       (:)   => null() ! ice wedge polygon microtopographic relief (m)
+    real(r8), pointer :: iwp_exclvol        (:)   => null() ! ice wedge polygon excluded volume (m)
+    real(r8), pointer :: iwp_ddep           (:)   => null() ! ice wedge polygon depression depth (m)
+    real(r8), pointer :: iwp_subsidence     (:)   => null() ! ice wedge polygon ground subsidence (m)
+    real(r8), pointer :: h2osfc_p           (:)   => null() ! h2osfc from previous timestep (inundation fraction is calculated based on this var)
+    real(r8), pointer :: supercool        (:,:)   => null() ! supercooled liquid water in soil (kg/m2)
+    real(r8), pointer :: smp_i            (:,:)   => null() ! frozen water potential
+    real(r8), pointer :: excess_ice       (:,:)   => null() ! excess ground ice mass (kg/m2) (1:nlevgrnd)
+    real(r8), pointer :: excess_ice_volfrac(:,:)  => null() ! excess ice volumetric fraction (0 to 1) (1:nlevgrnd)
+    real(r8), pointer :: degradation_index  (:)   => null() ! polygon degredation index (0 to 1)
 
   contains
     procedure, public :: Init    => col_ws_init

@@ -13,7 +13,7 @@ module initGridCellsMod
   use spmdMod        , only : masterproc,iam
   use abortutils     , only : endrun
   use elm_varctl     , only : iulog
-  use elm_varctl     , only : use_fates, use_fates_sp, use_polygonal_tundra, unified_polygonal_tundra
+  use elm_varctl     , only : use_fates, use_fates_sp, use_polygonal_tundra
   use elm_varcon     , only : namep, namec, namel, nameg
   use decompMod      , only : bounds_type, ldecomp
   use GridcellType   , only : grc_pp
@@ -404,9 +404,7 @@ contains
        ! add polygonal landunits and columns if feature turned on
        ! continue to assume one column per landunit.
        if (use_polygonal_tundra) then
-         ! loop over polygon types:
-         if (unified_polygonal_tundra) then
-           do z = istlowcenpoly,istunifiedpoly
+         do z = istpolygon
             ! get new weight for wttopounit:
             wtpoly2lndunit = wt_lunit(gi, topo_ind, z) 
             call add_polygon_landunit(li=li, ti=ti, ltype=ltype, wttopounit=wtpoly2lndunit, polytype = z - max_non_poly_lunit)
@@ -420,25 +418,7 @@ contains
                end if
                call add_patch(pi=pi, ci=ci, ptype=m, wtcol=p_wt, is_on_soil_col=.true.)
             end do
-           end do
-            else
-               do z = istlowcenpoly,isthighcenpoly
-                  ! get new weight for wttopounit:
-                  wtpoly2lndunit = wt_lunit(gi, topo_ind, z) 
-                  call add_polygon_landunit(li=li, ti=ti, ltype=ltype, wttopounit=wtpoly2lndunit, polytype = z - max_non_poly_lunit)
-                  call add_column(ci=ci, li=li, ctype=1, wtlunit=1.0_r8, is_soil=.true.)
-                  ! add patch:
-                  do m = natpft_lb,natpft_ub
-                     if(use_fates .and. .not.use_fates_sp) then
-                        p_wt = 1.0_r8/real(natpft_size,r8)
-                     else
-                        p_wt = wt_nat_patch(gi,topo_ind,m)
-                     end if
-                     call add_patch(pi=pi, ci=ci, ptype=m, wtcol=p_wt, is_on_soil_col=.true.)
-                  end do
-               end do
-            endif
-         endif
+         end do
        end if
 
   end subroutine set_landunit_veg_compete

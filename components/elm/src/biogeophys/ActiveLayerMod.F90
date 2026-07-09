@@ -19,7 +19,6 @@ module ActiveLayerMod
   use ColumnType      , only : col_pp
   use ColumnDataType  , only : col_es, col_ws
   use LandunitType    , only : lun_pp
-  use landunit_varcon , only : ilowcenpoly, iflatcenpoly, ihighcenpoly, iunifiedpoly
   !
   implicit none
   save
@@ -253,27 +252,10 @@ contains
 
            ! update ice wedge polygon microtopographic parameters if in polygonal ground
            if (lun_pp%ispolygon(col_pp%landunit(c))) then
-             if (lun_pp%polygontype(col_pp%landunit(c)) .eq. ilowcenpoly) then
-               rmax(c) = 0.4_r8
-               vexc(c) = 0.2_r8
-               ddep(c) = max(0.05_r8, 0.15_r8 - 0.25_r8*subsidence(c))
-             elseif (lun_pp%polygontype(col_pp%landunit(c)) .eq. iflatcenpoly) then
-               rmax(c) = min(0.4_r8, 0.1_r8 + 0.75_r8*subsidence(c))
-               vexc(c) = min(0.2_r8, 0.05_r8 + 0.375_r8*subsidence(c))
-               ddep(c) = min(0.05_r8, 0.01_r8 + 0.1_r8*subsidence(c))
-             elseif (lun_pp%polygontype(col_pp%landunit(c)) .eq. ihighcenpoly) then
-               rmax(c) = 0.4_r8
-               vexc(c) = 0.2_r8
-               ddep(c) = 0.05_r8
-             elseif (lun_pp%polygontype(col_pp%landunit(c)) .eq. iunifiedpoly) then
-               rmax(c) = 0.4_r8
-               vexc(c) = 0.2_r8
-               ! RPF - what to do with the microtopography parameters here?
-               ddep(c) = min(0.05_r8, 0.01_r8 + 0.1_r8*subsidence(c))
-             else
-               !call endrun !<- TODO: needed? Potential way to prevent unintended updating of microtopography
-               ! if polygonal ground is misspecified on surface file.
-             endif
+             rmax(c) = 0.4_r8
+             vexc(c) = 0.2_r8
+             ! RPF - what to do with the microtopography parameters here?
+             ddep(c) = min(0.05_r8, 0.01_r8 + 0.1_r8*subsidence(c))
            endif
          endif
        end do
