@@ -9,7 +9,7 @@ module SoilHydrologyMod
   use decompMod         , only : bounds_type
   use elm_varctl        , only : iulog, use_vichydro
   use elm_varctl        , only : use_lnd_rof_two_way, lnd_rof_coupling_nstep
-  use elm_varctl        , only : use_modified_infil, use_ocn_lnd_one_way, unified_polygonal_tundra
+  use elm_varctl        , only : use_modified_infil, use_ocn_lnd_one_way
   use elm_varcon        , only : e_ice, denh2o, denice, rpi
   use EnergyFluxType    , only : energyflux_type
   use SoilHydrologyType , only : soilhydrology_type
@@ -304,7 +304,7 @@ contains
      use elm_varcon       , only : denh2o, denice, roverg, wimp, mu, tfrz
      use elm_varcon       , only : pondmx, watmin
      use column_varcon    , only : icol_roof, icol_road_imperv, icol_sunwall, icol_shadewall, icol_road_perv
-     use landunit_varcon  , only : istsoil, istcrop, ilowcenpoly, iunifiedpoly
+     use landunit_varcon  , only : istsoil, istcrop, ipolygon
      use elm_time_manager , only : get_step_size, get_nstep
      use atm2lndType      , only : atm2lnd_type ! land river two way coupling
      use ocn2lndType      , only : ocn2lnd_type
@@ -579,37 +579,16 @@ contains
                 endif
              endif
 
-             if (lun_pp%ispolygon(col_pp%landunit(c)) .and. .not. lun_pp%polygontype(col_pp%landunit(c)) == iunifiedpoly) then
-                vdep = (2_r8*iwp_exclvol(c) - iwp_microrel(c)) * (iwp_ddep(c)/iwp_microrel(c))**3_r8 &
-                       + (2_r8*iwp_microrel(c) - 3_r8*iwp_exclvol(c)) * (iwp_ddep(c)/iwp_microrel(c))**2_r8
-                phi_eff = min(iwp_subsidence(c), 0.4_r8)
-                swc = h2osfc(c)/1000_r8 ! convert to m
-                
-                if (swc >= vdep) then
-                   if (lun_pp%polygontype(col_pp%landunit(c)) == ilowcenpoly) then
-                      k_wet = (2890_r8*phi_eff**4_r8 - 1171.1_r8*phi_eff**3_r8 + 144.94_r8*phi_eff**2_r8 + 1.682_r8*phi_eff + 2.028_r8) &
-                              * (710.3_r8*meangradz(c)**2_r8 - 28.736_r8*meangradz(c) + 12.74_r8)
-                   else
-                      k_wet = 24.925_r8 * (710.3_r8*meangradz(c)**2_r8 - 28.736_r8*meangradz(c) + 12.74_r8)
-                   endif
-                   qflx_h2osfc_surf(c) = k_wet * (swc - vdep) / 86400_r8 ! coefficients estimated for mm/day; convert from mm/day -> mm/s
-                   qflx_h2osfc_surf(c) = min(qflx_h2osfc_surf(c), (swc - vdep)*1000_r8/dtime)
-                else
-                   qflx_h2osfc_surf(c) = 0._r8
-                endif
-             else if (lun_pp%polygontype(col_pp%landunit(c)) == iunifiedpoly .and. lun_pp%ispolygon(col_pp%landunit(c))) then
+             if (lun_pp%polygontype(col_pp%landunit(c)) == ipolygon .and. lun_pp%ispolygon(col_pp%landunit(c))) then
                   swc = h2osfc(c)/1000_r8 ! convert to m
                   ! Per SLP 260323: delta can be left out since we're evaluating numerically 
                   ! rather than determining analytical solution
-                  if (unified_polygonal_tundra) then
-                     a = 3.5_r8 + (2._r8 - 3.5_r8) * degradation_index(c)
-                     b0 = 0.014_r8 * meangradz(c) ** (-0.37_r8)
-                     b1 = 0.0017_r8 * meangradz(c) ** (-0.37_r8)
-                     b = b0 + (b1 - b0) * degradation_index(c)
-                     qflx_h2osfc_surf(c) = 0.014_r8 * ((swc/b) ** a) * (0.5_r8 * (1 + (swc/b) ** (1_r8))**((0.4_r8-a)))
-                  else
-                     qflx_h2osfc_surf(c) = 0._r8
-                  endif
+                  a = 3.5_r8 + (2._r8 - 3.5_r8) * degradation_index(c)
+                  b0 = 0.014_r8 * meangradz(c) ** (-0.37_r8)
+                  b1 = 0.0017_r8 * meangradz(c) ** (-0.37_r8)
+                  b = b0 + (b1 - b0) * degradation_index(c)
+                  qflx_h2osfc_surf(c) = 0.014_r8 * ((swc/b) ** a) * (0.5_r8 * (1 + (swc/b) ** (1_r8))**((0.4_r8-a)))
+
              else
                 ! limit runoff to value of storage above S(pc)
                 if(h2osfc(c) >= h2osfc_thresh(c) .and. h2osfcflag/=0) then
