@@ -47,15 +47,16 @@ contains
 
     integer, parameter :: pft_boreal_shrub = 11
     integer, parameter :: pft_arctic_grass = 12
-    real(r8), parameter :: alpha = 0.17_r8          !value from Lawrence 2011 alpha = 0.17
     real(r8), parameter :: min_wt = 1.0e-12_r8
 
     integer :: t, c, p
-    real(r8) :: f_shrub, f_grass
+    real(r8) :: f_shrub, f_grass, alpha
 
     snow_factor_col_inout(bounds%begc:bounds%endc) = 1._r8
 
     if (shrub_snow_redist_alpha < 0._r8) return
+
+    alpha = shrub_snow_redist_alpha
 
     do t = bounds%begt, bounds%endt
 
