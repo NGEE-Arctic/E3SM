@@ -341,7 +341,7 @@ contains
     use elm_varsur, only : wt_lunit, wt_nat_patch, wt_polygon
     use subgridMod, only : subgrid_get_topounitinfo
     use elm_varpar, only : numpft, maxpatch_pft, numcft, natpft_lb, natpft_ub, natpft_size
-    use landunit_varcon, only: istpolygon, max_non_poly_lunit
+    use landunit_varcon, only: istpolygon, max_non_poly_lunit, max_lunit
     !
     ! !ARGUMENTS:    
     integer , intent(in)    :: ltype             ! landunit type
@@ -420,6 +420,7 @@ contains
             end do
          end do
        end if
+    endif
 
   end subroutine set_landunit_veg_compete
   
