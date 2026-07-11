@@ -2003,17 +2003,10 @@ contains
     !-----------------------------------------------------------------------
     
     if (use_polygonal_tundra) then
-      if (unified_polygonal_tundra) then
-         do ltype = 1, max_lunit
-            attname = att_prefix // landunit_names(ltype)
-            call ncd_putatt(lnfid, ncd_global, attname, ltype)
-         end do
-      else
-         do ltype = 1, max_lunit -1 
-            attname = att_prefix // landunit_names(ltype)
-            call ncd_putatt(lnfid, ncd_global, attname, ltype)
-         end do
-      end if
+      do ltype = 1, max_lunit
+         attname = att_prefix // landunit_names(ltype)
+         call ncd_putatt(lnfid, ncd_global, attname, ltype)
+      end do
     else
       do ltype = 1, max_non_poly_lunit
         attname = att_prefix // landunit_names(ltype)
