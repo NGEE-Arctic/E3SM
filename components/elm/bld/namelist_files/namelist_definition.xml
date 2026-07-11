@@ -2330,6 +2330,12 @@ Use polygonal tundra parameterizations for ice wedge polygon microtopography and
 <default>Default: .false.</default>
 </entry>
 
+<entry id="unified_polygonal_tundra" type="logical" category="default_settings"
+	group="elm_inparm" value=".false.">
+Temporary - use the new unified polygonal tundra parameterization.
+<default>Default: .false.</default>
+</entry>
+
 <entry id="prohibit_subsidence" type="logical" category="default_settings"
        group="elm_inparm" value=".false.">
 Prohibit microtopographic changes associated with subsidence in ice wedge polygons

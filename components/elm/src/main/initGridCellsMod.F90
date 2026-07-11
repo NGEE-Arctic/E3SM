@@ -341,7 +341,7 @@ contains
     use elm_varsur, only : wt_lunit, wt_nat_patch, wt_polygon
     use subgridMod, only : subgrid_get_topounitinfo
     use elm_varpar, only : numpft, maxpatch_pft, numcft, natpft_lb, natpft_ub, natpft_size
-    use landunit_varcon, only: istlowcenpoly, istflatcenpoly, isthighcenpoly, max_non_poly_lunit
+    use landunit_varcon, only: istpolygon, max_non_poly_lunit, max_lunit
     !
     ! !ARGUMENTS:    
     integer , intent(in)    :: ltype             ! landunit type
@@ -404,25 +404,23 @@ contains
        ! add polygonal landunits and columns if feature turned on
        ! continue to assume one column per landunit.
        if (use_polygonal_tundra) then
-         ! loop over polygon types:
-         do z = istlowcenpoly,isthighcenpoly
-           ! get new weight for wttopounit:
-           wtpoly2lndunit = wt_lunit(gi, topo_ind, z) 
-           call add_polygon_landunit(li=li, ti=ti, ltype=ltype, wttopounit=wtpoly2lndunit, polytype = z - max_non_poly_lunit)
-           call add_column(ci=ci, li=li, ctype=1, wtlunit=1.0_r8, is_soil=.true.)
-           ! add patch:
-           do m = natpft_lb,natpft_ub
-             if(use_fates .and. .not.use_fates_sp) then
-               p_wt = 1.0_r8/real(natpft_size,r8)
-             else
-               p_wt = wt_nat_patch(gi,topo_ind,m)
-             end if
-             call add_patch(pi=pi, ci=ci, ptype=m, wtcol=p_wt, is_on_soil_col=.true.)
-           end do
+         do z = istpolygon,max_lunit
+            ! get new weight for wttopounit:
+            wtpoly2lndunit = wt_lunit(gi, topo_ind, z) 
+            call add_polygon_landunit(li=li, ti=ti, ltype=ltype, wttopounit=wtpoly2lndunit, polytype = z - max_non_poly_lunit)
+            call add_column(ci=ci, li=li, ctype=1, wtlunit=1.0_r8, is_soil=.true.)
+            ! add patch:
+            do m = natpft_lb,natpft_ub
+               if(use_fates .and. .not.use_fates_sp) then
+                  p_wt = 1.0_r8/real(natpft_size,r8)
+               else
+                  p_wt = wt_nat_patch(gi,topo_ind,m)
+               end if
+               call add_patch(pi=pi, ci=ci, ptype=m, wtcol=p_wt, is_on_soil_col=.true.)
+            end do
          end do
-       end if 
-
-    end if
+       end if
+    endif
 
   end subroutine set_landunit_veg_compete
   

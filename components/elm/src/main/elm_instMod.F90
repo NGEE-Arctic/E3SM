@@ -274,7 +274,8 @@ contains
     use elm_varcon                        , only : h2osno_max, bdsno, bdfirn
     use domainMod                         , only : ldomain
     use elm_varpar                        , only : nlevsno, numpft
-    use elm_varctl                        , only : single_column, fsurdat, scmlat, scmlon, use_extrasnowlayers, iac_present
+    use elm_varctl                        , only : single_column, fsurdat, scmlat, scmlon 
+    use elm_varctl                        , only : use_extrasnowlayers, iac_present, use_polygonal_tundra
     use controlMod                        , only : nlfilename
     use SoilWaterRetentionCurveFactoryMod , only : create_soil_water_retention_curve
     use fileutils                         , only : getfil
@@ -282,6 +283,7 @@ contains
     use SoilorderConType                  , only : soilorderconInit
     use LakeCon                           , only : LakeConInit
     use initVerticalMod                   , only : initVertical
+    use ExcessIceMod                      , only : inflate_layers_from_excess_ice
     ! !ARGUMENTS
     implicit none
     type(bounds_type), intent(in) :: bounds_proc
@@ -440,6 +442,12 @@ contains
          h2osno_col(begc:endc),                    &
          snow_depth_col(begc:endc),                &
          soilstate_vars%watsat_col(begc:endc, 1:))
+
+    ! Inflate soil layer geometry for polygon tundra columns based on initial excess ice
+    if (use_polygonal_tundra) then
+       call inflate_layers_from_excess_ice(bounds_proc)
+    end if
+
     call veg_ws%Init(bounds_proc%begp_all, bounds_proc%endp_all)
 
     call waterflux_vars%init(bounds_proc)

@@ -10,7 +10,7 @@ module surfrdMod
   use shr_log_mod     , only : errMsg => shr_log_errMsg
   use abortutils      , only : endrun
   use elm_varpar      , only : numpft, numcft
-  use landunit_varcon , only : numurbl
+  use landunit_varcon , only : numurbl, max_lunit, max_non_poly_lunit
   use elm_varcon      , only : grlnd
   use elm_varctl      , only : iulog, scmlat, scmlon, single_column, firrig_data
   use elm_varctl      , only : create_glacier_mec_landunit
@@ -1071,8 +1071,12 @@ contains
     use elm_varpar      , only : surfpft_lb, surfpft_ub, surfpft_size, cft_lb, cft_ub, cft_size
     use elm_varpar      , only : crop_prog
     use elm_varsur      , only : wt_lunit, wt_nat_patch, wt_cft, fert_cft, fert_p_cft, wt_polygon
-    use landunit_varcon , only : istsoil, istcrop
-    use landunit_varcon , only : istlowcenpoly, ilowcenpoly, istflatcenpoly, iflatcenpoly, isthighcenpoly, ihighcenpoly
+    use ColumnDataType  , only : col_ws ! temporary!
+    use GridCellType    , only : grc_pp
+    use TopounitType    , only : top_pp
+    use LandUnitType    , only : lun_pp
+    use ColumnType      , only : col_pp
+    use landunit_varcon , only : istsoil, istcrop, istpolygon, ipolygon
     use pftvarcon       , only : nc3crop, nc3irrig, npcropmin
     use pftvarcon       , only : ncorn, ncornirrig, nsoybean, nsoybeanirrig
     use pftvarcon       , only : nscereal, nscerealirrig, nwcereal, nwcerealirrig
@@ -1089,7 +1093,7 @@ contains
     integer          ,intent(in)    :: ntpu(:)
     !
     ! !LOCAL VARIABLES:
-    integer  :: nl, t                             ! index
+    integer  :: nl, t, c, l, g                 ! indices
     integer  :: dimid,varid                    ! netCDF id's
     integer  :: ier                            ! error status	
     integer  :: cftsize                        ! size of CFT's
@@ -1100,6 +1104,7 @@ contains
     real(r8),pointer :: arrayNF(:,:,:)
     real(r8),pointer :: arrayPF(:,:,:)
     character(len=32) :: subname = 'surfrd_veg_all'  ! subroutine name
+    integer :: begc, endc
 !-----------------------------------------------------------------------
 
     call check_dim(ncid, 'lsmpft', numpft+1)
@@ -1114,22 +1119,29 @@ contains
     wt_lunit(begg:endg,1:max_topounits,istsoil) = arrayl(begg:endg,1:max_topounits)
 
     if (use_polygonal_tundra) then
-      call ncd_io(ncid=ncid, varname='PCT_HCP', flag='read', data=arrayl, &
+      call ncd_io(ncid=ncid, varname='PCT_POLYGON', flag='read', data=arrayl, &
          dim1name=grlnd, readvar=readvar)
-      if (.not. readvar) call endrun( msg=' ERROR: use_polygonal_tundra = .true., but PCT_HCP NOT on surfdata file'//errMsg(__FILE__, __LINE__))
-      wt_polygon(begg:endg,1:max_topounits,ihighcenpoly) = arrayl(begg:endg,1:max_topounits)
+      if (.not. readvar) call endrun( msg=' ERROR: use_polygonal_tundra = .true., but PCT_POLYGON NOT on surfdata file'//errMsg(__FILE__, __LINE__))
+      wt_polygon(begg:endg,1:max_topounits,ipolygon) = arrayl(begg:endg,1:max_topounits)
 
-      call ncd_io(ncid=ncid, varname='PCT_FCP', flag='read', data=arrayl, &
+      call ncd_io(ncid=ncid, varname='DEGRADATION_INDEX', flag='read', data=arrayl, &
          dim1name=grlnd, readvar=readvar)
-      if (.not. readvar) call endrun( msg=' ERROR: use_polygonal_tundra = .true., but PCT_FCP NOT on surfdata file'//errMsg(__FILE__, __LINE__))
-      wt_polygon(begg:endg,1:max_topounits,iflatcenpoly) = arrayl(begg:endg,1:max_topounits)
-
-      call ncd_io(ncid=ncid, varname='PCT_LCP', flag='read', data=arrayl, &
-         dim1name=grlnd, readvar=readvar)
-      if (.not. readvar) call endrun( msg=' ERROR: use_polygonal_tundra = .true., but PCT_LCP NOT on surfdata file'//errMsg(__FILE__, __LINE__))
-      wt_polygon(begg:endg,1:max_topounits,ilowcenpoly) = arrayl(begg:endg,1:max_topounits)
+      if (.not. readvar) call endrun( msg=' ERROR: use_polygonal_tundra = .true., but DEGRADATION_INDEX NOT on surfdata file'//errMsg(__FILE__, __LINE__))
+      
+      ! note: this allows specification of different degradation indices on topounits, 
+      ! but will need to return to this if there are still issues.
+      do g = begg, endg
+         do t = grc_pp%topi(g), grc_pp%topf(g)
+            do l = max_non_poly_lunit, max_lunit
+               do c = lun_pp%coli(l),lun_pp%colf(l)
+                  col_ws%degradation_index(c) = arrayl(g,t)
+               enddo
+            enddo
+         enddo
+      enddo
     else
-      wt_polygon(begg:endg,1:max_topounits,ilowcenpoly:ihighcenpoly) = 0._r8
+      wt_polygon(begg:endg,1:max_topounits,ipolygon) = 0._r8
+      col_ws%degradation_index(c) = 0._r8
     endif
 
     ! add two other types
@@ -1288,12 +1300,11 @@ contains
       ! adjust wt_lunit(:,:,istsoil) for polygonal fraction:
       do nl = begg,endg
         do t = 1,max_topounits
-          wt_lunit(nl,t,istlowcenpoly) = wt_lunit(nl,t,istsoil) * wt_polygon(nl,t,ilowcenpoly)
-          wt_lunit(nl,t,istflatcenpoly) = wt_lunit(nl,t,istsoil) * wt_polygon(nl,t,iflatcenpoly)
-          wt_lunit(nl,t,isthighcenpoly) = wt_lunit(nl,t,istsoil) * wt_polygon(nl,t,ihighcenpoly)
-          wt_lunit(nl,t,istsoil) = wt_lunit(nl,t,istsoil) - sum(wt_lunit(nl,t,istlowcenpoly:isthighcenpoly))
+          wt_lunit(nl,t,istpolygon) = wt_lunit(nl,t,istsoil) * wt_polygon(nl,t,ipolygon)
+          wt_lunit(nl,t,istsoil) = wt_lunit(nl,t,istsoil) - sum(wt_lunit(nl,t,max_non_poly_lunit+1:max_lunit))
           ! check to make sure istsoil weight is still positive:
           if (wt_lunit(nl,t,istsoil) .lt. 0_r8) then
+
             call endrun(msg='ERROR:Polygonal tundra fraction > 100% in surface file'//&
                                    errMsg(__FILE__, __LINE__))
           end if

@@ -83,7 +83,7 @@ module controlMod
                         do_budgets, budget_inst, budget_daily, budget_month, &
                         budget_ann, budget_ltann, budget_ltend, &
                         use_lnd_rof_two_way, use_ocn_lnd_one_way, &
-                        use_modified_infil, use_polygonal_tundra, use_arctic_init, &
+                        use_modified_infil, use_polygonal_tundra, unified_polygonal_tundra, use_arctic_init, &
                         iundef, nsrest, rundef, scmlat, scmlon, single_column, &
                         source, version, rpntdir, rpntfil, nlfilename_in, &
                         finidat_interp_source, finidat_interp_dest, caseid, ctitle, &
@@ -414,7 +414,7 @@ contains
 
    ! NGEE Arctic options
    namelist /elm_inparm/ &
-         use_polygonal_tundra, use_arctic_init
+         use_polygonal_tundra, unified_polygonal_tundra, use_arctic_init
     ! ----------------------------------------------------------------------
     ! Default values
     ! ----------------------------------------------------------------------

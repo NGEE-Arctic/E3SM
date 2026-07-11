@@ -1989,7 +1989,7 @@ contains
     !
     ! !USES:
     use landunit_varcon, only : max_lunit, max_non_poly_lunit, landunit_names, landunit_name_length
-    use elm_varctl,      only : use_polygonal_tundra
+    use elm_varctl,      only : use_polygonal_tundra, unified_polygonal_tundra
     !
     ! !ARGUMENTS:
     type(file_desc_t), intent(inout) :: lnfid ! local file id
@@ -2004,8 +2004,8 @@ contains
     
     if (use_polygonal_tundra) then
       do ltype = 1, max_lunit
-        attname = att_prefix // landunit_names(ltype)
-        call ncd_putatt(lnfid, ncd_global, attname, ltype)
+         attname = att_prefix // landunit_names(ltype)
+         call ncd_putatt(lnfid, ncd_global, attname, ltype)
       end do
     else
       do ltype = 1, max_non_poly_lunit
