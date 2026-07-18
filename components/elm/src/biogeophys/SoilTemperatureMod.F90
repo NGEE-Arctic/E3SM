@@ -1031,7 +1031,10 @@ contains
                      ! Equation 5, Balland and Arp 2005
                      thk(c,j) = (dksat - tkdry(c,j))*dke + tkdry(c,j)   
                   endif
-                  
+                  if (use_polygonal_tundra .and. f_exice .gt. 0._r8) then
+                     ! Modify thk for excess ice using sum of resistances
+                     thk(c,j) = 1._r8 / ((1._r8-f_exice)/thk(c,j) + f_exice/tkice)
+                  endif
                   if (j > nlevbed) thk(c,j) = thk_bedrock
                else if (lun_pp%itype(l) == istice .OR. lun_pp%itype(l) == istice_mec) then
                   thk(c,j) = tkwat
