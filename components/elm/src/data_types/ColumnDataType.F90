@@ -5791,10 +5791,12 @@ contains
      call hist_addfld1d (fname='FSM_U',  units='W/m^2',  &
           avgflag='A', long_name='Urban snow melt heat flux', &
            ptr_col=this%eflx_snomelt_u, c2l_scale_type='urbanf', set_nourb=spval)
-    this%eflx_exice_melt(begc:endc) = spval
-     call hist_addfld1d (fname='EXICE_MELT_COL',  units='W/m^2',  &
-          avgflag='A', long_name='Excess ice melt latent heat flux', &
-           ptr_col=this%eflx_exice_melt, c2l_scale_type='urbanf', set_nourb=spval)
+    if (use_polygonal_tundra) then
+      this%eflx_exice_melt(begc:endc) = spval
+      call hist_addfld1d (fname='EXICE_MELT_COL',  units='W/m^2',  &
+            avgflag='A', long_name='Excess ice melt latent heat flux', &
+            ptr_col=this%eflx_exice_melt, c2l_scale_type='urbanf', set_nourb=spval)
+    endif
     this%eflx_building_heat(begc:endc) = spval
      call hist_addfld1d (fname='BUILDHEAT', units='W/m^2',  &
           avgflag='A', long_name='heat flux from urban building interior to walls and roof', &
@@ -6092,16 +6094,17 @@ contains
           avgflag='A', long_name='snow melt per snow layer', &
            ptr_col=this%qflx_snomelt_lyr,no_snow_behavior=no_snow_normal, c2l_scale_type='urbanf')
 
-    this%qflx_exice_melt(begc:endc) = spval
-     call hist_addfld1d (fname='QEXCESSICE',  units='mm/s',  &
-          avgflag='A', long_name='excess ice melt', &
-           ptr_col=this%qflx_exice_melt, c2l_scale_type='urbanf')
+    if  (use_polygonal_tundra) then
+      this%qflx_exice_melt(begc:endc) = spval
+      call hist_addfld1d (fname='QEXCESSICE',  units='mm/s',  &
+            avgflag='A', long_name='excess ice melt', &
+            ptr_col=this%qflx_exice_melt, c2l_scale_type='urbanf')
 
-    this%qflx_exice_melt_lyr(begc:endc,1:nlevgrnd) = spval
-     call hist_addfld2d (fname='QEXCESSICE_LYR',  units='mm/s',type2d='levgrnd',&
-          avgflag='A', long_name='excess ice per soil layer', &
-           ptr_col=this%qflx_exice_melt_lyr, c2l_scale_type='urbanf')
-
+      this%qflx_exice_melt_lyr(begc:endc,1:nlevgrnd) = spval
+      call hist_addfld2d (fname='QEXCESSICE_LYR',  units='mm/s',type2d='levgrnd',&
+            avgflag='A', long_name='excess ice per soil layer', &
+            ptr_col=this%qflx_exice_melt_lyr, c2l_scale_type='urbanf')
+    endif
     this%qflx_qrgwl(begc:endc) = spval
      call hist_addfld1d (fname='QRGWL',  units='mm/s',  &
           avgflag='A', long_name='surface runoff at glaciers (liquid only), wetlands, lakes', &
