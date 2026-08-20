@@ -104,7 +104,7 @@ contains
          begwb                  => col_ws%begwb                  , & ! Input:  [real(r8) (:)   ]  water mass begining of the time step
          endwb                  => col_ws%endwb                  , & ! Output: [real(r8) (:)   ]  water mass end of the time step
          h2osoi_ice             => col_ws%h2osoi_ice             , & ! Output: [real(r8) (:,:) ]  ice lens (kg/m2)
-         excess_ice             => col_ws%excess_ice             , & ! Output? RPF [real(r8) (:,:) ] excess ice (kg/m2)
+         excess_ice             => col_ws%excess_ice             , & ! Input:  [real(r8) (:,:) ] excess ice (kg/m2)
          h2osoi_liq             => col_ws%h2osoi_liq             , & ! Output: [real(r8) (:,:) ]  liquid water (kg/m2)
          h2osoi_vol             => col_ws%h2osoi_vol             , & ! Output: [real(r8) (:,:) ]  volumetric soil water (0<=h2osoi_vol<=watsat) [m3/m3]
          snow_persistence       => col_ws%snow_persistence       , & ! Output: [real(r8) (:)   ]  counter for length of time snow-covered
