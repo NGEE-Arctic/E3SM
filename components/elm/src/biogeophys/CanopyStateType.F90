@@ -59,16 +59,39 @@ module CanopyStateType
      real(r8) , pointer :: fsun24_patch             (:)   ! patch 24hr average of sunlit fraction of canopy
      real(r8) , pointer :: fsun240_patch            (:)   ! patch 240hr average of sunlit fraction of canopy
 
-     real(r8) , pointer :: alt_col                  (:)   ! col current depth of thaw
-     integer  , pointer :: alt_indx_col             (:)   ! col current depth of thaw
-     real(r8) , pointer :: altmax_col               (:)   ! col maximum annual depth of thaw
-     real(r8) , pointer :: altmax_lastyear_col      (:)   ! col prior year maximum annual depth of thaw
-     integer  , pointer :: altmax_indx_col          (:)   ! col maximum annual depth of thaw
-     integer  , pointer :: altmax_lastyear_indx_col (:)   ! col prior year maximum annual depth of thaw
-     real(r8) , pointer :: altmax_1989_col          (:)   ! col maximum annual thaw depth in 1989 RF note: temporary for IM1!
-     real(r8) , pointer :: altmax_ever_col          (:)   ! col maximum thaw depth from beginning of simulation
-     integer  , pointer :: altmax_1989_indx_col     (:)   ! col 1989 maximum thaw depth RF note: temporary for IM1!
-     integer  , pointer :: altmax_ever_indx_col     (:)   ! col maximum thaw depth from beginning of simulation
+     ! Bottom-up thaw depth (original algorithm, search from bedrock up)
+     real(r8) , pointer :: zthaw_bu_col                     (:)   ! col current depth (bottom-up)
+     integer  , pointer :: zthaw_bu_indx_col                (:)   ! col current index (bottom-up)
+     real(r8) , pointer :: zthaw_bu_max_col                 (:)   ! col annual maximum (bottom-up)
+     real(r8) , pointer :: zthaw_bu_max_lastyear_col        (:)   ! col prior year max (bottom-up)
+     integer  , pointer :: zthaw_bu_max_indx_col            (:)   ! col annual max index (bottom-up)
+     integer  , pointer :: zthaw_bu_max_lastyear_indx_col   (:)   ! col prior year max index (bottom-up)
+     real(r8) , pointer :: zthaw_bu_max_1989_col            (:)   ! col 1989 baseline (bottom-up)
+     real(r8) , pointer :: zthaw_bu_max_ever_col            (:)   ! col all-time maximum (bottom-up)
+     integer  , pointer :: zthaw_bu_max_1989_indx_col       (:)   ! col 1989 index (bottom-up)
+     integer  , pointer :: zthaw_bu_max_ever_indx_col       (:)   ! col all-time max index (bottom-up)
+
+     ! Top-down thaw depth (new algorithm, search from surface down)
+     real(r8) , pointer :: zthaw_td_col                     (:)   ! col current depth (top-down)
+     integer  , pointer :: zthaw_td_indx_col                (:)   ! col current index (top-down)
+     real(r8) , pointer :: zthaw_td_max_col                 (:)   ! col annual maximum (top-down)
+     real(r8) , pointer :: zthaw_td_max_lastyear_col        (:)   ! col prior year max (top-down)
+     integer  , pointer :: zthaw_td_max_indx_col            (:)   ! col annual max index (top-down)
+     integer  , pointer :: zthaw_td_max_lastyear_indx_col   (:)   ! col prior year max index (top-down)
+
+     ! Active layer (max(TD, TD_lastyear) for rooting memory)
+     real(r8) , pointer :: alt_col                          (:)   ! col max(TD, TD_lastyear) ALT
+     integer  , pointer :: alt_indx_col                     (:)   ! col max(TD, TD_lastyear) index
+     real(r8) , pointer :: altmax_col                       (:)   ! col annual max ALT
+     real(r8) , pointer :: altmax_lastyear_col              (:)   ! col prior year max ALT
+     integer  , pointer :: altmax_indx_col                  (:)   ! col annual max index
+     integer  , pointer :: altmax_lastyear_indx_col         (:)   ! col prior year max index
+
+     ! Special tracking (backward compatibility for polygonal tundra)
+     real(r8) , pointer :: altmax_1989_col                  (:)   ! col 1989 baseline
+     real(r8) , pointer :: altmax_ever_col                  (:)   ! col all-time maximum
+     integer  , pointer :: altmax_1989_indx_col             (:)   ! col 1989 index
+     integer  , pointer :: altmax_ever_indx_col             (:)   ! col all-time max index
 
      real(r8) , pointer :: dewmx_patch              (:)   ! patch maximum allowed dew [mm]
 
@@ -144,16 +167,39 @@ contains
     allocate(this%fsun24_patch             (begp:endp))           ; this%fsun24_patch             (:)   = spval
     allocate(this%fsun240_patch            (begp:endp))           ; this%fsun240_patch            (:)   = spval
 
-    allocate(this%alt_col                  (begc:endc))           ; this%alt_col                  (:)   = spval;
-    allocate(this%altmax_col               (begc:endc))           ; this%altmax_col               (:)   = spval
-    allocate(this%altmax_lastyear_col      (begc:endc))           ; this%altmax_lastyear_col      (:)   = spval
-    allocate(this%altmax_1989_col          (begc:endc))           ; this%altmax_1989_col          (:)   = spval
-    allocate(this%altmax_ever_col          (begc:endc))           ; this%altmax_ever_col          (:)   = spval
-    allocate(this%alt_indx_col             (begc:endc))           ; this%alt_indx_col             (:)   = huge(1)
-    allocate(this%altmax_indx_col          (begc:endc))           ; this%altmax_indx_col          (:)   = huge(1)
-    allocate(this%altmax_lastyear_indx_col (begc:endc))           ; this%altmax_lastyear_indx_col (:)   = huge(1)
-    allocate(this%altmax_1989_indx_col     (begc:endc))           ; this%altmax_1989_indx_col     (:)   = huge(1)
-    allocate(this%altmax_ever_indx_col     (begc:endc))           ; this%altmax_ever_indx_col     (:)   = huge(1)
+    ! Bottom-up thaw depth (10 variables)
+    allocate(this%zthaw_bu_col                     (begc:endc))   ; this%zthaw_bu_col                     (:) = spval
+    allocate(this%zthaw_bu_max_col                 (begc:endc))   ; this%zthaw_bu_max_col                 (:) = spval
+    allocate(this%zthaw_bu_max_lastyear_col        (begc:endc))   ; this%zthaw_bu_max_lastyear_col        (:) = spval
+    allocate(this%zthaw_bu_max_1989_col            (begc:endc))   ; this%zthaw_bu_max_1989_col            (:) = spval
+    allocate(this%zthaw_bu_max_ever_col            (begc:endc))   ; this%zthaw_bu_max_ever_col            (:) = spval
+    allocate(this%zthaw_bu_indx_col                (begc:endc))   ; this%zthaw_bu_indx_col                (:) = huge(1)
+    allocate(this%zthaw_bu_max_indx_col            (begc:endc))   ; this%zthaw_bu_max_indx_col            (:) = huge(1)
+    allocate(this%zthaw_bu_max_lastyear_indx_col   (begc:endc))   ; this%zthaw_bu_max_lastyear_indx_col   (:) = huge(1)
+    allocate(this%zthaw_bu_max_1989_indx_col       (begc:endc))   ; this%zthaw_bu_max_1989_indx_col       (:) = huge(1)
+    allocate(this%zthaw_bu_max_ever_indx_col       (begc:endc))   ; this%zthaw_bu_max_ever_indx_col       (:) = huge(1)
+
+    ! Top-down thaw depth (6 variables)
+    allocate(this%zthaw_td_col                     (begc:endc))   ; this%zthaw_td_col                     (:) = spval
+    allocate(this%zthaw_td_max_col                 (begc:endc))   ; this%zthaw_td_max_col                 (:) = spval
+    allocate(this%zthaw_td_max_lastyear_col        (begc:endc))   ; this%zthaw_td_max_lastyear_col        (:) = spval
+    allocate(this%zthaw_td_indx_col                (begc:endc))   ; this%zthaw_td_indx_col                (:) = huge(1)
+    allocate(this%zthaw_td_max_indx_col            (begc:endc))   ; this%zthaw_td_max_indx_col            (:) = huge(1)
+    allocate(this%zthaw_td_max_lastyear_indx_col   (begc:endc))   ; this%zthaw_td_max_lastyear_indx_col   (:) = huge(1)
+
+    ! Active layer (6 variables)
+    allocate(this%alt_col                          (begc:endc))   ; this%alt_col                          (:) = spval
+    allocate(this%altmax_col                       (begc:endc))   ; this%altmax_col                       (:) = spval
+    allocate(this%altmax_lastyear_col              (begc:endc))   ; this%altmax_lastyear_col              (:) = spval
+    allocate(this%alt_indx_col                     (begc:endc))   ; this%alt_indx_col                     (:) = huge(1)
+    allocate(this%altmax_indx_col                  (begc:endc))   ; this%altmax_indx_col                  (:) = huge(1)
+    allocate(this%altmax_lastyear_indx_col         (begc:endc))   ; this%altmax_lastyear_indx_col         (:) = huge(1)
+
+    ! Special tracking (4 variables - backward compatibility)
+    allocate(this%altmax_1989_col                  (begc:endc))   ; this%altmax_1989_col                  (:) = spval
+    allocate(this%altmax_ever_col                  (begc:endc))   ; this%altmax_ever_col                  (:) = spval
+    allocate(this%altmax_1989_indx_col             (begc:endc))   ; this%altmax_1989_indx_col             (:) = huge(1)
+    allocate(this%altmax_ever_indx_col             (begc:endc))   ; this%altmax_ever_indx_col             (:) = huge(1)
 
     allocate(this%dewmx_patch              (begp:endp))           ; this%dewmx_patch              (:)   = spval
     allocate(this%dleaf_patch              (begp:endp))           ; this%dleaf_patch              (:)   = spval
@@ -286,6 +332,32 @@ contains
        call hist_addfld1d (fname='ALTMAX_LASTYEAR', units='m', &
             avgflag='A', long_name='maximum prior year active layer thickness', &
             ptr_col=this%altmax_lastyear_col)
+
+       ! New diagnostic fields (default inactive to avoid output bloat)
+       this%zthaw_bu_col(begc:endc) = spval
+       call hist_addfld1d (fname='ZTHAW_BU', units='m', &
+            avgflag='A', long_name='current depth of thaw (bottom-up algorithm)', &
+            ptr_col=this%zthaw_bu_col, default='inactive')
+
+       this%zthaw_bu_max_col(begc:endc) = spval
+       call hist_addfld1d (fname='ZTHAW_BU_MAX', units='m', &
+            avgflag='A', long_name='maximum annual depth of thaw (bottom-up)', &
+            ptr_col=this%zthaw_bu_max_col, default='inactive')
+
+       this%zthaw_td_col(begc:endc) = spval
+       call hist_addfld1d (fname='ZTHAW_TD', units='m', &
+            avgflag='A', long_name='current depth of thaw (top-down algorithm)', &
+            ptr_col=this%zthaw_td_col, default='inactive')
+
+       this%zthaw_td_max_col(begc:endc) = spval
+       call hist_addfld1d (fname='ZTHAW_TD_MAX', units='m', &
+            avgflag='A', long_name='maximum annual depth of thaw (top-down)', &
+            ptr_col=this%zthaw_td_max_col, default='inactive')
+
+       this%zthaw_td_max_lastyear_col(begc:endc) = spval
+       call hist_addfld1d (fname='ZTHAW_TD_MAX_LASTYEAR', units='m', &
+            avgflag='A', long_name='prior year maximum depth of thaw (top-down)', &
+            ptr_col=this%zthaw_td_max_lastyear_col, default='inactive')
 
        if (use_polygonal_tundra) then
           this%altmax_1989_col(begc:endc) = spval
@@ -532,16 +604,39 @@ contains
        l = col_pp%landunit(c)
 
        if (col_pp%is_soil(c) .or. col_pp%is_crop(c)) then
-          this%alt_col(c)                  = 0._r8
-          this%altmax_col(c)               = 0._r8
-          this%altmax_lastyear_col(c)      = 0._r8
-          this%altmax_1989_col(c)          = 0._r8
-          this%altmax_ever_col(c)          = 0._r8
-          this%alt_indx_col(c)             = 0
-          this%altmax_indx_col(c)          = 0
-          this%altmax_lastyear_indx_col(c) = 0
-          this%altmax_1989_indx_col(c)     = 0
-          this%altmax_ever_indx_col(c)     = 0
+          ! Bottom-up thaw depth
+          this%zthaw_bu_col(c)                     = 0._r8
+          this%zthaw_bu_max_col(c)                 = 0._r8
+          this%zthaw_bu_max_lastyear_col(c)        = 0._r8
+          this%zthaw_bu_max_1989_col(c)            = 0._r8
+          this%zthaw_bu_max_ever_col(c)            = 0._r8
+          this%zthaw_bu_indx_col(c)                = 0
+          this%zthaw_bu_max_indx_col(c)            = 0
+          this%zthaw_bu_max_lastyear_indx_col(c)   = 0
+          this%zthaw_bu_max_1989_indx_col(c)       = 0
+          this%zthaw_bu_max_ever_indx_col(c)       = 0
+
+          ! Top-down thaw depth
+          this%zthaw_td_col(c)                     = 0._r8
+          this%zthaw_td_max_col(c)                 = 0._r8
+          this%zthaw_td_max_lastyear_col(c)        = 0._r8
+          this%zthaw_td_indx_col(c)                = 0
+          this%zthaw_td_max_indx_col(c)            = 0
+          this%zthaw_td_max_lastyear_indx_col(c)   = 0
+
+          ! Active layer
+          this%alt_col(c)                          = 0._r8
+          this%altmax_col(c)                       = 0._r8
+          this%altmax_lastyear_col(c)              = 0._r8
+          this%alt_indx_col(c)                     = 0
+          this%altmax_indx_col(c)                  = 0
+          this%altmax_lastyear_indx_col(c)         = 0
+
+          ! Special tracking
+          this%altmax_1989_col(c)                  = 0._r8
+          this%altmax_ever_col(c)                  = 0._r8
+          this%altmax_1989_indx_col(c)             = 0
+          this%altmax_ever_indx_col(c)             = 0
        end if
     end do
 
@@ -603,31 +698,86 @@ contains
        end do
     end if
     if (use_cn .or. use_fates) then
+       ! Bottom-up thaw depth variables
+       call restartvar(ncid=ncid, flag=flag, varname='zthaw_bu_max', xtype=ncd_double,  &
+            dim1name='column', long_name='maximum annual depth of thaw (bottom-up)', units='m', &
+            interpinic_flag='interp', readvar=readvar, data=this%zthaw_bu_max_col)
+       call restartvar(ncid=ncid, flag=flag, varname='zthaw_bu_max_lastyear', xtype=ncd_double,  &
+            dim1name='column', long_name='prior year max depth of thaw (bottom-up)', units='m', &
+            interpinic_flag='interp', readvar=readvar, data=this%zthaw_bu_max_lastyear_col)
+       call restartvar(ncid=ncid, flag=flag, varname='zthaw_bu_max_indx', xtype=ncd_int,  &
+            dim1name='column', long_name='max annual depth of thaw index (bottom-up)', units='index', &
+            interpinic_flag='interp', readvar=readvar, data=this%zthaw_bu_max_indx_col)
+       call restartvar(ncid=ncid, flag=flag, varname='zthaw_bu_max_lastyear_indx', xtype=ncd_int,  &
+            dim1name='column', long_name='prior year max depth of thaw index (bottom-up)', units='index', &
+            interpinic_flag='interp', readvar=readvar, data=this%zthaw_bu_max_lastyear_indx_col)
+
+       ! Top-down thaw depth variables
+       call restartvar(ncid=ncid, flag=flag, varname='zthaw_td_max', xtype=ncd_double,  &
+            dim1name='column', long_name='maximum annual depth of thaw (top-down)', units='m', &
+            interpinic_flag='interp', readvar=readvar, data=this%zthaw_td_max_col)
+       call restartvar(ncid=ncid, flag=flag, varname='zthaw_td_max_lastyear', xtype=ncd_double,  &
+            dim1name='column', long_name='prior year max depth of thaw (top-down)', units='m', &
+            interpinic_flag='interp', readvar=readvar, data=this%zthaw_td_max_lastyear_col)
+       call restartvar(ncid=ncid, flag=flag, varname='zthaw_td_max_indx', xtype=ncd_int,  &
+            dim1name='column', long_name='max annual depth of thaw index (top-down)', units='index', &
+            interpinic_flag='interp', readvar=readvar, data=this%zthaw_td_max_indx_col)
+       call restartvar(ncid=ncid, flag=flag, varname='zthaw_td_max_lastyear_indx', xtype=ncd_int,  &
+            dim1name='column', long_name='prior year max depth of thaw index (top-down)', units='index', &
+            interpinic_flag='interp', readvar=readvar, data=this%zthaw_td_max_lastyear_indx_col)
+
+       ! Active layer variables (max(TD, TD_lastyear))
        call restartvar(ncid=ncid, flag=flag, varname='altmax', xtype=ncd_double,  &
-            dim1name='column', long_name='', units='m', &
+            dim1name='column', long_name='maximum annual active layer thickness', units='m', &
             interpinic_flag='interp', readvar=readvar, data=this%altmax_col)
        call restartvar(ncid=ncid, flag=flag, varname='altmax_lastyear', xtype=ncd_double,  &
-            dim1name='column', long_name='', units='m', &
+            dim1name='column', long_name='prior year max active layer thickness', units='m', &
             interpinic_flag='interp', readvar=readvar, data=this%altmax_lastyear_col)
        call restartvar(ncid=ncid, flag=flag, varname='altmax_indx', xtype=ncd_int,  &
-            dim1name='column', long_name='', units='integer value', &
+            dim1name='column', long_name='max annual active layer thickness index', units='index', &
             interpinic_flag='interp', readvar=readvar, data=this%altmax_indx_col)
        call restartvar(ncid=ncid, flag=flag, varname='altmax_lastyear_indx', xtype=ncd_int,  &
-            dim1name='column', long_name='', units='integer value', &
+            dim1name='column', long_name='prior year max active layer thickness index', units='index', &
             interpinic_flag='interp', readvar=readvar, data=this%altmax_lastyear_indx_col)
+
+       ! Backward compatibility: if reading old restart file without new variables, initialize TD from BU
+       if (flag == 'read') then
+          if (.not. readvar) then
+             ! Old restart file - initialize TD variables conservatively from BU (or zero if BU missing)
+             do c = bounds%begc, bounds%endc
+                this%zthaw_td_max_col(c) = this%zthaw_bu_max_col(c)
+                this%zthaw_td_max_lastyear_col(c) = this%zthaw_bu_max_lastyear_col(c)
+                this%zthaw_td_max_indx_col(c) = this%zthaw_bu_max_indx_col(c)
+                this%zthaw_td_max_lastyear_indx_col(c) = this%zthaw_bu_max_lastyear_indx_col(c)
+             end do
+          end if
+       end if
+
        if (use_polygonal_tundra) then
-          call restartvar(ncid=ncid, flag=flag, varname='altmax_1989_indx', xtype=ncd_double,  &
-               dim1name='column', long_name='', units='', &
-               interpinic_flag='interp', readvar=readvar, data=this%altmax_1989_indx_col)
-          call restartvar(ncid=ncid, flag=flag, varname='altmax_ever_indx', xtype=ncd_int,  &
-               dim1name='column', long_name='', units='', &
-               interpinic_flag='interp', readvar=readvar, data=this%altmax_ever_indx_col)
+          call restartvar(ncid=ncid, flag=flag, varname='zthaw_bu_max_1989', xtype=ncd_double,  &
+               dim1name='column', long_name='1989 max depth of thaw (bottom-up)', units='m', &
+               interpinic_flag='interp', readvar=readvar, data=this%zthaw_bu_max_1989_col)
+          call restartvar(ncid=ncid, flag=flag, varname='zthaw_bu_max_ever', xtype=ncd_double,  &
+               dim1name='column', long_name='all-time max depth of thaw (bottom-up)', units='m', &
+               interpinic_flag='interp', readvar=readvar, data=this%zthaw_bu_max_ever_col)
+          call restartvar(ncid=ncid, flag=flag, varname='zthaw_bu_max_1989_indx', xtype=ncd_int,  &
+               dim1name='column', long_name='1989 max depth of thaw index (bottom-up)', units='index', &
+               interpinic_flag='interp', readvar=readvar, data=this%zthaw_bu_max_1989_indx_col)
+          call restartvar(ncid=ncid, flag=flag, varname='zthaw_bu_max_ever_indx', xtype=ncd_int,  &
+               dim1name='column', long_name='all-time max depth of thaw index (bottom-up)', units='index', &
+               interpinic_flag='interp', readvar=readvar, data=this%zthaw_bu_max_ever_indx_col)
           call restartvar(ncid=ncid, flag=flag, varname='altmax_1989', xtype=ncd_double,  &
-               dim1name='column', long_name='', units='', &
+               dim1name='column', long_name='1989 max active layer thickness', units='m', &
                interpinic_flag='interp', readvar=readvar, data=this%altmax_1989_col)
           call restartvar(ncid=ncid, flag=flag, varname='altmax_ever', xtype=ncd_double,  &
-               dim1name='column', long_name='', units='', &
+               dim1name='column', long_name='all-time max active layer thickness', units='m', &
                interpinic_flag='interp', readvar=readvar, data=this%altmax_ever_col)
+          call restartvar(ncid=ncid, flag=flag, varname='altmax_1989_indx', xtype=ncd_int,  &
+               dim1name='column', long_name='1989 max active layer thickness index', units='index', &
+               interpinic_flag='interp', readvar=readvar, data=this%altmax_1989_indx_col)
+          call restartvar(ncid=ncid, flag=flag, varname='altmax_ever_indx', xtype=ncd_int,  &
+               dim1name='column', long_name='all-time max active layer thickness index', units='index', &
+               interpinic_flag='interp', readvar=readvar, data=this%altmax_ever_indx_col)
        end if ! polygonal tundra
     end if ! cn or fates
     if ( use_hydrstress ) then
