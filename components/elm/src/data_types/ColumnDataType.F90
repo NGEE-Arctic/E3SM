@@ -6104,11 +6104,6 @@ contains
       call hist_addfld2d (fname='QEXCESSICE_LYR',  units='mm/s',type2d='levgrnd',&
           avgflag='A', long_name='excess ice melt rate per soil layer', &
           ptr_col=this%qflx_exice_melt_lyr, c2l_scale_type='urbanf')
-
-      this%qflx_exice_melt_lyr(begc:endc,1:nlevgrnd) = spval
-      call hist_addfld2d (fname='QEXCESSICE_LYR',  units='mm/s',type2d='levgrnd',&
-            avgflag='A', long_name='excess ice per soil layer', &
-            ptr_col=this%qflx_exice_melt_lyr, c2l_scale_type='urbanf')
     endif
     
     this%qflx_qrgwl(begc:endc) = spval
