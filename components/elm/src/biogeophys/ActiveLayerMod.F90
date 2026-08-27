@@ -2,7 +2,13 @@ module ActiveLayerMod
   
   !-----------------------------------------------------------------------
   ! !DESCRIPTION:
-  ! Module holding routines for calculation of active layer dynamics
+  ! Module holding routines for calculation of active layer dynamics.
+  ! Implements three thaw depth calculations:
+  !   1. Bottom-up (ZTHAW_BU): searches from bedrock upward for deepest thaw
+  !   2. Top-down (ZTHAW_TD): searches from surface downward for shallowest freeze
+  !   3. Active layer (ALT): max(ZTHAW_TD, ZTHAW_TD_lastyear) for rooting memory
+  ! The ALT calculation allows roots to access soil down to the deeper of current
+  ! year's or prior year's maximum top-down thaw depth.
   !
   ! !USES:
   use shr_kind_mod    , only : r8 => shr_kind_r8
@@ -74,22 +80,45 @@ contains
     associate(                                                                &
          t_soisno             =>    col_es%t_soisno        ,    & ! Input:   [real(r8) (:,:) ]  soil temperature (Kelvin)  (-nlevsno+1:nlevgrnd)
 
-         alt                  =>    canopystate_vars%alt_col             ,      & ! Output:  [real(r8) (:)   ]  current depth of thaw
-         altmax               =>    canopystate_vars%altmax_col          ,      & ! Output:  [real(r8) (:)   ]  maximum annual depth of thaw
-         altmax_lastyear      =>    canopystate_vars%altmax_lastyear_col ,      & ! Output:  [real(r8) (:)   ]  prior year maximum annual depth of thaw
-         altmax_1989          =>    canopystate_vars%altmax_1989_col     ,      & ! Output:  [real(r8) (:)   ]  maximum ALT in 1989
-         altmax_ever          =>    canopystate_vars%altmax_ever_col     ,      & ! Output:  [real(r8) (:)   ]  maximum thaw depth since initialization
-         alt_indx             =>    canopystate_vars%alt_indx_col        ,      & ! Output:  [integer  (:)   ]  current depth of thaw
-         altmax_indx          =>    canopystate_vars%altmax_indx_col     ,      & ! Output:  [integer  (:)   ]  maximum annual depth of thaw
-         altmax_lastyear_indx =>    canopystate_vars%altmax_lastyear_indx_col , & ! Output:  [integer  (:)   ]  prior year maximum annual depth of thaw
-         altmax_1989_indx     =>    canopystate_vars%altmax_1989_indx_col,      & ! Output:  [integer  (:)   ]  index of maximum ALT in 1989
-         altmax_ever_indx     =>    canopystate_vars%altmax_ever_indx_col,      & ! Output:  [integer  (:)   ]  maximum thaw depth since initialization
-         excess_ice           =>    col_ws%excess_ice                    ,      & ! Input/output:[real(r8) (:,:)]  depth variable excess ice content in soil column (-)
-         rmax                 =>    col_ws%iwp_microrel                  ,      & ! Output:  [real(r8) (:)   ]  ice wedge polygon microtopographic relief (m)
-         vexc                 =>    col_ws%iwp_exclvol                   ,      & ! Output:  [real(r8) (:)   ]  ice wedge polygon excluded volume (m)
-         ddep                 =>    col_ws%iwp_ddep                      ,      & ! Output:  [real(r8) (:)   ]  ice wedge polygon depression depth (m)
-         subsidence           =>    col_ws%iwp_subsidence                ,      & ! Input/output:[real(r8)(:)]  ice wedge polygon subsidence (m)
-         frac_melted          =>    col_ws%frac_melted                          & ! Input/output:[real(r8)(:)]  fraction of layer that has ever melted (-)
+         ! Bottom-up thaw depth variables
+         zthaw_bu                     =>    canopystate_vars%zthaw_bu_col                     ,      & ! Output:  [real(r8) (:)]  current depth (bottom-up)
+         zthaw_bu_max                 =>    canopystate_vars%zthaw_bu_max_col                 ,      & ! Output:  [real(r8) (:)]  annual maximum (bottom-up)
+         zthaw_bu_max_lastyear        =>    canopystate_vars%zthaw_bu_max_lastyear_col        ,      & ! Output:  [real(r8) (:)]  prior year max (bottom-up)
+         zthaw_bu_max_ever            =>    canopystate_vars%zthaw_bu_max_ever_col            ,      & ! Output:  [real(r8) (:)]  all-time maximum (bottom-up)
+         zthaw_bu_indx                =>    canopystate_vars%zthaw_bu_indx_col                ,      & ! Output:  [integer  (:)]  current index (bottom-up)
+         zthaw_bu_max_indx            =>    canopystate_vars%zthaw_bu_max_indx_col            ,      & ! Output:  [integer  (:)]  annual max index (bottom-up)
+         zthaw_bu_max_lastyear_indx   =>    canopystate_vars%zthaw_bu_max_lastyear_indx_col   ,      & ! Output:  [integer  (:)]  prior year max index (bottom-up)
+         zthaw_bu_max_ever_indx       =>    canopystate_vars%zthaw_bu_max_ever_indx_col       ,      & ! Output:  [integer  (:)]  all-time max index (bottom-up)
+
+         ! Top-down thaw depth variables
+         zthaw_td                     =>    canopystate_vars%zthaw_td_col                     ,      & ! Output:  [real(r8) (:)]  current depth (top-down)
+         zthaw_td_max                 =>    canopystate_vars%zthaw_td_max_col                 ,      & ! Output:  [real(r8) (:)]  annual maximum (top-down)
+         zthaw_td_max_lastyear        =>    canopystate_vars%zthaw_td_max_lastyear_col        ,      & ! Output:  [real(r8) (:)]  prior year max (top-down)
+         zthaw_td_indx                =>    canopystate_vars%zthaw_td_indx_col                ,      & ! Output:  [integer  (:)]  current index (top-down)
+         zthaw_td_max_indx            =>    canopystate_vars%zthaw_td_max_indx_col            ,      & ! Output:  [integer  (:)]  annual max index (top-down)
+         zthaw_td_max_lastyear_indx   =>    canopystate_vars%zthaw_td_max_lastyear_indx_col   ,      & ! Output:  [integer  (:)]  prior year max index (top-down)
+
+         ! Active layer variables (max(TD, TD_lastyear))
+         alt                  =>    canopystate_vars%alt_col             ,      & ! Output:  [real(r8) (:)]  max(TD, TD_lastyear) ALT
+         altmax               =>    canopystate_vars%altmax_col          ,      & ! Output:  [real(r8) (:)]  annual max ALT
+         altmax_lastyear      =>    canopystate_vars%altmax_lastyear_col ,      & ! Output:  [real(r8) (:)]  prior year max ALT
+         alt_indx             =>    canopystate_vars%alt_indx_col        ,      & ! Output:  [integer  (:)]  max(TD, TD_lastyear) index
+         altmax_indx          =>    canopystate_vars%altmax_indx_col     ,      & ! Output:  [integer  (:)]  annual max index
+         altmax_lastyear_indx =>    canopystate_vars%altmax_lastyear_indx_col , & ! Output:  [integer  (:)]  prior year max index
+
+         ! Special tracking (backward compatibility)
+         altmax_1989          =>    canopystate_vars%altmax_1989_col     ,      & ! Output:  [real(r8) (:)]  1989 baseline
+         altmax_ever          =>    canopystate_vars%altmax_ever_col     ,      & ! Output:  [real(r8) (:)]  all-time maximum
+         altmax_1989_indx     =>    canopystate_vars%altmax_1989_indx_col,      & ! Output:  [integer  (:)]  1989 index
+         altmax_ever_indx     =>    canopystate_vars%altmax_ever_indx_col,      & ! Output:  [integer  (:)]  all-time max index
+
+         ! Polygonal tundra variables (unchanged)
+         excess_ice           =>    col_ws%excess_ice                    ,      & ! Input/output:[real(r8) (:,:)]  excess ice content (-)
+         rmax                 =>    col_ws%iwp_microrel                  ,      & ! Output:  [real(r8) (:)]  microtopographic relief (m)
+         vexc                 =>    col_ws%iwp_exclvol                   ,      & ! Output:  [real(r8) (:)]  excluded volume (m)
+         ddep                 =>    col_ws%iwp_ddep                      ,      & ! Output:  [real(r8) (:)]  depression depth (m)
+         subsidence           =>    col_ws%iwp_subsidence                ,      & ! Input/output:[real(r8)(:)]  subsidence (m)
+         frac_melted          =>    col_ws%frac_melted                          & ! Input/output:[real(r8)(:)]  fraction melted (-)
          )
 
       ! on a set annual timestep, update annual maxima
@@ -101,10 +130,22 @@ contains
             c = filter_soilc(fc)
             g = col_pp%gridcell(c)
             if ( grc_pp%lat(g) > 0. ) then
-               
+               ! Reset bottom-up annual maximum
+               zthaw_bu_max_lastyear(c) = zthaw_bu_max(c)
+               zthaw_bu_max_lastyear_indx(c) = zthaw_bu_max_indx(c)
+               zthaw_bu_max(c) = 0._r8
+               zthaw_bu_max_indx(c) = 0
+
+               ! Reset top-down annual maximum
+               zthaw_td_max_lastyear(c) = zthaw_td_max(c)
+               zthaw_td_max_lastyear_indx(c) = zthaw_td_max_indx(c)
+               zthaw_td_max(c) = 0._r8
+               zthaw_td_max_indx(c) = 0
+
+               ! Reset active layer annual maximum
                altmax_lastyear(c) = altmax(c)
                altmax_lastyear_indx(c) = altmax_indx(c)
-               altmax(c) = 0.
+               altmax(c) = 0._r8
                altmax_indx(c) = 0
             endif
          end do
@@ -113,10 +154,23 @@ contains
          do fc = 1,num_soilc
             c = filter_soilc(fc)
             g = col_pp%gridcell(c)
-            if ( grc_pp%lat(g) <= 0. ) then 
+            if ( grc_pp%lat(g) <= 0. ) then
+               ! Reset bottom-up annual maximum
+               zthaw_bu_max_lastyear(c) = zthaw_bu_max(c)
+               zthaw_bu_max_lastyear_indx(c) = zthaw_bu_max_indx(c)
+               zthaw_bu_max(c) = 0._r8
+               zthaw_bu_max_indx(c) = 0
+
+               ! Reset top-down annual maximum
+               zthaw_td_max_lastyear(c) = zthaw_td_max(c)
+               zthaw_td_max_lastyear_indx(c) = zthaw_td_max_indx(c)
+               zthaw_td_max(c) = 0._r8
+               zthaw_td_max_indx(c) = 0
+
+               ! Reset active layer annual maximum
                altmax_lastyear(c) = altmax(c)
                altmax_lastyear_indx(c) = altmax_indx(c)
-               altmax(c) = 0.
+               altmax(c) = 0._r8
                altmax_indx(c) = 0
             endif
          end do
@@ -125,14 +179,14 @@ contains
       do fc = 1,num_soilc
          c = filter_soilc(fc)
 
-         ! calculate alt for a given timestep
-         ! start from base of soil and search upwards for first thawed layer.
-         ! note that this will put talik in with active layer
-         ! a different way of doing this could be to keep track of how long a given layer has ben frozen for,
-         ! and define ALT as the first layer that has been frozen for less than 2 years.
+         ! ========================================================================
+         ! ALGORITHM 1: Bottom-Up Thaw Depth (ZTHAW_BU)
+         ! ========================================================================
+         ! Original algorithm: search from bedrock upward for deepest thaw
+         ! Note: this will include talik (deep thawed soil) in the calculation
          if (t_soisno(c,nlevgrnd) > SHR_CONST_TKFRZ ) then
-            alt(c) = zsoi(nlevgrnd)
-            alt_indx(c) = nlevgrnd
+            zthaw_bu(c) = zsoi(nlevgrnd)
+            zthaw_bu_indx(c) = nlevgrnd
          else
             k_frz=0
             found_thawlayer = .false.
@@ -144,29 +198,110 @@ contains
             end do
 
             if ( k_frz > 0 ) then
-               ! define active layer as the depth at which the linearly interpolated temperature line intersects with zero
+               ! Interpolate to find exact depth where temperature crosses freezing
                z1 = zsoi(k_frz)
                z2 = zsoi(k_frz+1)
                t1 = t_soisno(c,k_frz)
                t2 = t_soisno(c,k_frz+1)
-               alt(c) = z1 + (t1-SHR_CONST_TKFRZ)*(z2-z1)/(t1-t2)
-               alt_indx(c) = k_frz
+               zthaw_bu(c) = z1 + (t1-SHR_CONST_TKFRZ)*(z2-z1)/(t1-t2)
+               zthaw_bu_indx(c) = k_frz
             else
-               alt(c)=0._r8
-               alt_indx(c) = 0
+               zthaw_bu(c)=0._r8
+               zthaw_bu_indx(c) = 0
             endif
          endif
 
-         ! if appropriate, update maximum annual active layer thickness
+         ! Update BU annual maximum
+         if (zthaw_bu(c) > zthaw_bu_max(c)) then
+            zthaw_bu_max(c) = zthaw_bu(c)
+            zthaw_bu_max_indx(c) = zthaw_bu_indx(c)
+         endif
+
+         ! Update BU all-time maximum
+         if (zthaw_bu(c) > zthaw_bu_max_ever(c)) then
+            if (spinup_state .eq. 0) then
+                zthaw_bu_max_ever(c) = zthaw_bu(c)
+                zthaw_bu_max_ever_indx(c) = zthaw_bu_indx(c)
+            else
+                zthaw_bu_max_ever(c) = 0._r8
+                zthaw_bu_max_ever_indx(c) = 0
+            endif
+         endif
+
+         ! ========================================================================
+         ! ALGORITHM 2: Top-Down Thaw Depth (ZTHAW_TD)
+         ! ========================================================================
+         ! New algorithm: search from surface downward for first frozen layer
+         if (t_soisno(c,1) <= SHR_CONST_TKFRZ) then
+            ! Surface frozen - no thaw from top
+            zthaw_td(c) = 0._r8
+            zthaw_td_indx(c) = 0
+         else
+            ! Surface thawed - search downward for first frozen layer
+            k_frz = 0
+            found_thawlayer = .false.
+            do j = 1, nlevgrnd-1
+               if ((t_soisno(c,j+1) <= SHR_CONST_TKFRZ) .and. .not. found_thawlayer) then
+                  k_frz = j
+                  found_thawlayer = .true.
+               endif
+            end do
+
+            if (k_frz > 0) then
+               ! Found frozen layer below thawed layer - interpolate
+               z1 = zsoi(k_frz)
+               z2 = zsoi(k_frz+1)
+               t1 = t_soisno(c,k_frz)
+               t2 = t_soisno(c,k_frz+1)
+               zthaw_td(c) = z1 + (t1-SHR_CONST_TKFRZ)*(z2-z1)/(t1-t2)
+               zthaw_td_indx(c) = k_frz
+            else
+               ! No frozen layer found - check if fully thawed to bedrock
+               if (t_soisno(c,nlevgrnd) > SHR_CONST_TKFRZ) then
+                  zthaw_td(c) = zsoi(nlevgrnd)
+                  zthaw_td_indx(c) = nlevgrnd
+               else
+                  ! Deepest layer is frozen - interpolate at base
+                  z1 = zsoi(nlevgrnd-1)
+                  z2 = zsoi(nlevgrnd)
+                  t1 = t_soisno(c,nlevgrnd-1)
+                  t2 = t_soisno(c,nlevgrnd)
+                  zthaw_td(c) = z1 + (t1-SHR_CONST_TKFRZ)*(z2-z1)/(t1-t2)
+                  zthaw_td_indx(c) = nlevgrnd-1
+               endif
+            endif
+         endif
+
+         ! Update TD annual maximum
+         if (zthaw_td(c) > zthaw_td_max(c)) then
+            zthaw_td_max(c) = zthaw_td(c)
+            zthaw_td_max_indx(c) = zthaw_td_indx(c)
+         endif
+
+         ! ========================================================================
+         ! ALGORITHM 3: Active Layer (ALT) with Rooting Memory
+         ! ========================================================================
+         ! ALT = max(current TD, prior year's max TD) for rooting memory
+         if (zthaw_td(c) >= zthaw_td_max_lastyear(c)) then
+            alt(c) = zthaw_td(c)
+            alt_indx(c) = zthaw_td_indx(c)
+         else
+            alt(c) = zthaw_td_max_lastyear(c)
+            alt_indx(c) = zthaw_td_max_lastyear_indx(c)
+         endif
+
+         ! Update ALT annual maximum
          if (alt(c) > altmax(c)) then
             altmax(c) = alt(c)
             altmax_indx(c) = alt_indx(c)
          endif
+
+         ! Update ALT all-time maximum (for polygonal tundra baseline)
          if (alt(c) > altmax_ever(c)) then
             if (spinup_state .eq. 0) then
                 altmax_ever(c) = alt(c)
                 altmax_ever_indx(c) = alt_indx(c)
-            else !overwrite if in spinup
+            else
                 altmax_ever(c) = 0._r8
                 altmax_ever_indx(c) = 0
             endif
@@ -190,9 +325,9 @@ contains
            melt_profile(:) = 0._r8
 
            do j = nlevgrnd,1,-1 ! note, this will go from bottom to top
-              if (j .gt. k_frz + 1) then ! all layers below k_frz + 1 remain frozen
+              if (j .gt. alt_indx(c) + 1) then ! all layers below alt_indx + 1 remain frozen
                 melt_profile(j) = 0.0_r8
-              else if (j .eq. k_frz + 1) then ! first layer below the 'thawed' layer
+              else if (j .eq. alt_indx(c) + 1) then ! first layer below the 'thawed' layer
                 ! need to check to see if the active layer thickness is is actually
                 ! in this layer (and not between the midpoint of j_frz and bottom interface
                 ! or else inferred melt will be negative
@@ -208,7 +343,7 @@ contains
                 else
                   melt_profile(j) = 0._r8 ! no melt
                 end if
-              else if (j .eq. k_frz) then
+              else if (j .eq. alt_indx(c)) then
                 if (alt(c) .eq. altmax_ever(c) .and. (frac_melted(c,j) .lt. 1._r8)) then
                   orig_excess = (1._r8/(1._r8 - frac_melted(c,j))) * excess_ice(c,j)
                   old_mfrac = frac_melted(c,j)
