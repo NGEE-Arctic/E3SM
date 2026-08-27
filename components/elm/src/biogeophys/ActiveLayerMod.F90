@@ -84,12 +84,10 @@ contains
          zthaw_bu                     =>    canopystate_vars%zthaw_bu_col                     ,      & ! Output:  [real(r8) (:)]  current depth (bottom-up)
          zthaw_bu_max                 =>    canopystate_vars%zthaw_bu_max_col                 ,      & ! Output:  [real(r8) (:)]  annual maximum (bottom-up)
          zthaw_bu_max_lastyear        =>    canopystate_vars%zthaw_bu_max_lastyear_col        ,      & ! Output:  [real(r8) (:)]  prior year max (bottom-up)
-         zthaw_bu_max_1989            =>    canopystate_vars%zthaw_bu_max_1989_col            ,      & ! Output:  [real(r8) (:)]  1989 baseline (bottom-up)
          zthaw_bu_max_ever            =>    canopystate_vars%zthaw_bu_max_ever_col            ,      & ! Output:  [real(r8) (:)]  all-time maximum (bottom-up)
          zthaw_bu_indx                =>    canopystate_vars%zthaw_bu_indx_col                ,      & ! Output:  [integer  (:)]  current index (bottom-up)
          zthaw_bu_max_indx            =>    canopystate_vars%zthaw_bu_max_indx_col            ,      & ! Output:  [integer  (:)]  annual max index (bottom-up)
          zthaw_bu_max_lastyear_indx   =>    canopystate_vars%zthaw_bu_max_lastyear_indx_col   ,      & ! Output:  [integer  (:)]  prior year max index (bottom-up)
-         zthaw_bu_max_1989_indx       =>    canopystate_vars%zthaw_bu_max_1989_indx_col       ,      & ! Output:  [integer  (:)]  1989 index (bottom-up)
          zthaw_bu_max_ever_indx       =>    canopystate_vars%zthaw_bu_max_ever_indx_col       ,      & ! Output:  [integer  (:)]  all-time max index (bottom-up)
 
          ! Top-down thaw depth variables
