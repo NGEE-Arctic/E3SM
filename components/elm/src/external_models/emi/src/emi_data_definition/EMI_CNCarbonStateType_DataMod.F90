@@ -25,21 +25,21 @@ contains
     ! !ARGUMENTS:
     integer            , intent(in)  :: data_id
     integer            , intent(out) :: id_val
-    character (len=24) , intent(out) :: name_val
+    character (len=32) , intent(out) :: name_val
     character (len=128), intent(out) :: long_name_val
-    character (len=24) , intent(out) :: units_val
+    character (len=32) , intent(out) :: units_val
     logical            , intent(out) :: is_int_type
     logical            , intent(out) :: is_real_type
     integer            , intent(out) :: ndim
-    character (len=24) , intent(out) :: dim1_beg_name
-    character (len=24) , intent(out) :: dim1_end_name
-    character (len=24) , intent(out) :: dim2_beg_name
-    character (len=24) , intent(out) :: dim2_end_name
-    character (len=24) , intent(out) :: dim3_beg_name
-    character (len=24) , intent(out) :: dim3_end_name
-    character (len=24) , intent(out) :: dim4_beg_name
-    character (len=24) , intent(out) :: dim4_end_name
-    logical            , intent(out) :: data_found
+    character (len=32) , intent(out) :: dim1_beg_name
+    character (len=32) , intent(out) :: dim1_end_name
+    character (len=32) , intent(out) :: dim2_beg_name
+    character (len=32) , intent(out) :: dim2_end_name
+    character (len=32) , intent(out) :: dim3_beg_name
+    character (len=32) , intent(out) :: dim3_end_name
+    character (len=32) , intent(out) :: dim4_beg_name
+    character (len=32) , intent(out) :: dim4_end_name
+    logical            , intent(inout) :: data_found
 
     is_int_type    = .false.
     is_real_type   = .false.
@@ -82,6 +82,58 @@ contains
        dim2_end_name  =  dimname_nlevdecomp_full
        dim3_beg_name  =  dimname_one
        dim3_end_name  =  dimname_ndecomp_pools
+       data_found   =  .true.
+
+    case(E2L_STATE_DOC_VERTICALLY_RESOLVED)
+       id_val         =  E2L_STATE_DOC_VERTICALLY_RESOLVED
+       name_val       =  'DOC vr'
+       long_name_val  =  'DOC vr: EM to ELM'
+       units_val      =  '[gC/m2]'
+       is_real_type   =  .true.
+       ndim           =  2
+       dim1_beg_name  =  dimname_begc
+       dim1_end_name  =  dimname_endc
+       dim2_beg_name  =  dimname_one
+       dim2_end_name  =  dimname_nlevdecomp_full
+       data_found   =  .true.
+
+    case(E2L_STATE_DIC_VERTICALLY_RESOLVED)
+       id_val         =  E2L_STATE_DIC_VERTICALLY_RESOLVED
+       name_val       =  'DIC vr'
+       long_name_val  =  'DIC vr: EM to ELM'
+       units_val      =  '[gC/m2]'
+       is_real_type   =  .true.
+       ndim           =  2
+       dim1_beg_name  =  dimname_begc
+       dim1_end_name  =  dimname_endc
+       dim2_beg_name  =  dimname_one
+       dim2_end_name  =  dimname_nlevdecomp_full
+       data_found   =  .true.
+
+    case(E2L_STATE_METHANE_VERTICALLY_RESOLVED)
+       id_val         =  E2L_STATE_METHANE_VERTICALLY_RESOLVED
+       name_val       =  'CH4 vr'
+       long_name_val  =  'CH4 vr: EM to ELM'
+       units_val      =  '[gC/m2]'
+       is_real_type   =  .true.
+       ndim           =  2
+       dim1_beg_name  =  dimname_begc
+       dim1_end_name  =  dimname_endc
+       dim2_beg_name  =  dimname_one
+       dim2_end_name  =  dimname_nlevdecomp_full
+       data_found   =  .true.
+
+    case(E2L_STATE_SOIL_CARBONATE)
+       id_val         =  E2L_STATE_SOIL_CARBONATE
+       name_val       =  'Soil carbonate'
+       long_name_val  =  'Soil carbonate: EM to ELM'
+       units_val      =  '[g C m^-3]'
+       is_real_type   =  .true.
+       ndim           =  2
+       dim1_beg_name  =  dimname_begc
+       dim1_end_name  =  dimname_endc
+       dim2_beg_name  =  dimname_one
+       dim2_end_name  =  dimname_nlevsoi
        data_found   =  .true.
     end select
     

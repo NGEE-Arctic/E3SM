@@ -6,12 +6,17 @@ module EMI_TemperatureType_ExchangeMod
   use elm_varctl                            , only : iulog
   use EMI_DataMod                           , only : emi_data_list, emi_data
   use EMI_DataDimensionMod                  , only : emi_data_dimension_list_type
-  use TemperatureType                       , only : temperature_type
-  use ColumnDataType                        , only : col_es
-  use VegetationDataType                    , only : veg_es
+  use TemperatureType      , only : temperature_type
   use EMI_Atm2LndType_Constants
   use EMI_CanopyStateType_Constants
   use EMI_ChemStateType_Constants
+  use EMI_CNCarbonStateType_Constants
+  use EMI_CNNitrogenStateType_Constants
+  use EMI_CNNitrogenFluxType_Constants
+  use EMI_CNCarbonFluxType_Constants
+  use EMI_ColumnEnergyStateType_Constants
+  use EMI_ColumnWaterStateType_Constants
+  use EMI_ColumnWaterFluxType_Constants
   use EMI_EnergyFluxType_Constants
   use EMI_SoilHydrologyType_Constants
   use EMI_SoilStateType_Constants
@@ -39,7 +44,9 @@ contains
     ! Pack data from ALM temperature_vars for EM
     !
     ! !USES:
-    use elm_varpar             , only : nlevsoi, nlevgrnd, nlevsno
+    use elm_varpar             , only : nlevgrnd
+    use elm_varpar             , only : nlevsno
+    use elm_varpar             , only : nlevsoi
     !
     implicit none
     !
@@ -51,16 +58,16 @@ contains
     type(temperature_type) , intent(in) :: temperature_vars
     !
     ! !LOCAL_VARIABLES:
-    integer                             :: fc,c,j
+    integer                             :: fc,c,j,k
     class(emi_data), pointer            :: cur_data
     logical                             :: need_to_pack
     integer                             :: istage
     integer                             :: count
 
     associate(& 
-         t_soisno  => col_es%t_soisno  , &
-         t_h2osfc  => col_es%t_h2osfc  , &
-         t_soi10cm => col_es%t_soi10cm   &
+         t_soisno_col  => temperature_vars%t_soisno_col  , &
+         t_h2osfc_col  => temperature_vars%t_h2osfc_col  , &
+         t_soi10cm_col => temperature_vars%t_soi10cm_col   &
          )
 
     count = 0
@@ -85,7 +92,7 @@ contains
              do fc = 1, num_filter
                 c = filter(fc)
                 do j = 1, nlevgrnd
-                   cur_data%data_real_2d(c,j) = t_soisno(c,j)
+                   cur_data%data_real_2d(c,j) = t_soisno_col(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -94,7 +101,7 @@ contains
              do fc = 1, num_filter
                 c = filter(fc)
                 do j = -nlevsno + 1, 0
-                   cur_data%data_real_2d(c,j) = t_soisno(c,j)
+                   cur_data%data_real_2d(c,j) = t_soisno_col(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -102,14 +109,14 @@ contains
           case (L2E_STATE_TH2OSFC)
              do fc = 1, num_filter
                 c = filter(fc)
-                cur_data%data_real_1d(c) = t_h2osfc(c)
+                cur_data%data_real_1d(c) = t_h2osfc_col(c)
              enddo
              cur_data%is_set = .true.
 
           case (L2E_STATE_TSOI10CM)
              do fc = 1, num_filter
                 c = filter(fc)
-                cur_data%data_real_1d(c) = t_soi10cm(c)
+                cur_data%data_real_1d(c) = t_soi10cm_col(c)
              enddo
              cur_data%is_set = .true.
 
@@ -117,7 +124,7 @@ contains
              do fc = 1, num_filter
                 c = filter(fc)
                 do j = 1, nlevsoi
-                   cur_data%data_real_2d(c,j) = t_soisno(c,j)
+                   cur_data%data_real_2d(c,j) = t_soisno_col(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -141,7 +148,6 @@ contains
     ! Pack data from ALM temperature_vars for EM
     !
     ! !USES:
-    use elm_varpar             , only : nlevsoi, nlevgrnd, nlevsno
     !
     implicit none
     !
@@ -153,14 +159,14 @@ contains
     type(temperature_type) , intent(in) :: temperature_vars
     !
     ! !LOCAL_VARIABLES:
-    integer                             :: fp,p,j
+    integer                             :: fp,p,j,k
     class(emi_data), pointer            :: cur_data
     logical                             :: need_to_pack
     integer                             :: istage
     integer                             :: count
 
     associate(& 
-         t_veg => veg_es%t_veg   &
+         t_veg_patch => temperature_vars%t_veg_patch   &
          )
 
     count = 0
@@ -184,7 +190,7 @@ contains
           case (L2E_STATE_TVEG)
              do fp = 1, num_filter
                 p = filter(fp)
-                cur_data%data_real_1d(p) = t_veg(p)
+                cur_data%data_real_1d(p) = t_veg_patch(p)
              enddo
              cur_data%is_set = .true.
 
@@ -207,7 +213,8 @@ contains
     ! Unpack data for ALM temperature_vars from EM
     !
     ! !USES:
-    use elm_varpar             , only : nlevsoi, nlevgrnd, nlevsno
+    use elm_varpar             , only : nlevgrnd
+    use elm_varpar             , only : nlevsno
     !
     implicit none
     !
@@ -219,15 +226,15 @@ contains
     type(temperature_type) , intent(in) :: temperature_vars
     !
     ! !LOCAL_VARIABLES:
-    integer                             :: fc,c,j
+    integer                             :: fc,c,j,k
     class(emi_data), pointer            :: cur_data
     logical                             :: need_to_pack
     integer                             :: istage
     integer                             :: count
 
     associate(& 
-         t_soisno => col_es%t_soisno , &
-         t_h2osfc => col_es%t_h2osfc   &
+         t_soisno_col => temperature_vars%t_soisno_col , &
+         t_h2osfc_col => temperature_vars%t_h2osfc_col   &
          )
 
     count = 0
@@ -252,7 +259,7 @@ contains
              do fc = 1, num_filter
                 c = filter(fc)
                 do j = 1, nlevgrnd
-                   t_soisno(c,j) = cur_data%data_real_2d(c,j)
+                   t_soisno_col(c,j) = cur_data%data_real_2d(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -261,7 +268,7 @@ contains
              do fc = 1, num_filter
                 c = filter(fc)
                 do j = -nlevsno + 1, 0
-                   t_soisno(c,j) = cur_data%data_real_2d(c,j)
+                   t_soisno_col(c,j) = cur_data%data_real_2d(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -269,7 +276,7 @@ contains
           case (E2L_STATE_TH2OSFC)
              do fc = 1, num_filter
                 c = filter(fc)
-                t_h2osfc(c) = cur_data%data_real_1d(c)
+                t_h2osfc_col(c) = cur_data%data_real_1d(c)
              enddo
              cur_data%is_set = .true.
 

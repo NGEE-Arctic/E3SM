@@ -36,6 +36,7 @@ module SoilLittDecompMod
   use elm_varctl             , only : use_elm_interface, use_pflotran, pf_cmode
   use elm_varctl             , only : use_cn, use_fates
   use elm_instMod            , only : alm_fates
+  use elm_varctl             , only : use_alquimia
   !
   implicit none
   save
@@ -577,6 +578,7 @@ contains
     ! !USES:
     use AllocationMod , only: PlantCNPAlloc_RD, PlantCNPAlloc_ECAMIC ! Phase-3 of CNAllocation
     use atm2lndType     , only: atm2lnd_type
+    use elm_varctl    , only: cnallocate_carbon_only, cnallocate_carbonnitrogen_only, cnallocate_carbonphosphorus_only
 
     !
     ! !ARGUMENT:
@@ -629,12 +631,20 @@ contains
          sminn_to_plant                   =>    col_nf%sminn_to_plant                   , & ! Output: [real(r8) (:)     ]  col N uptake (gN/m2/s)
          sminn_to_plant_vr                =>    col_nf%sminn_to_plant_vr                , & ! Input:  [real(r8) (:,:)    ]  vertically-resolved N uptake (gN/m3/s)
 
+         fpg_p                            =>    cnstate_vars%fpg_p_col                  , &
+         sminp_to_plant_vr                =>    col_pf%sminp_to_plant_vr                , & ! Input:  [real(r8) (:,:)    ]  vertically-resolved N uptake (gN/m3/s)
+         sminp_to_plant                   =>    col_pf%sminp_to_plant                   , &
+
          smin_no3_to_plant_vr             =>    col_nf%smin_no3_to_plant_vr             , & ! Output: [real(r8) (:,:) ]
          smin_nh4_to_plant_vr             =>    col_nf%smin_nh4_to_plant_vr             , & ! Output: [real(r8) (:,:) ]
 
          col_plant_ndemand_vr             =>    col_nf%plant_ndemand_vr                 , & ! Input:  [real(r8) (:)     ]  col N uptake (gN/m2/s)
+         col_plant_pdemand_vr             =>    col_pf%plant_pdemand_vr                 , & ! Input:  [real(r8) (:)     ]  col N uptake (gN/m2/s)
 
          plant_ndemand_col                =>    col_nf%plant_ndemand                    , & ! Output:  [real(r8) (:,:) ]
+
+         supplement_to_sminn_vr           =>    col_nf%supplement_to_sminn_vr           , & ! Output: [real(r8) (:,:) ]
+         supplement_to_sminp_vr           =>    col_pf%supplement_to_sminp_vr           , & ! Output: [real(r8) (:,:) ]
 
          w_scalar                         =>    col_cf%w_scalar                           , & ! Input:  [real(r8) (:,:)   ]  fraction by which decomposition is limited by moisture availability
          decomp_cascade_hr_vr             =>    col_cf%decomp_cascade_hr_vr               , & ! Output: [real(r8) (:,:,:) ]  vertically-resolved het. resp. from decomposing C pools (gC/m3/s)
@@ -644,6 +654,7 @@ contains
          phr_vr                           =>    col_cf%phr_vr                             , & ! Output: [real(r8) (:,:)   ]  potential HR (gC/m3/s)
          fphr                             =>    col_cf%fphr                               , & ! Output: [real(r8) (:,:)   ]  fraction of potential SOM + LITTER heterotrophic
 
+         sminn_vr                         =>    col_ns%sminn_vr                        , &
          smin_no3_vr                      =>    col_ns%smin_no3_vr                     , &
          smin_nh4_vr                      =>    col_ns%smin_nh4_vr                       &
          )
@@ -655,9 +666,50 @@ contains
             smin_nh4_to_plant_vr_loc(:,:) = 0._r8
             smin_no3_to_plant_vr_loc(:,:) = 0._r8
 
+      ! Alquimia needs to correct for N or P limitation being turned off because it skips the calculation in SoilLittDecompAlloc
+      if(use_alquimia) then 
+         supplement_to_sminn_vr(1:num_soilc,:) = 0._r8  ! need to zeros, because alquimia coupling had skipped this step
+         if( cnallocate_carbon_only() .or. cnallocate_carbonphosphorus_only()) then
+            do fc=1,num_soilc
+               c = filter_soilc(fc)
+               do j = 1, nlevdecomp           ! sum up actual and potential column-level N fluxes to plant
+                  supplement_to_sminn_vr(c,j) = col_plant_ndemand_vr(c,j) - (smin_nh4_to_plant_vr(c,j) + smin_no3_to_plant_vr(c,j))
+                  smin_nh4_to_plant_vr(c,j)   = smin_nh4_to_plant_vr(c,j) + supplement_to_sminn_vr(c,j)
+                  ! Handle immobilization nitrogen. Potential and actual immob should be set by alquimia/Pflotran
+                  if(potential_immob_vr(c,j)>0.0) then
+                     ! For now, supplementing with potential immobilization value because only supplementing shortfall might underestimate
+                     supplement_to_sminn_vr(c,j) = supplement_to_sminn_vr(c,j) + (potential_immob_vr(c,j) - actual_immob_vr(c,j))
+                  endif
+                  ! Supplement to immobilization is added back for next time step but supplement to plant N is only given to the plant, not soil,
+                  ! because we are skipping the subtraction of plant N from smin_nh4 in NitrogenStateUpdate1Mod
+                  smin_nh4_vr(c,j) = smin_nh4_vr(c,j) + (potential_immob_vr(c,j) - actual_immob_vr(c,j))*dt
+               end do
+            end do
+         endif
+         supplement_to_sminp_vr(1:num_soilc,:) = 0._r8  ! need to zeros
+         if( cnallocate_carbon_only() .or. cnallocate_carbonnitrogen_only() .or. .true.) then ! Always on because PFLOTRAN doesn't have P yet
+            do fc=1,num_soilc
+               c = filter_soilc(fc)
+               sminp_to_plant(c) = 0.0_r8
+               do j = 1, nlevdecomp    
+                  supplement_to_sminp_vr(c,j) = col_plant_pdemand_vr(c,j) - sminp_to_plant_vr(c,j)
+                  sminp_to_plant_vr(c,j)       = sminp_to_plant_vr(c,j) + supplement_to_sminp_vr(c,j)
+                  sminp_to_plant(c) = sminp_to_plant(c) + sminp_to_plant_vr(c,j)*dzsoi_decomp(j)
+               enddo
+            fpg_p(c) = 1.0_r8
+            enddo
+         endif
+         do fc=1,num_soilc
+            c = filter_soilc(fc)
+            do j = 1, nlevdecomp    
+               sminn_to_plant_vr(c,j) = smin_no3_to_plant_vr(c,j) + smin_nh4_to_plant_vr(c,j)
+               sminn_vr(c,j) = col_ns%smin_nh4_vr(c,j) + col_ns%smin_no3_vr(c,j)
+            enddo
+         enddo
+      endif
 
       ! MUST have already updated needed bgc variables from PFLOTRAN by this point
-      if(use_elm_interface.and.use_pflotran.and.pf_cmode) then
+      if((use_elm_interface.and.use_pflotran.and.pf_cmode) .or. use_alquimia) then
          ! fpg calculation
          do fc=1,num_soilc
             c = filter_soilc(fc)
@@ -772,7 +824,7 @@ contains
       end if
       !------------------------------------------------------------------
 
-    if(use_pflotran.and.pf_cmode) then
+    if((use_pflotran.and.pf_cmode) .or. use_alquimia ) then
     ! in PlantCNPAlloc():
     ! smin_nh4_to_plant_vr(c,j), smin_no3_to_plant_vr(c,j), sminn_to_plant_vr(c,j) may be adjusted
     ! therefore, we need to update smin_no3_vr(c,j) & smin_nh4_vr(c,j)
@@ -783,6 +835,7 @@ contains
                smin_nh4_vr(c,j) = smin_nh4_vr(c,j) - (smin_nh4_to_plant_vr(c,j) - smin_nh4_to_plant_vr_loc(c,j))*dt
                smin_no3_vr(c,j) = max(0._r8, smin_no3_vr(c,j))
                smin_nh4_vr(c,j) = max(0._r8, smin_nh4_vr(c,j))
+               sminn_vr(c,j)    = smin_nh4_vr(c,j) + smin_no3_vr(c,j)
             end do
       end do
     end if !(use_pflotran.and.pf_cmode)
@@ -817,7 +870,7 @@ contains
   !  if not properly set.
   !
   !USES:
-    use elm_varctl   , only: carbon_only, carbonnitrogen_only
+    use elm_varctl   , only: cnallocate_carbon_only, cnallocate_carbonnitrogen_only
     use elm_varpar   , only: nlevdecomp, ndecomp_cascade_transitions
    !
    !ARGUMENTS:
@@ -854,7 +907,7 @@ contains
    end do
 
    ! pflotran not yet support phosphous cycle
-   if ( carbon_only .or.  carbonnitrogen_only  ) then
+   if ((cnallocate_carbon_only() .or. cnallocate_carbonnitrogen_only()) .and. use_pflotran) then
       call veg_ps%SetValues(num_patch=num_soilp,  filter_patch=filter_soilp,  value_patch=0._r8)
       call col_ps%SetValues(num_column=num_soilc, filter_column=filter_soilc, value_column=0._r8)
 

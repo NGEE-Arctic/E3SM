@@ -15,6 +15,7 @@ include_directories(${CMAKE_BINARY_DIR}/em/fates)
 include_directories(${CMAKE_BINARY_DIR}/em/ptm)
 include_directories(${CMAKE_BINARY_DIR}/em/stub)
 include_directories(${CMAKE_BINARY_DIR}/em/vsfm)
+include_directories(${CMAKE_BINARY_DIR}/em/alquimia)
 
 include(add_emi_library)
 add_emi_library(emi_emi ${EMI_EMI_SOURCES})

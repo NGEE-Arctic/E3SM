@@ -3,6 +3,8 @@ module elm_instMod
   use atm2lndType       , only : atm2lnd_type
   use CanopyStateType   , only : canopystate_type
   use CNCarbonStateType , only : carbonstate_type
+  use CNCarbonFluxType , only : carbonflux_type
+  use CNNitrogenStateType , only : nitrogenstate_type
   use ChemStateType     , only : chemstate_type
   use decompMod         , only : bounds_type
   use EnergyFluxType    , only : energyflux_type
@@ -23,6 +25,8 @@ module elm_instMod
   type(atm2lnd_type)       :: atm2lnd_vars
   type(canopystate_type)   :: canopystate_vars
   type(carbonstate_type)   :: carbonstate_vars
+  type(carbonflux_type)    :: carbonflux_vars
+  type(nitrogenstate_type)   :: nitrogenstate_vars
   type(chemstate_type)     :: chemstate_vars
   type(energyflux_type)    :: energyflux_vars
   type(soilhydrology_type) :: soilhydrology_vars
@@ -55,9 +59,13 @@ module elm_instMod
     call atm2lnd_vars%Init( bounds_proc )
     call canopystate_vars%init(bounds_proc)
     call carbonstate_vars%init(bounds_proc)
+    call carbonflux_vars%init(bounds_proc)
+    call nitrogenstate_vars%init(bounds_proc)
     call chemstate_vars%Init(bounds_proc)
     call soilstate_vars%init(bounds_proc)
     call soilhydrology_vars%Init(bounds_proc)
+    call temperature_vars%Init(bounds_proc)
+    call waterstate_vars%Init(bounds_proc)
 
   end subroutine elm_inst_biogeophys
 

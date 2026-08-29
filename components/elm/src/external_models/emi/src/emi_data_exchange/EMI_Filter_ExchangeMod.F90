@@ -52,13 +52,13 @@ contains
 
           select case (cur_data%id)
 
-          case (L2E_FILTER_HYDROLOGYC, L2E_FILTER_NOLAKEC, L2E_FILTER_NOLAKEC_AND_NOURBANC)
+          case (L2E_FILTER_HYDROLOGYC, L2E_FILTER_NOLAKEC, L2E_FILTER_NOLAKEC_AND_NOURBANC, L2E_FILTER_SOILC)
              do i = 1, num_filter
                 cur_data%data_int_1d(i) = filter(i)
              enddo
              cur_data%is_set = .true.
 
-          case (L2E_FILTER_NUM_HYDROLOGYC, L2E_FILTER_NUM_NOLAKEC, L2E_FILTER_NUM_NOLAKEC_AND_NOURBANC)
+          case (L2E_FILTER_NUM_HYDROLOGYC, L2E_FILTER_NUM_NOLAKEC, L2E_FILTER_NUM_NOLAKEC_AND_NOURBANC, L2E_FILTER_NUM_SOILC)
 
              cur_data%data_int_1d(1) = num_filter
              cur_data%is_set = .true.

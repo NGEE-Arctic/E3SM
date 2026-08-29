@@ -2093,6 +2093,41 @@ topounit level. Based on the IM2 implementation from NGEE Arctic project.
     pflotran file prefix.
 </entry>
 
+<entry id="use_alquimia" type="logical" category="default_settings"
+    group="elm_inparm" valid_values="">
+    Runtime flag to turn on/off alquimia interface.
+</entry>
+
+<entry id="alquimia_inputfile" type="char*256" category="default_settings"
+    group="elm_inparm" valid_values="">
+    Path to input file defining alquimia chemistry.
+</entry>
+
+<entry id="alquimia_engine_name" type="char*32" category="default_settings"
+       group="elm_inparm" valid_values="">
+       Name of alquimia engine (default pflotran)
+</entry>
+<entry id="alquimia_IC_name" type="char*32" category="default_settings"
+       group="elm_inparm" valid_values="">
+       Name of initial condition in alquimia input file
+</entry>
+<entry id="alquimia_CO2_name" type="char*32" category="default_settings"
+       group="elm_inparm" valid_values="">
+       Name of CO2 chemical in alquimia reaction network
+</entry>
+<entry id="alquimia_NH4_name" type="char*32" category="default_settings"
+       group="elm_inparm" valid_values="">
+       Name of NH4 chemical in alquimia reaction network
+</entry>
+<entry id="alquimia_NO3_name" type="char*32" category="default_settings"
+       group="elm_inparm" valid_values="">
+       Name of NO3 chemical in alquimia reaction network
+</entry>
+<entry id="alquimia_handsoff" type="logical" category="default_settings"
+       group="elm_inparm" valid_values="">
+       Whether alquimia runs in hands-on or hands-off mode
+</entry>
+
 <!-- ========================================================================================  -->
 <!-- Namelist options related to plant phenology                                               -->
 <!-- ========================================================================================  -->

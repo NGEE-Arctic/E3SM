@@ -25,6 +25,7 @@ module ColumnDataType
   use elm_varctl      , only : bound_h2osoi, use_cn, iulog, use_vertsoilc, spinup_state
   use elm_varctl      , only : ero_ccycle
   use elm_varctl      , only : use_elm_interface, use_pflotran, pf_cmode
+  use elm_varctl      , only : use_alquimia
   use elm_varctl      , only : hist_wrtch4diag, use_century_decomp
   use elm_varctl      , only : get_carbontag, override_bgc_restart_mismatch_dump
   use elm_varctl      , only : pf_hmode, nu_com
@@ -181,6 +182,11 @@ module ColumnDataType
     real(r8), pointer :: h2osfc_p         (:) => null() ! h2osfc from previous timestep (inundation fraction is calculated based on this var)
     real(r8), pointer :: supercool      (:,:) => null() ! supercooled liquid water in soil (kg/m2)
     real(r8), pointer :: smp_i          (:,:) => null() ! frozen water potential
+    ! TAI
+    real(r8), pointer :: salinity           (:)   => null() ! salinity from PFLOTRAN when using interface (TAO 5/19/2020)
+    real(r8), pointer :: h2osfc_tide        (:)   => null() ! tidal height above surface
+    real(r8), pointer :: nitrate_tide       (:)   => null() ! tide water nitrate concentration (mol/L)
+
   contains
     procedure, public :: Init    => col_ws_init
     procedure, public :: Restart => col_ws_restart
@@ -237,6 +243,13 @@ module ColumnDataType
     real(r8), pointer :: totsomc_end          (:)    => null()
     real(r8), pointer :: decomp_som2c_vr      (:,:)  => null()
     real(r8), pointer :: cropseedc_deficit    (:)    => null()
+    real(r8), pointer :: DOC_vr               (:,:)  => null() ! gC/m2
+    real(r8), pointer :: DIC_vr               (:,:)  => null() ! gC/m2
+    real(r8), pointer :: CH4_vr               (:,:)  => null() ! gC/m2
+    real(r8), pointer :: totDOC               (:)    => null() ! gC/m2
+    real(r8), pointer :: totDIC               (:)    => null() ! gC/m2
+    real(r8), pointer :: SIC_vr               (:,:)  => null() ! Soil inorganic C (carbonates) gC/m3
+    real(r8), pointer :: totSIC               (:)    => null() ! gC/m2
 
   contains
     procedure, public :: Init    => col_cs_init
@@ -262,6 +275,12 @@ module ColumnDataType
     real(r8), pointer :: smin_nh4                 (:)     => null() ! (gN/m2) soil mineral NH4 pool
     real(r8), pointer :: smin_nh4sorb             (:)     => null() ! (gN/m2) soil mineral NH4 pool absorbed
     real(r8), pointer :: sminn                    (:)     => null() ! (gN/m2) soil mineral N
+    real(r8), pointer :: DON_vr                   (:,:)   => null() ! (gN/m3) vertically-resolved DON
+    real(r8), pointer :: totDON                   (:)     => null() ! (gN/m2) soil total DON
+    real(r8), pointer :: N2O_vr                   (:,:)   => null() ! (gN/m3) vertically-resolved N2O
+    real(r8), pointer :: N2_vr                    (:,:)   => null() ! (gN/m3) vertically-resolved N2
+    real(r8), pointer :: totN2O                   (:)     => null() ! (gN/m2) soil total N2O
+    real(r8), pointer :: totN2                    (:)     => null() ! (gN/m2) soil total N2
     real(r8), pointer :: ntrunc                   (:)     => null() ! (gN/m2) column-level sink for N truncation
     real(r8), pointer :: cwdn                     (:)     => null() ! (gN/m2) Diagnostic: coarse woody debris N
     real(r8), pointer :: totlitn                  (:)     => null() ! (gN/m2) total litter nitrogen
@@ -538,6 +557,11 @@ module ColumnDataType
     real(r8), pointer :: qflx_from_uphill     (:)   => null() ! input to top soil layer from uphill topounit(s) (mm H2O/s))
     real(r8), pointer :: qflx_to_downhill     (:)   => null() ! output from column to the downhill topounit (mm H2O/s))
 
+    real(r8), pointer :: qflx_lat_aqu         (:)   => null() ! Total lateral flux between hummock/hollow (mm H2O /s)
+    real(r8), pointer :: qflx_lat_aqu_layer   (:,:) => null() ! Lateral flux between hummock/hollow by layer (mm H2O/s)
+    real(r8), pointer :: qflx_surf_input      (:)   => null() ! Runoff input from Hummock (mm H2O/s)
+    real(r8), pointer :: qflx_tide            (:)   => null() ! tidal flux between consecutive timesteps TAO
+
     real(r8), pointer :: mflx_infl_1d         (:)   => null() ! infiltration source in top soil control volume (kg H2O /s)
     real(r8), pointer :: mflx_dew_1d          (:)   => null() ! liquid+snow dew source in top soil control volume (kg H2O /s)
     real(r8), pointer :: mflx_et_1d           (:)   => null() ! evapotranspiration sink from all soil coontrol volumes (kg H2O /s)
@@ -684,6 +708,10 @@ module ColumnDataType
     real(r8), pointer :: f_co2_soil_vr                         (:,:)   => null() ! total vertically-resolved soil-atm. CO2 exchange (gC/m3/s)
     real(r8), pointer :: f_co2_soil                            (:)     => null() ! total soil-atm. CO2 exchange (gC/m2/s)
 
+    real(r8), pointer :: DOC_runoff                            (:)     => null() ! column dissolved organic carbon runoff (gC/m2/s)
+    real(r8), pointer :: DIC_runoff                            (:)     => null() ! column dissolved inorganic carbon runoff (gC/m2/s)
+    real(r8), pointer :: ch4flux                               (:)     => null() ! (gC/m2/s) total methane flux
+
   contains
     procedure, public :: Init       => col_cf_init
     procedure, public :: Restart    => col_cf_restart
@@ -803,6 +831,7 @@ module ColumnDataType
     real(r8), pointer :: smin_no3_runoff                       (:)     => null() ! soil mineral NO3 pool loss to runoff (gN/m2/s)
     real(r8), pointer :: smin_nh4_runoff                       (:)     => null() 
     real(r8), pointer :: nh3_soi_flx                           (:)     => null()
+    real(r8), pointer :: DON_runoff                            (:)     => null() ! soil dissolved organic nitrogen pool loss to runoff (gN/m2/s)
     ! nitrification /denitrification diagnostic quantities
     real(r8), pointer :: smin_no3_massdens_vr                  (:,:)   => null() ! (ugN / g soil) soil nitrate concentration
     real(r8), pointer :: soil_bulkdensity                      (:,:)   => null() ! (kg soil / m3) bulk density of soil
@@ -1062,6 +1091,50 @@ module ColumnDataType
     procedure, public :: Clean      => col_pf_clean
   end type column_phosphorus_flux
 
+  type, public :: column_chem_state
+
+     real(r8), pointer :: soil_pH               (:,:)   => null() ! soil pH (1:nlevdecomp_full)
+     real(r8), pointer :: soil_salinity         (:,:)   => null() ! soil salinity (ppt) (1:nlevdecomp_full)
+     real(r8), pointer :: soil_O2               (:,:)   => null() ! soil O2 (mol m^-3) (1:nlevdecomp_full)
+     real(r8), pointer :: soil_sulfate          (:,:)   => null() ! soil sulfate (mol m^-3) (1:nlevdecomp_full)
+     real(r8), pointer :: soil_sulfide          (:,:)   => null() ! soil sulfide (mol m^-3) (1:nlevdecomp_full)
+     real(r8), pointer :: soil_FeOxide          (:,:)   => null() ! soil iron oxide minerals (mol Fe m^-3) (1:nlevdecomp_full)
+     real(r8), pointer :: soil_FeS              (:,:)   => null() ! soil iron sulfide minerals (mol Fe m^-3) (1:nlevdecomp_full)
+     real(r8), pointer :: soil_Fe2              (:,:)   => null() ! soil Fe(II) (mol Fe m^-3) (1:nlevdecomp_full)
+     real(r8), pointer :: soil_acetate          (:,:)   => null() ! soil acetate (mol m^-3) (1:nlevdecomp_full)
+
+     real(r8), pointer :: chem_dt               (:)     => null() ! Time step of successful chemistry solve (s)
+
+     ! Data that must be saved for chemistry model (via alquimia)
+     ! Sizes are set by alquimia
+     ! State variables [col x layer]: water_density, porosity, temperature, aqueous_pressure
+     ! [col x layer x num_primary]: total_mobile, total_immobile
+     ! [col x layer x num_minerals]: mineral_volume_fraction, mineral_specific_surface_area
+     ! [col x layer x num_surface_sites]: surface_site_density
+     ! [col x layer x num_ion_exchange_sites]: cation_exchange_capacity
+     ! [col x layer x num_aux_ints]: aux_ints
+     ! [col x layer x num_aux_doubles]: aux_doubles
+     ! Question: Is there a problem if these are not c doubles?
+     real(r8), pointer :: water_density                   (:,:)  => null() 
+     !  real(r8), pointer :: porosity(:,:)    ! Redundant with soilstate_type%watsat_col
+     !  real(r8), pointer :: temperature(:,:) ! Redundant with columnenergystate%t_soisno
+     real(r8), pointer :: aqueous_pressure                (:,:)  => null()
+
+     real(r8), pointer :: total_mobile                    (:,:,:) => null()
+     real(r8), pointer :: free_mobile                     (:,:,:) => null()
+     real(r8), pointer :: total_immobile                  (:,:,:) => null()
+     real(r8), pointer :: mineral_volume_fraction         (:,:,:) => null()
+     real(r8), pointer :: mineral_specific_surface_area   (:,:,:) => null()
+     real(r8), pointer :: surface_site_density            (:,:,:) => null()
+     real(r8), pointer :: cation_exchange_capacity        (:,:,:) => null()
+     real(r8), pointer :: aux_doubles                     (:,:,:) => null()
+     integer,  pointer :: aux_ints                        (:,:,:) => null()
+
+  contains
+    procedure, public  :: Init           => col_chem_init 
+    procedure, public  :: Restart        => col_chem_restart
+  end type column_chem_state
+
   !-----------------------------------------------------------------------
   ! declare the public instances of column-level data types
   !-----------------------------------------------------------------------
@@ -1082,6 +1155,8 @@ module ColumnDataType
   type(column_nitrogen_flux)         , public, target :: col_nf     ! column nitrogen flux
   type(column_phosphorus_flux)       , public, target :: col_pf     ! column phosphorus flux
 
+  type(column_chem_state)            , public, target :: col_chem   ! column chemistry state
+
   !$acc declare create(col_es)
   !$acc declare create(col_ef)
   !$acc declare create(col_ws)
@@ -1097,6 +1172,8 @@ module ColumnDataType
   !$acc declare create(c14_col_cf)
   !$acc declare create(col_nf    )
   !$acc declare create(col_pf    )
+
+  !$acc declare create(col_chem  )
   !------------------------------------------------------------------------
 
 contains
@@ -1481,6 +1558,10 @@ contains
       allocate(this%frac_melted        (begc:endc,1:nlevgrnd))        ; this%frac_melted    (:,:) = spval
       allocate(this%excess_ice         (begc:endc,1:nlevgrnd))        ; this%excess_ice     (:,:) = spval
     end if
+    !TAI
+    allocate(this%salinity           (begc:endc))                     ; this%salinity           (:)   = spval
+    allocate(this%nitrate_tide       (begc:endc))                     ; this%nitrate_tide       (:)   = spval
+    allocate(this%h2osfc_tide        (begc:endc))                     ; this%h2osfc_tide        (:)   = spval
 
     !-----------------------------------------------------------------------
     ! initialize history fields for select members of col_ws
@@ -1694,6 +1775,21 @@ contains
          ptr_col=this%wslake_col)
     end if
 
+   this%salinity(begc:endc) = spval
+    call hist_addfld1d (fname='SALINITY',  units='ppt', &
+         avgflag='A', long_name='Tide salinity concentration', &
+         ptr_col=this%salinity)
+
+   this%nitrate_tide(begc:endc) = spval
+    call hist_addfld1d (fname='NITRATE_TIDE',  units='ppt', &
+         avgflag='A', long_name='Tide nitrate concentration', &
+         ptr_col=this%nitrate_tide)
+
+   this%h2osfc_tide(begc:endc) = spval
+   call hist_addfld1d (fname='H2OSFC_TIDE',  units='mm H2O',  &
+      avgflag='A', long_name='Tide height above soil surface', &
+      ptr_col=this%h2osfc_tide)
+
     !-----------------------------------------------------------------------
     ! set cold-start initial values for select members of col_ws
     !-----------------------------------------------------------------------
@@ -1717,6 +1813,10 @@ contains
        this%h2orof(c)                 = 0._r8
        this%frac_h2orof(c)            = 0._r8
        this%frac_h2oocn(c)            = 0._r8
+
+       this%salinity(c)               = 0._r8
+       this%h2osfc_tide(c)            = 0._r8
+       this%nitrate_tide(c)           = 0._r8
 
        if (lun_pp%urbpoi(l)) then
           ! From Bonan 1996 (LSM technical note)
@@ -2235,6 +2335,13 @@ contains
     allocate(this%totsomc_1m           (begc:endc))     ; this%totsomc_1m           (:)     = spval
     allocate(this%totlitc              (begc:endc))     ; this%totlitc              (:)     = spval
     allocate(this%totsomc              (begc:endc))     ; this%totsomc              (:)     = spval
+    allocate(this%DOC_vr    (begc:endc,1:nlevdecomp_full))                   ; this%DOC_vr    (:,:)   = spval
+    allocate(this%DIC_vr    (begc:endc,1:nlevdecomp_full))                   ; this%DIC_vr    (:,:)   = spval
+    allocate(this%CH4_vr    (begc:endc,1:nlevdecomp_full))                   ; this%CH4_vr    (:,:)   = spval
+    allocate(this%totDOC    (begc:endc))                   ; this%totDOC    (:)   = spval
+    allocate(this%totDIC    (begc:endc))                   ; this%totDIC    (:)   = spval
+    allocate(this%SIC_vr    (begc:endc,1:nlevdecomp_full)) ; this%SIC_vr    (:,:) = spval
+    allocate(this%totSIC    (begc:endc))                   ; this%totSIC    (:)   = spval
 
     !-----------------------------------------------------------------------
     ! initialize history fields for select members of col_cs
@@ -2354,6 +2461,28 @@ contains
 
 
        end if
+
+      if(use_alquimia) then
+         this%DOC_vr(begc:endc,:) = spval
+         call hist_addfld2d (fname='DOC_vr', units='gC/m^3',  type2d='levdcmp', &
+            avgflag='A', long_name='Soil dissolved organic carbon vr', &
+               ptr_col=this%DOC_vr,default='inactive')
+
+         this%DIC_vr(begc:endc,:) = spval
+         call hist_addfld2d (fname='DIC_vr', units='gC/m^3',  type2d='levdcmp', &
+            avgflag='A', long_name='Soil dissolved inorganic carbon vr', &
+               ptr_col=this%DIC_vr,default='inactive')
+
+         this%CH4_vr(begc:endc,:) = spval
+         call hist_addfld2d (fname='CH4_vr', units='gC/m^3',  type2d='levdcmp', &
+            avgflag='A', long_name='Soil dissolved methane vr', &
+               ptr_col=this%CH4_vr,default='inactive')
+
+         this%SIC_vr(begc:endc,:) = spval
+         call hist_addfld2d (fname='SIC_vr', units='gC/m^3',  type2d='levdcmp', &
+            avgflag='A', long_name='Soil inorganic carbon vr', &
+               ptr_col=this%SIC_vr,default='inactive')
+      endif
 
     else if ( carbon_type == 'c13' ) then
        this%decomp_cpools_vr(begc:endc,:,:) = spval
@@ -2596,6 +2725,15 @@ contains
           this%prod1c(c)     = 0._r8
           this%totprodc(c)   = 0._r8
 
+          !
+          this%DOC_vr(c,:)   = 0.0_r8
+          this%DIC_vr(c,:)   = 0.0_r8
+          this%CH4_vr(c,:)   = 0.0_r8
+          this%totDOC(c)     = 0.0_r8
+          this%totDIC(c)     = 0.0_r8
+          this%SIC_vr(c,:)   = 0.0_r8
+          this%totSIC(c)     = 0.0_r8
+
        end if !  landunit istsoil or istcrop
 
     end do ! columns loop
@@ -2791,6 +2929,28 @@ contains
        call restartvar(ncid=ncid, flag=flag, varname='prod1c', xtype=ncd_double,  &
             dim1name='column', long_name='', units='', &
             interpinic_flag='interp', readvar=readvar, data=this%prod1c)
+
+       if (use_alquimia) then
+         call restartvar(ncid=ncid, flag=flag, varname='DIC_vr', xtype=ncd_double,  &
+               dim1name='column', dim2name='levgrnd', switchdim=.true., &
+               long_name='',  units='', fill_value=0.0_r8, &
+               interpinic_flag='interp', readvar=readvar, data=this%DIC_vr)
+
+         call restartvar(ncid=ncid, flag=flag, varname='DOC_vr', xtype=ncd_double,  &
+               dim1name='column', dim2name='levgrnd', switchdim=.true., &
+               long_name='',  units='', fill_value=0.0_r8, &
+               interpinic_flag='interp', readvar=readvar, data=this%DOC_vr)
+
+         call restartvar(ncid=ncid, flag=flag, varname='SIC_vr', xtype=ncd_double,  &
+               dim1name='column', dim2name='levgrnd', switchdim=.true., &
+               long_name='',  units='', fill_value=0.0_r8, &
+               interpinic_flag='interp', readvar=readvar, data=this%SIC_vr)
+
+         call restartvar(ncid=ncid, flag=flag, varname='CH4_vr', xtype=ncd_double,  &
+               dim1name='column', dim2name='levgrnd', switchdim=.true., &
+               long_name='',  units='', fill_value=0.0_r8, &
+               interpinic_flag='interp', readvar=readvar, data=this%CH4_vr)
+       endif
 
     end if ! C12
 
@@ -3281,6 +3441,13 @@ contains
        end do
     end do
 
+    do fc = 1, num_soilc
+      c = filter_soilc(fc)
+      this%totDOC(c) = dot_sum(this%DOC_vr(c,1:nlevdecomp),dzsoi_decomp(1:nlevdecomp)) 
+      this%totDIC(c) = dot_sum(this%DIC_vr(c,1:nlevdecomp),dzsoi_decomp(1:nlevdecomp)) 
+      this%totSIC(c) = dot_sum(this%SIC_vr(c,1:nlevdecomp),dzsoi_decomp(1:nlevdecomp)) 
+   enddo
+
     do fc = 1,num_soilc
        c = filter_soilc(fc)
 
@@ -3297,6 +3464,13 @@ contains
             this%totsomc(c)  + &
             this%totprodc(c) + &
             this%totvegc(c)
+       if (use_alquimia) then
+         this%totecosysc(c) = &
+            this%totecosysc(c) + &
+            this%totDIC(c)     + &
+            this%totDOC(c)     + &
+            this%totSIC(c)
+       endif
 
        ! total column carbon, including veg and cpool (TOTCOLC)
        ! adding col_ctrunc, seedc
@@ -3312,6 +3486,15 @@ contains
       ! if we are using the crop model, then we need to add the cropseedc deficit
        if (use_crop) then 
           this%totcolc(c) = this%totcolc(c) + this%cropseedc_deficit(c)
+       endif
+
+      ! For alquimia, also include DIC, DOC, and SIC here. Should be zero otherwise
+       if (use_alquimia) then
+          this%totcolc(c) =    &
+            this%totcolc(c)  + &
+            this%totDIC(c)   + &
+            this%totDOC(c)   + &
+            this%totSIC(c)
        endif
 
        this%totabgc(c) =       &
@@ -3395,6 +3578,12 @@ contains
     allocate(this%smin_no3_vr           (begc:endc,1:nlevdecomp_full))   ; this%smin_no3_vr           (:,:) = spval
     allocate(this%smin_nh4_vr           (begc:endc,1:nlevdecomp_full))   ; this%smin_nh4_vr           (:,:) = spval
     allocate(this%smin_nh4sorb_vr       (begc:endc,1:nlevdecomp_full))   ; this%smin_nh4sorb_vr       (:,:) = spval
+    allocate(this%DON_vr                (begc:endc,1:nlevdecomp_full))   ; this%DON_vr                (:,:) = 0.0_r8
+    allocate(this%totDON                (begc:endc))                     ; this%totDON                (:)   = 0.0_r8
+    allocate(this%N2O_vr                (begc:endc,1:nlevdecomp_full))   ; this%N2O_vr                (:,:) = 0.0_r8
+    allocate(this%N2_vr                 (begc:endc,1:nlevdecomp_full))   ; this%N2_vr                 (:,:) = 0.0_r8
+    allocate(this%totN2O                (begc:endc))                     ; this%totN2O                (:)   = 0.0_r8
+    allocate(this%totN2                 (begc:endc))                     ; this%totN2                 (:)   = 0.0_r8
     allocate(this%decomp_npools         (begc:endc,1:ndecomp_pools))     ; this%decomp_npools         (:,:) = spval
     allocate(this%decomp_npools_1m      (begc:endc,1:ndecomp_pools))     ; this%decomp_npools_1m      (:,:) = spval
     allocate(this%smin_no3              (begc:endc))                     ; this%smin_no3              (:)   = spval
@@ -3557,6 +3746,24 @@ contains
             avgflag='A', long_name='soil mineral NH4 absorbed (vert. res.)', &
             ptr_col=this%smin_nh4sorb_vr)
     end if
+
+    if(use_alquimia) then
+       this%DON_vr(begc:endc,:) = spval
+       call hist_addfld2d (fname='DON_vr', units='gN/m^3',  type2d='levdcmp', &
+            avgflag='A', long_name='Soil dissolved organic nitrogen vr', &
+            ptr_col=this%DON_vr,default='inactive')
+
+       this%N2O_vr(begc:endc,:) = spval
+       call hist_addfld2d (fname='N2O_vr', units='gN/m^3',  type2d='levdcmp', &
+             avgflag='A', long_name='Soil dissolved N2O vr', &
+             ptr_col=this%N2O_vr,default='inactive')
+
+       this%N2_vr(begc:endc,:) = spval
+       call hist_addfld2d (fname='N2_vr', units='gN/m^3',  type2d='levdcmp', &
+             avgflag='A', long_name='Soil dissolved N2 vr', &
+             ptr_col=this%N2_vr,default='inactive')
+
+    endif
 
     if ( nlevdecomp_full > 1 ) then
        this%smin_no3(begc:endc) = spval
@@ -3990,6 +4197,23 @@ contains
        call endrun(msg= 'ERROR:: smin_nh4_vr'//' is required on an initialization dataset' )
     end if
 
+    if (use_alquimia) then
+      call restartvar(ncid=ncid, flag=flag, varname='N2O_vr', xtype=ncd_double,  &
+            dim1name='column', dim2name='levgrnd', switchdim=.true., &
+            long_name='',  units='', fill_value=0.0_r8, &
+            interpinic_flag='interp', readvar=readvar, data=this%N2O_vr)
+
+      call restartvar(ncid=ncid, flag=flag, varname='DON_vr', xtype=ncd_double,  &
+            dim1name='column', dim2name='levgrnd', switchdim=.true., &
+            long_name='',  units='', fill_value=0.0_r8, &
+            interpinic_flag='interp', readvar=readvar, data=this%DON_vr)
+
+      call restartvar(ncid=ncid, flag=flag, varname='N2_vr', xtype=ncd_double,  &
+            dim1name='column', dim2name='levgrnd', switchdim=.true., &
+            long_name='',  units='', fill_value=0.0_r8, &
+            interpinic_flag='interp', readvar=readvar, data=this%N2_vr)
+    endif
+
     ! pflotran: smin_nh4sorb
     if (use_pflotran .and. pf_cmode) then
        if (use_vertsoilc) then
@@ -4313,6 +4537,9 @@ contains
           if(use_pflotran .and. pf_cmode) then
              this%smin_nh4sorb_vr(i,j) = value_column
           end if
+          if(use_alquimia) this%DON_vr(i,j) = value_column
+          if(use_alquimia) this%N2O_vr(i,j) = value_column
+          if(use_alquimia) this%N2_vr(i,j) = value_column
        end do
     end do
 
@@ -4383,6 +4610,16 @@ contains
        end do
     end do
 
+
+     if(use_alquimia) then
+      do fc = 1, num_soilc
+         c = filter_soilc(fc)
+         this%totDON(c) = dot_sum(this%DON_vr(c,1:nlevdecomp),dzsoi_decomp(1:nlevdecomp)) 
+         this%totN2O(c) = dot_sum(this%N2O_vr(c,1:nlevdecomp),dzsoi_decomp(1:nlevdecomp)) 
+         this%totN2(c) = dot_sum(this%N2_vr(c,1:nlevdecomp),dzsoi_decomp(1:nlevdecomp)) 
+      enddo
+     endif
+     
     ! vertically integrate each of the decomposing N pools
     do l = 1, ndecomp_pools
        do fc = 1,num_soilc
@@ -4558,8 +4795,13 @@ contains
             this%sminn(c) + &
             this%totprodn(c) + &
             this%totvegn(c)
-
-
+       if (use_alquimia) then
+          this%totecosysn(c) =   &
+            this%totecosysn(c) + &
+            this%totDON(c)     + &
+            this%totN2O(c)     + &
+            this%totN2(c)
+       endif
 
        ! total column nitrogen, including pft (TOTCOLN)
        this%totcoln(c) = &
@@ -4572,6 +4814,13 @@ contains
             this%ntrunc(c)+ &
             this%plant_n_buffer(c) + &
             this%fan_totn(c)
+       if (use_alquimia) then
+          this%totcoln(c) =   &
+            this%totcoln(c) + &
+            this%totDON(c)  + &
+            this%totN2O(c)  + &
+            this%totN2(c)
+       endif
 
        ! if we are using the crop model, then we need to add the cropseedc deficit
        if (use_crop) then 
@@ -4590,6 +4839,13 @@ contains
             this%totlitn(c) + &
             this%totsomn(c) + &
             this%sminn(c)
+       if (use_alquimia) then
+          this%totblgn(c) =   &
+            this%totblgn(c) + &
+            this%totDON(c)  + &
+            this%totN2O(c)  + &
+            this%totN2(c)
+       endif
     end do
 
   end subroutine col_ns_summary
@@ -5932,6 +6188,11 @@ contains
     allocate(this%qflx_h2oocn_drain      (begc:endc))             ; this%qflx_h2oocn_drain    (:)   = spval
     allocate(this%qflx_from_uphill       (begc:endc))             ; this%qflx_from_uphill     (:)   = spval
     allocate(this%qflx_to_downhill       (begc:endc))             ; this%qflx_to_downhill     (:)   = spval
+    !TAI
+    allocate(this%qflx_lat_aqu           (begc:endc))             ; this%qflx_lat_aqu         (:)   = spval
+    allocate(this%qflx_lat_aqu_layer     (begc:endc,1:nlevgrnd))  ; this%qflx_lat_aqu_layer   (:,:) = spval
+    allocate(this%qflx_surf_input        (begc:endc))             ; this%qflx_surf_input      (:)   = spval
+    allocate(this%qflx_tide              (begc:endc))             ; this%qflx_tide            (:)   = spval
 
     !VSFM variables
     ncells = endc - begc + 1
@@ -5997,6 +6258,36 @@ contains
            avgflag='A', long_name='land to ocean drainage', &
            ptr_col=this%qflx_lnd2ocn, c2l_scale_type='urbanf')
     endif
+
+    this%qflx_drain_vr(begc:endc, :) = spval
+    call hist_addfld2d (fname='QDRAI_VR',  units='mm/s', type2d='levgrnd', &
+          avgflag='A', long_name='Sub-surface drainage by layer', &
+          ptr_col=this%qflx_drain_vr)
+
+    this%qflx_lat_aqu(begc:endc) = spval
+    call hist_addfld1d (fname='QFLX_LAT_AQU',  units='mm/s',  &
+         avgflag='A', long_name='Lateral flow between hummock and hollow', &
+         ptr_col=this%qflx_lat_aqu, c2l_scale_type='urbanf')
+
+    this%qflx_lat_aqu_layer(begc:endc, :) = spval
+    call hist_addfld2d (fname='QFLX_LAT_AQU_LAYER',  units='mm/s', type2d='levgrnd', &
+         avgflag='A', long_name='Lateral flow between hummock and hollow by layer', &
+         ptr_col=this%qflx_lat_aqu_layer)
+
+    this%qflx_tide(begc:endc) = spval
+    call hist_addfld1d (fname='QFLX_TIDE',  units='mm H2O/s',  &
+         avgflag='A', long_name='Tidal flux between marsh columns', &
+         ptr_col=this%qflx_tide)
+
+    this%qflx_surf_input(begc:endc) = spval
+    call hist_addfld1d (fname='QSURF_INPUT', units='kg/m2/s', &
+         avgflag='A', long_name='surface flux into current column', &
+         ptr_col=this%qflx_surf_input, default='inactive')
+
+    this%qflx_adv(begc:endc,:) = spval
+    call hist_addfld2d (fname='QFLX_ADV',  units='mm/s', type2d='levgrnd', &
+      avgflag='A', long_name='Vertical flow across soil layers', &
+      ptr_col=this%qflx_adv, c2l_scale_type='urbanf')
 
     this%qflx_irr_demand(begc:endc) = spval
     call hist_addfld1d (fname='QIRRIG_WM',  units='mm/s',  &
@@ -6146,6 +6437,13 @@ contains
           this%qflx_lnd2ocn(c) = 0._r8
        end if
     end do
+
+    ! TAI
+    this%qflx_drain_vr     (begc:endc,1:nlevgrnd) = 0._r8
+    this%qflx_lat_aqu      (begc:endc)            = 0._r8
+    this%qflx_lat_aqu_layer(begc:endc,1:nlevgrnd) = 0._r8
+    this%qflx_surf_input   (begc:endc)            = 0._r8
+    this%qflx_tide         (begc:endc)            = 0._r8
 
   end subroutine col_wf_init
 
@@ -6358,6 +6656,9 @@ contains
     allocate(this%externalc_to_decomp_delta         (begc:endc))                  ; this%externalc_to_decomp_delta    (:)   = spval
     allocate(this%f_co2_soil_vr                     (begc:endc,1:nlevdecomp_full)); this%f_co2_soil_vr                (:,:) = spval
     allocate(this%f_co2_soil                        (begc:endc))                  ; this%f_co2_soil                   (:)   = spval
+    allocate(this%DOC_runoff                        (begc:endc))                  ; this%DOC_runoff                   (:)   = 0.0_r8
+    allocate(this%DIC_runoff                        (begc:endc))                  ; this%DIC_runoff                   (:)   = 0.0_r8
+    allocate(this%ch4flux                           (begc:endc))                  ; this%ch4flux                      (:)   = 0.0_r8
 
     !-----------------------------------------------------------------------
     ! initialize history fields for select members of col_cf
@@ -6703,6 +7004,23 @@ contains
                 avgflag='A', long_name='total vertically resolved soil-atm. CO2 exchange', &
                  ptr_col=this%f_co2_soil_vr)
        endif
+
+       if(use_alquimia) then
+         this%DOC_runoff(begc:endc) = spval
+         call hist_addfld1d (fname='DOC_RUNOFF', units='gC/m^2/s', &
+              avgflag='A', long_name='total dissolved organic carbon runoff', &
+              ptr_col=this%DOC_runoff,default='inactive')   
+
+         this%DIC_runoff(begc:endc) = spval
+         call hist_addfld1d (fname='DIC_RUNOFF', units='gC/m^2/s', &
+               avgflag='A', long_name='total dissolved inorganic carbon runoff', &
+               ptr_col=this%DIC_runoff,default='inactive')  
+               
+         this%ch4flux(begc:endc) = spval
+         call hist_addfld1d (fname='CH4FLUX_ALQUIMIA', units='gC/m^2/s', &
+               avgflag='A', long_name='total methane flux', &
+               ptr_col=this%ch4flux,default='inactive')
+       endif     
 
        this%hr(begc:endc) = spval
         call hist_addfld1d (fname='HR', units='gC/m^2/s', &
@@ -7496,7 +7814,8 @@ contains
     end do
 
     if ( (.not. is_active_betr_bgc           ) .and. &
-         (.not. (use_pflotran .and. pf_cmode))) then
+         (.not. (use_pflotran .and. pf_cmode)) .and. &
+         (.not. use_alquimia) ) then
 
        ! vertically integrate HR and decomposition cascade fluxes
        do k = 1, ndecomp_cascade_transitions
@@ -7533,7 +7852,7 @@ contains
        this%somhr(c)              = 0._r8
        this%lithr(c)              = 0._r8
        this%decomp_cascade_hr(c,1:ndecomp_cascade_transitions)= 0._r8
-       if (.not. (use_pflotran .and. pf_cmode)) then
+       if (.not. ((use_pflotran .and. pf_cmode) .or. use_alquimia)) then
        ! pflotran has returned 'hr_vr(begc:endc,1:nlevdecomp)' to ALM before this subroutine is called in CNEcosystemDynNoLeaching2
        ! thus 'hr_vr_col' should NOT be set to 0
             this%hr_vr(c,1:nlevdecomp) = 0._r8
@@ -7581,6 +7900,7 @@ contains
 
     ! total heterotrophic respiration, vertically resolved (HR)
 
+   if(.not. use_alquimia) then ! hr_vr was already calculated in alquimia
     do k = 1, ndecomp_cascade_transitions
        do j = 1,nlevdecomp
           do fc = 1,num_soilc
@@ -7592,6 +7912,7 @@ contains
        end do
     end do
 
+   endif
     !----------------------------------------------------------------
     ! bgc interface & pflotran:
     !----------------------------------------------------------------
@@ -7867,7 +8188,7 @@ contains
        this%somhr(c)              = 0._r8
        this%lithr(c)              = 0._r8
        this%decomp_cascade_hr(c,1:ndecomp_cascade_transitions)= 0._r8
-       if (.not. (use_pflotran .and. pf_cmode)) then
+       if (.not. (use_pflotran .and. pf_cmode) .and. .not. use_alquimia) then
        ! pflotran has returned 'hr_vr(begc:endc,1:nlevdecomp)' to ALM before this subroutine is called in CNEcosystemDynNoLeaching2
        ! thus 'hr_vr_col' should NOT be set to 0
             this%hr_vr(c,1:nlevdecomp) = 0._r8
@@ -7875,7 +8196,8 @@ contains
     enddo
 
     if ( (.not. is_active_betr_bgc           ) .and. &
-         (.not. (use_pflotran .and. pf_cmode))) then
+         (.not. (use_pflotran .and. pf_cmode)) .and. &
+         (.not. use_alquimia           ) ) then
       ! vertically integrate HR and decomposition cascade fluxes
       do k = 1, ndecomp_cascade_transitions
 
@@ -8055,6 +8377,10 @@ contains
        this%vegfire(i)               = value_column
        this%wood_harvestc(i)         = value_column
        this%hrv_xsmrpool_to_atm(i)   = value_column
+
+       this%DOC_runoff(i)            = value_column
+       this%DIC_runoff(i)            = value_column
+       this%ch4flux(i)               = value_column
     end do
   
     if(use_crop) then 
@@ -8471,6 +8797,7 @@ contains
     allocate(this%smin_nh4_leached                (begc:endc))                   ; this%smin_nh4_leached               (:)   = spval
     allocate(this%smin_no3_runoff_vr              (begc:endc,1:nlevdecomp_full)) ; this%smin_no3_runoff_vr             (:,:) = spval
     allocate(this%smin_no3_runoff                 (begc:endc))                   ; this%smin_no3_runoff                (:)   = spval
+    allocate(this%DON_runoff                      (begc:endc))                   ; this%DON_runoff                     (:)   = spval
     allocate(this%nh3_soi_flx                     (begc:endc))                   ; this%nh3_soi_flx                     (:)  = spval
     allocate(this%smin_nh4_runoff                 (begc:endc))                   ; this%smin_nh4_runoff                (:)   = spval
     allocate(this%pot_f_nit_vr                    (begc:endc,1:nlevdecomp_full)) ; this%pot_f_nit_vr                   (:,:) = spval
@@ -8877,6 +9204,13 @@ contains
          ptr_col=this%smin_no3_runoff)
 
 
+    if (use_alquimia) then
+      this%DON_runoff(begc:endc) = spval
+      call hist_addfld1d (fname='DON_RUNOFF', units='gN/m^2/s', &
+           avgflag='A', long_name='soil DON pool loss to runoff', &
+           ptr_col=this%DON_runoff,default='inactive')
+    end if
+      
     if ((nlevdecomp_full > 1) .or. (use_pflotran .and. pf_cmode)) then
        this%f_nit_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='F_NIT'//trim(vr_suffix), units='gN/m^3/s', type2d='levdcmp', &
@@ -9615,6 +9949,20 @@ contains
        end do 
      end if 
 
+    if(use_alquimia) then
+      do j = 1, nlevdecomp_full
+        do fi = 1,num_column 
+         i = filter_column(fi)
+            this%f_nit_vr(i,j)                      = value_column
+            this%f_denit_vr(i,j)                    = value_column
+            this%smin_no3_leached_vr(i,j)           = value_column
+            this%smin_no3_runoff_vr(i,j)            = value_column
+            this%f_n2o_denit_vr(i,j)                = value_column
+            this%f_n2o_nit_vr(i,j)                  = value_column
+        end do
+      end do
+    end if
+
     do fi = 1,num_column
        i = filter_column(fi)
 
@@ -9667,6 +10015,8 @@ contains
        ! Zero p2c column fluxes
        this%fire_nloss(i) = value_column
        this%wood_harvestn(i) = value_column
+
+       if(use_alquimia) this%DON_runoff(i) = value_column
 
        ! bgc-interface
        this%plant_ndemand(i) = value_column
@@ -11800,6 +12150,291 @@ contains
 
   end subroutine col_pf_clean
 
-    !------------------------------------------------------------------------
+  !------------------------------------------------------------------------
+
+  subroutine col_chem_init(this, begc, endc)
+
+   ! use ExternalModelInterfaceMod, only : EMI_Init_EM
+   ! use ExternalModelConstants   , only : EM_ID_ALQUIMIA
+   use elm_varctl      , only : use_alquimia
+   use histFileMod     , only : hist_addfld2d, hist_addfld1d
+
+   use elm_varpar      , only : alquimia_num_primary, alquimia_num_minerals, &
+                                alquimia_num_surface_sites, alquimia_num_ion_exchange_sites, &
+                                alquimia_num_aux_doubles, alquimia_num_aux_ints
+
+   implicit none
+
+   class(column_chem_state)         :: this
+   integer, intent(in)              :: begc, endc
+
+   integer :: lbj,  ubj
+
+   lbj  = 1;
+   ubj  = nlevdecomp_full
+   
+   allocate(this%soil_pH(begc:endc, lbj:ubj))
+
+   ! Data for chemistry model (via alquimia)
+   ! State variables [col x layer]: water_density, porosity*, temperature*, aqueous_pressure
+   ! [col x layer x num_primary]: total_mobile, total_immobile
+   ! [col x layer x num_minerals]: mineral_volume_fraction, mineral_specific_surface_area
+   ! [col x layer x num_surface_sites]: surface_site_density
+   ! [col x layer x num_ion_exchange_sites]: cation_exchange_capacity
+   ! [col x layer x num_aux_ints]: aux_ints
+   ! [col x layer x num_aux_doubles]: aux_doubles
+   if(use_alquimia) then
+      allocate(this%water_density(begc:endc,lbj:ubj))
+      allocate(this%aqueous_pressure(begc:endc,lbj:ubj))
+
+      allocate(this%total_mobile(begc:endc,lbj:ubj,1:alquimia_num_primary))
+      allocate(this%free_mobile(begc:endc,lbj:ubj,1:alquimia_num_primary))
+      allocate(this%total_immobile(begc:endc,lbj:ubj,1:alquimia_num_primary))
+      allocate(this%mineral_volume_fraction(begc:endc,lbj:ubj,1:alquimia_num_minerals))
+      allocate(this%mineral_specific_surface_area(begc:endc,lbj:ubj,1:alquimia_num_minerals))
+      allocate(this%surface_site_density(begc:endc,lbj:ubj,1:alquimia_num_surface_sites))
+      allocate(this%cation_exchange_capacity(begc:endc,lbj:ubj,1:alquimia_num_ion_exchange_sites))
+      allocate(this%aux_ints(begc:endc,lbj:ubj,1:alquimia_num_aux_ints))
+      allocate(this%aux_doubles(begc:endc,lbj:ubj,1:alquimia_num_aux_doubles))
+
+      allocate(this%soil_salinity(begc:endc, lbj:ubj))
+      allocate(this%soil_O2(begc:endc, lbj:ubj))
+      allocate(this%soil_sulfate(begc:endc, lbj:ubj))
+      allocate(this%soil_sulfide(begc:endc, lbj:ubj))
+      allocate(this%soil_FeOxide(begc:endc, lbj:ubj))
+      allocate(this%soil_FeS(begc:endc, lbj:ubj))
+      allocate(this%soil_Fe2(begc:endc, lbj:ubj))
+      allocate(this%soil_acetate(begc:endc, lbj:ubj))
+
+      allocate(this%chem_dt(begc:endc))
+   endif
+
+   if(use_alquimia) then
+     this%soil_pH(begc:endc,:) = 0.0_r8
+     call hist_addfld2d (fname='soil_pH', units='-',  type2d='levdcmp', &
+       avgflag='A', long_name='Soil pH', &
+           ptr_col=this%soil_pH,default='inactive')
+
+     this%soil_salinity(begc:endc,:) = 0.0_r8
+     call hist_addfld2d (fname='soil_salinity', units='ppt',  type2d='levdcmp', &
+       avgflag='A', long_name='Soil salinity', &
+           ptr_col=this%soil_salinity,default='inactive')
+
+     this%soil_O2(begc:endc,:) = 0.0_r8
+     call hist_addfld2d (fname='soil_O2', units='mol m-3',  type2d='levdcmp', &
+       avgflag='A', long_name='Soil porewater dissolved oxygen', &
+           ptr_col=this%soil_O2,default='inactive')
+
+     this%soil_sulfate(begc:endc,:) = 0.0_r8
+     call hist_addfld2d (fname='soil_sulfate', units='mol m-3',  type2d='levdcmp', &
+       avgflag='A', long_name='Soil porewater dissolved sulfate', &
+           ptr_col=this%soil_sulfate,default='inactive')
+
+     this%soil_sulfide(begc:endc,:) = 0.0_r8
+     call hist_addfld2d (fname='soil_sulfide', units='mol m-3',  type2d='levdcmp', &
+       avgflag='A', long_name='Soil porewater dissolved sulfide', &
+           ptr_col=this%soil_sulfide,default='inactive')
+
+     this%soil_Fe2(begc:endc,:) = 0.0_r8
+     call hist_addfld2d (fname='soil_Fe2', units='mol m-3',  type2d='levdcmp', &
+       avgflag='A', long_name='Soil porewater dissolved Fe(II)', &
+           ptr_col=this%soil_Fe2,default='inactive')
+
+     this%soil_FeOxide(begc:endc,:) = 0.0_r8
+     call hist_addfld2d (fname='soil_FeOxide', units='mol Fe m-3',  type2d='levdcmp', &
+       avgflag='A', long_name='Soil iron oxide mineral concentration', &
+           ptr_col=this%soil_FeOxide,default='inactive')
+
+     this%soil_FeS(begc:endc,:) = 0.0_r8
+     call hist_addfld2d (fname='soil_FeS', units='mol Fe m-3',  type2d='levdcmp', &
+        avgflag='A', long_name='Soil iron sulfide mineral concentration', &
+           ptr_col=this%soil_FeS,default='inactive')
+
+     this%soil_acetate(begc:endc,:) = 0.0_r8
+     call hist_addfld2d (fname='soil_acetate', units='mol m-3',  type2d='levdcmp', &
+        avgflag='A', long_name='Soil porewater acetate molar concentration', &
+           ptr_col=this%soil_acetate,default='inactive')
+
+     this%chem_dt(begc:endc) = 0.0_r8
+     call hist_addfld1d (fname='chem_dt', units='s', &
+       avgflag='A', long_name='Chemistry solver time step', &
+           ptr_col=this%chem_dt,default='inactive')
+       
+   endif
+
+
+  end subroutine col_chem_init
+
+  !------------------------------------------------------------------------
+
+  subroutine col_chem_restart (this,  bounds, ncid, flag )
+
+   use restUtilMod     , only : restartvar
+   use ncdio_pio       , only : file_desc_t,ncd_double, ncd_int
+   use elm_varpar      , only : alquimia_num_primary, alquimia_num_minerals,&
+                                alquimia_num_surface_sites, alquimia_num_ion_exchange_sites, &
+                                alquimia_num_aux_doubles, alquimia_num_aux_ints
+   use elm_varctl               , only : use_alquimia
+   use elm_varpar            , only : nlevdecomp_full
+
+   implicit none
+   !
+   ! !ARGUMENTS:
+   class (column_chem_state)     :: this
+   type(bounds_type) , intent(in)     :: bounds 
+   type(file_desc_t) , intent(inout)  :: ncid   ! netcdf id
+   character(len=*)  , intent(in)     :: flag   !'read' or 'write'
+   !
+   ! !LOCAL VARIABLES:
+   logical :: readvar   ! determine if variable is on initial file
+   integer :: ii
+   character(len=256) :: nc_varname, var_longname, alq_poolname
+   real(r8), pointer :: real2d(:,:)
+   real(r8) , pointer :: int2d(:,:) ! Restart system doesn't actually support 2D integer arrays for some reason. Workaround is cast to real and back
+
+   ! TODO: Check on read that number and order of variables is correct.
+   !       - Make model fail if it fails to read an expected variable (i.e., not enough values stored)
+   !       - At end of expected list, check if there is another in the netCDF file (too many variables stored)
+   !       - See if long_name can be read from file and compared with expected long_name
+   !       In either of these cases, restart does not match current reaction network spec and model should fail
+   if(use_alquimia) then
+     alq_poolname=''
+     do ii=1,alquimia_num_primary
+       !!! TOTAL_MOBILE !!!
+       ! call c_f_string_ptr(name_list(ii),alq_poolname) ! Need to get metadata from alquimia somehow... EMI will not pass character data
+       ! Generate field name as ALQUIMIA_MOBILE_01, ALQUIMIA_MOBILE_02, ...
+       write(nc_varname,'(a,i2.2)') 'ALQUIMIA_MOBILE_',ii
+       var_longname = 'Alquimia total mobile '//trim(alq_poolname)
+       real2d => this%total_mobile(:,:,ii)
+
+       call restartvar(ncid=ncid, flag=flag, varname=nc_varname, xtype=ncd_double,   &
+           dim1name='column', dim2name='levgrnd', switchdim=.true., &
+           long_name=var_longname, units='mol/m^3', &
+           interpinic_flag='interp', readvar=readvar, data=real2d)
+
+       write(nc_varname,'(a,i2.2)') 'ALQUIMIA_FREE_MOBILE_',ii
+       var_longname = 'Alquimia free mobile '//trim(alq_poolname)
+       real2d => this%free_mobile(:,:,ii)
+
+       call restartvar(ncid=ncid, flag=flag, varname=nc_varname, xtype=ncd_double,   &
+           dim1name='column', dim2name='levgrnd', switchdim=.true., &
+           long_name=var_longname, units='mol/m^3', &
+           interpinic_flag='interp', readvar=readvar, data=real2d)
+
+       write(nc_varname,'(a,i2.2)') 'ALQUIMIA_IMMOBILE_',ii
+       var_longname = 'Alquimia total immobile '//trim(alq_poolname)
+       real2d => this%total_immobile(:,:,ii)
+
+       call restartvar(ncid=ncid, flag=flag, varname=nc_varname, xtype=ncd_double,   &
+           dim1name='column', dim2name='levgrnd', switchdim=.true., &
+           long_name=var_longname, units='mol/m^3', &
+           interpinic_flag='interp', readvar=readvar, data=real2d)
+
+     enddo ! End of primary species loop
+
+       
+     do ii=1,alquimia_num_minerals
+       !!! mineral_volume_fraction !!!
+       ! Generate field name as ALQUIMIA_MINERAL_01, ALQUIMIA_MINERAL_02, ...
+       write(nc_varname,'(a,i2.2)') 'ALQUIMIA_MINERAL_VF_',ii
+       var_longname = 'Alquimia mineral volume fraction '//trim(alq_poolname)
+       real2d => this%mineral_volume_fraction(:,:,ii)
+
+       call restartvar(ncid=ncid, flag=flag, varname=nc_varname, xtype=ncd_double,   &
+           dim1name='column', dim2name='levgrnd', switchdim=.true., &
+           long_name=var_longname, units='[m^3 mineral/m^3 bulk]', &
+           interpinic_flag='interp', readvar=readvar, data=real2d)
+
+       !!! Mineral specific surface areas !!!
+       ! Generate field name as ALQUIMIA_MINERAL_SSA_01, ALQUIMIA_MINERAL_SSA_02, ...
+       write(nc_varname,'(a,i2.2)') 'ALQUIMIA_MINERAL_SSA_',ii
+       var_longname = 'Alquimia mineral specific surface area '//trim(alq_poolname)
+       real2d => this%mineral_specific_surface_area(:,:,ii)
+
+       call restartvar(ncid=ncid, flag=flag, varname=nc_varname, xtype=ncd_double,   &
+           dim1name='column', dim2name='levgrnd', switchdim=.true., &
+           long_name=var_longname, units='[m^2 mineral/m^3 bulk]', &
+           interpinic_flag='interp', readvar=readvar, data=real2d)
+
+     enddo ! End of mineral species loop
+     
+     
+     do ii=1,alquimia_num_surface_sites
+       !!! surface site density !!!
+       ! call c_f_string_ptr(name_list(ii),alq_poolname)
+       ! Generate field name as ALQUIMIA_SURFACE_SITE_DENS_01, ALQUIMIA_SURFACE_SITE_DENS_02, ...
+       write(nc_varname,'(a,i2.2)') 'ALQUIMIA_SURFACE_SITE_DENS_',ii
+       var_longname = 'Alquimia surface site density '//trim(alq_poolname)
+       real2d => this%surface_site_density(:,:,ii)
+
+       call restartvar(ncid=ncid, flag=flag, varname=nc_varname, xtype=ncd_double,   &
+           dim1name='column', dim2name='levgrnd', switchdim=.true., &
+           long_name=var_longname, units='moles/m^3 bulk', &
+           interpinic_flag='interp', readvar=readvar, data=real2d)
+
+     enddo ! End of surface site densities
+
+
+     do ii=1,alquimia_num_ion_exchange_sites
+       !!! surface site density !!!
+       ! call c_f_string_ptr(name_list(ii),alq_poolname)
+       ! Generate field name as ALQUIMIA_CEC_01, ALQUIMIA_CEC_02, ...
+       write(nc_varname,'(a,i2.2)') 'ALQUIMIA_CEC_',ii
+       var_longname = 'Alquimia cation exchange capacity '//trim(alq_poolname)
+       real2d => this%cation_exchange_capacity(:,:,ii)
+
+       call restartvar(ncid=ncid, flag=flag, varname=nc_varname, xtype=ncd_double,   &
+           dim1name='column', dim2name='levgrnd', switchdim=.true., &
+           long_name=var_longname, units='moles/m^3 bulk', &
+           interpinic_flag='interp', readvar=readvar, data=real2d)
+
+     enddo ! End of ion exchange sites
+
+
+     ! Aux doubles. These don't have metadata
+     do ii=1,alquimia_num_aux_doubles
+       write(nc_varname,'(a,i2.2)') 'ALQUIMIA_AUX_DOUBLE_',ii
+       var_longname = ''
+       real2d => this%aux_doubles(:,:,ii)
+
+       call restartvar(ncid=ncid, flag=flag, varname=nc_varname, xtype=ncd_double,   &
+           dim1name='column', dim2name='levgrnd', switchdim=.true., &
+           long_name=var_longname, units='-', &
+           interpinic_flag='interp', readvar=readvar, data=real2d)
+
+     enddo ! End of aux doubles
+
+
+     ! Aux integers. These don't have metadata
+     ! Restart system only supports 1D ints so I am casting this to real
+     allocate(int2d(bounds%begc:bounds%endc,1:nlevdecomp_full))
+     do ii=1,alquimia_num_aux_ints
+       write(nc_varname,'(a,i2.2)') 'ALQUIMIA_AUX_INT_',ii
+       var_longname = ''
+       if(flag == 'write') int2d = real(this%aux_ints(:,:,ii))
+
+       call restartvar(ncid=ncid, flag=flag, varname=nc_varname, xtype=ncd_int,   &
+           dim1name='column', dim2name='levgrnd', switchdim=.true., &
+           long_name=var_longname, units='-', &
+           interpinic_flag='interp', readvar=readvar, data=int2d)
+
+       if(flag == 'read') this%aux_ints(:,:,ii) = int(int2d)
+
+     enddo ! End of aux ints
+     deallocate(int2d)
+
+     call restartvar(ncid=ncid, flag=flag, varname='ALQUIMIA_WATER_DENSITY', xtype=ncd_double,   &
+       dim1name='column', dim2name='levgrnd', switchdim=.true., &
+       long_name='alquimia water density', units='kg/m^3', &
+       interpinic_flag='interp', readvar=readvar, data=this%water_density)
+
+     call restartvar(ncid=ncid, flag=flag, varname='ALQUIMIA_AQUEOUS_PRESSURE', xtype=ncd_double,   &
+       dim1name='column', dim2name='levgrnd', switchdim=.true., &
+       long_name='alquimia aqueous pressure', units='Pa', &
+       interpinic_flag='interp', readvar=readvar, data=this%aqueous_pressure)
+   endif
+
+  end subroutine col_chem_restart
+  !------------------------------------------------------------------------
 
 end module ColumnDataType

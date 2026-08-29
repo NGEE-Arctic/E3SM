@@ -32,6 +32,7 @@ module AllocationMod
   ! bgc interface & pflotran module switches
   use elm_varctl          , only: use_elm_interface,use_elm_bgc, use_pflotran, pf_cmode
   use elm_varctl          , only : nu_com
+  use elm_varctl          , only : use_alquimia
   use SoilStatetype       , only : soilstate_type
   use elm_varctl          , only : NFIX_PTASE_plant
   use ELMFatesInterfaceMod  , only : hlm_fates_interface_type
@@ -460,7 +461,7 @@ contains
       end if
 
       ! pflotran will need an input from CN: modified 'sum_ndemand_vr' ('potential_immob' excluded).
-      if (use_elm_interface.and.use_pflotran .and. pf_cmode) then
+      if ((use_elm_interface.and.use_pflotran .and. pf_cmode) .or. use_alquimia) then
          do j = 1, nlevdecomp
             do fc=1, num_soilc
                c = filter_soilc(fc)
@@ -3175,7 +3176,7 @@ contains
           ! column loops to resolve plant/heterotroph competition for mineral N
 
           !$acc enter data create(sminn_tot(1:num_soilc))
-         if( .not. (use_pflotran .and. pf_cmode) ) then
+         if( .not. ((use_pflotran .and. pf_cmode) .or. use_alquimia) ) then
 
           !$acc parallel loop independent gang worker default(present) private(sum1,c)
           do fc=1,num_soilc
@@ -3205,7 +3206,7 @@ contains
           end do
 
           end if
-          if(use_pflotran .and. pf_cmode) then
+          if ((use_pflotran .and. pf_cmode) .or. use_alquimia) then
             do fc=1,num_soilc
                sum1 = 0._r8
                c = filter_soilc(fc)

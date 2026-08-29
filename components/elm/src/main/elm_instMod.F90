@@ -67,6 +67,7 @@ module elm_instMod
   use ColumnDataType             , only : col_cf, c13_col_cf, c14_col_cf
   use ColumnDataType             , only : col_ns, col_nf
   use ColumnDataType             , only : col_ps, col_pf
+  use ColumnDataType             , only : col_chem
   use VegetationType             , only : veg_pp
   use VegetationDataType         , only : veg_es, veg_ef, veg_ws, veg_wf
   use VegetationDataType         , only : veg_cs, c13_veg_cs, c14_veg_cs
@@ -449,6 +450,7 @@ contains
     call veg_wf%Init(bounds_proc%begp_all, bounds_proc%endp_all)
 
     call chemstate_vars%Init(bounds_proc)
+    call col_chem%Init(begc, endc)
     ! WJS (6-24-14): Without the following write statement, the assertion in
     ! energyflux_vars%init fails with pgi 13.9 on yellowstone. So for now, I'm leaving
     ! this write statement in place as a workaround for this problem.

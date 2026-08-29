@@ -6,11 +6,17 @@ module EMI_EnergyFluxType_ExchangeMod
   use elm_varctl                            , only : iulog
   use EMI_DataMod                           , only : emi_data_list, emi_data
   use EMI_DataDimensionMod                  , only : emi_data_dimension_list_type
-  use EnergyFluxType                        , only : energyflux_type
-  use ColumnDataType                        , only : col_ef
+  use EnergyFluxType       , only : energyflux_type
   use EMI_Atm2LndType_Constants
   use EMI_CanopyStateType_Constants
   use EMI_ChemStateType_Constants
+  use EMI_CNCarbonStateType_Constants
+  use EMI_CNNitrogenStateType_Constants
+  use EMI_CNNitrogenFluxType_Constants
+  use EMI_CNCarbonFluxType_Constants
+  use EMI_ColumnEnergyStateType_Constants
+  use EMI_ColumnWaterStateType_Constants
+  use EMI_ColumnWaterFluxType_Constants
   use EMI_EnergyFluxType_Constants
   use EMI_SoilHydrologyType_Constants
   use EMI_SoilStateType_Constants
@@ -36,7 +42,7 @@ contains
     ! Pack data from ALM energyflux_vars for EM
     !
     ! !USES:
-    use elm_varpar             , only : nlevsoi, nlevgrnd, nlevsno
+    use elm_varpar             , only : nlevsno
     !
     implicit none
     !
@@ -48,18 +54,18 @@ contains
     type(energyflux_type)  , intent(in) :: energyflux_vars
     !
     ! !LOCAL_VARIABLES:
-    integer                             :: fc,c,j
+    integer                             :: fc,c,j,k
     class(emi_data), pointer            :: cur_data
     logical                             :: need_to_pack
     integer                             :: istage
     integer                             :: count
 
     associate(& 
-         eflx_sabg_lyr    => col_ef%eflx_sabg_lyr    , &
-         eflx_hs_soil     => col_ef%eflx_hs_soil     , &
-         eflx_hs_top_snow => col_ef%eflx_hs_top_snow , &
-         eflx_hs_h2osfc   => col_ef%eflx_hs_h2osfc   , &
-         eflx_dhsdT       => col_ef%eflx_dhsdT         &
+         eflx_sabg_lyr_col    => energyflux_vars%eflx_sabg_lyr_col    , &
+         eflx_hs_soil_col     => energyflux_vars%eflx_hs_soil_col     , &
+         eflx_hs_top_snow_col => energyflux_vars%eflx_hs_top_snow_col , &
+         eflx_hs_h2osfc_col   => energyflux_vars%eflx_hs_h2osfc_col   , &
+         eflx_dhsdT_col       => energyflux_vars%eflx_dhsdT_col         &
          )
 
     count = 0
@@ -84,7 +90,7 @@ contains
              do fc = 1, num_filter
                 c = filter(fc)
                 do j = -nlevsno+1, 1
-                   cur_data%data_real_2d(c,j) = eflx_sabg_lyr(c,j)
+                   cur_data%data_real_2d(c,j) = eflx_sabg_lyr_col(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -92,28 +98,28 @@ contains
           case (L2E_FLUX_SOIL_HEAT_FLUX)
              do fc = 1, num_filter
                 c = filter(fc)
-                cur_data%data_real_1d(c) = eflx_hs_soil(c)
+                cur_data%data_real_1d(c) = eflx_hs_soil_col(c)
              enddo
              cur_data%is_set = .true.
 
           case (L2E_FLUX_SNOW_HEAT_FLUX)
              do fc = 1, num_filter
                 c = filter(fc)
-                cur_data%data_real_1d(c) = eflx_hs_top_snow(c)
+                cur_data%data_real_1d(c) = eflx_hs_top_snow_col(c)
              enddo
              cur_data%is_set = .true.
 
           case (L2E_FLUX_H2OSFC_HEAT_FLUX)
              do fc = 1, num_filter
                 c = filter(fc)
-                cur_data%data_real_1d(c) = eflx_hs_h2osfc(c)
+                cur_data%data_real_1d(c) = eflx_hs_h2osfc_col(c)
              enddo
              cur_data%is_set = .true.
 
           case (L2E_FLUX_DERIVATIVE_OF_HEAT_FLUX)
              do fc = 1, num_filter
                 c = filter(fc)
-                cur_data%data_real_1d(c) = eflx_dhsdT(c)
+                cur_data%data_real_1d(c) = eflx_dhsdT_col(c)
              enddo
              cur_data%is_set = .true.
 

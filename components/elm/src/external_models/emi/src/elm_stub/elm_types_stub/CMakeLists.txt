@@ -1,6 +1,8 @@
 set(EMI_ELM_TYPES_STUB_SOURCES
   CanopyStateType.F90
   CNCarbonStateType.F90
+  CNNitrogenStateType.F90
+  CNCarbonFluxType.F90
   ChemStateType.F90
   EnergyFluxType.F90
   SoilHydrologyType.F90
@@ -10,6 +12,7 @@ set(EMI_ELM_TYPES_STUB_SOURCES
   WaterfluxType.F90
   atm2lndType.F90
   elm_instMod.F90
+  CNDecompCascadeConType.F90
 )
 
 include_directories(${CMAKE_BINARY_DIR}/elm_stub/shr)

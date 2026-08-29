@@ -84,6 +84,14 @@ module elm_varpar
   real(r8), parameter :: zecoeff = 0.50_r8
 
   integer, parameter :: ndir_horizon_angle = 8    ! number of directions for horizon angle
+  ! Could add alquimia sizes here to allow all data to be passed through EMI
+  ! These need to be set through alquimia
+  integer :: alquimia_num_primary
+  integer :: alquimia_num_minerals
+  integer :: alquimia_num_surface_sites
+  integer :: alquimia_num_ion_exchange_sites
+  integer :: alquimia_num_aux_doubles
+  integer :: alquimia_num_aux_ints
 
   ! These strings define the elm-fates nutrient coupling, i.e. which chemical species
   ! are cycled between the two, see corresponding values for fates_parteh_mode:

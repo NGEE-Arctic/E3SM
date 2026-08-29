@@ -4,12 +4,19 @@ module EMI_SoilStateType_ExchangeMod
   use shr_log_mod                           , only : errMsg => shr_log_errMsg
   use abortutils                            , only : endrun
   use elm_varctl                            , only : iulog
-  use EMI_DataMod         , only : emi_data_list, emi_data
-  use EMI_DataDimensionMod , only : emi_data_dimension_list_type
-  use SoilStateType                         , only : soilstate_type
+  use EMI_DataMod                           , only : emi_data_list, emi_data
+  use EMI_DataDimensionMod                  , only : emi_data_dimension_list_type
+  use SoilStateType        , only : soilstate_type
   use EMI_Atm2LndType_Constants
   use EMI_CanopyStateType_Constants
   use EMI_ChemStateType_Constants
+  use EMI_CNCarbonStateType_Constants
+  use EMI_CNNitrogenStateType_Constants
+  use EMI_CNNitrogenFluxType_Constants
+  use EMI_CNCarbonFluxType_Constants
+  use EMI_ColumnEnergyStateType_Constants
+  use EMI_ColumnWaterStateType_Constants
+  use EMI_ColumnWaterFluxType_Constants
   use EMI_EnergyFluxType_Constants
   use EMI_SoilHydrologyType_Constants
   use EMI_SoilStateType_Constants
@@ -37,7 +44,7 @@ contains
     ! Pack data from ALM soilstate_vars for EM
     !
     ! !USES:
-    use elm_varpar             , only : nlevsoi, nlevgrnd, nlevsno
+    use elm_varpar             , only : nlevgrnd
     !
     implicit none
     !
@@ -49,26 +56,26 @@ contains
     type(soilstate_type)   , intent(in) :: soilstate_vars
     !
     ! !LOCAL_VARIABLES:
-    integer                             :: fc,c,j
+    integer                             :: fc,c,j,k
     class(emi_data), pointer            :: cur_data
     logical                             :: need_to_pack
     integer                             :: istage
     integer                             :: count
 
     associate(& 
-         watsat       => soilstate_vars%watsat_col       , &
-         hksat        => soilstate_vars%hksat_col        , &
-         bsw          => soilstate_vars%bsw_col          , &
-         sucsat       => soilstate_vars%sucsat_col       , &
-         eff_porosity => soilstate_vars%eff_porosity_col , &
-         csol         => soilstate_vars%csol_col         , &
-         tkmg         => soilstate_vars%tkmg_col         , &
-         tkdry        => soilstate_vars%tkdry_col        , &
-         cellorg      => soilstate_vars%cellorg_col      , &
-         cellclay     => soilstate_vars%cellclay_col     , &
-         cellsand     => soilstate_vars%cellsand_col     , &
-         bd           => soilstate_vars%bd_col           , &
-         watfc        => soilstate_vars%watfc_col          &
+         watsat_col       => soilstate_vars%watsat_col       , &
+         hksat_col        => soilstate_vars%hksat_col        , &
+         bsw_col          => soilstate_vars%bsw_col          , &
+         sucsat_col       => soilstate_vars%sucsat_col       , &
+         eff_porosity_col => soilstate_vars%eff_porosity_col , &
+         csol_col         => soilstate_vars%csol_col         , &
+         tkmg_col         => soilstate_vars%tkmg_col         , &
+         tkdry_col        => soilstate_vars%tkdry_col        , &
+         cellorg_col      => soilstate_vars%cellorg_col      , &
+         cellclay_col     => soilstate_vars%cellclay_col     , &
+         cellsand_col     => soilstate_vars%cellsand_col     , &
+         bd_col           => soilstate_vars%bd_col           , &
+         watfc_col        => soilstate_vars%watfc_col          &
          )
 
     count = 0
@@ -93,7 +100,7 @@ contains
              do fc = 1, num_filter
                 c = filter(fc)
                 do j = 1, nlevgrnd
-                   cur_data%data_real_2d(c,j) = watsat(c,j)
+                   cur_data%data_real_2d(c,j) = watsat_col(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -102,7 +109,7 @@ contains
              do fc = 1, num_filter
                 c = filter(fc)
                 do j = 1, nlevgrnd
-                   cur_data%data_real_2d(c,j) = hksat(c,j)
+                   cur_data%data_real_2d(c,j) = hksat_col(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -111,7 +118,7 @@ contains
              do fc = 1, num_filter
                 c = filter(fc)
                 do j = 1, nlevgrnd
-                   cur_data%data_real_2d(c,j) = bsw(c,j)
+                   cur_data%data_real_2d(c,j) = bsw_col(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -120,7 +127,7 @@ contains
              do fc = 1, num_filter
                 c = filter(fc)
                 do j = 1, nlevgrnd
-                   cur_data%data_real_2d(c,j) = sucsat(c,j)
+                   cur_data%data_real_2d(c,j) = sucsat_col(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -129,7 +136,7 @@ contains
              do fc = 1, num_filter
                 c = filter(fc)
                 do j = 1, nlevgrnd
-                   cur_data%data_real_2d(c,j) = eff_porosity(c,j)
+                   cur_data%data_real_2d(c,j) = eff_porosity_col(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -138,7 +145,7 @@ contains
              do fc = 1, num_filter
                 c = filter(fc)
                 do j = 1, nlevgrnd
-                   cur_data%data_real_2d(c,j) = csol(c,j)
+                   cur_data%data_real_2d(c,j) = csol_col(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -147,7 +154,7 @@ contains
              do fc = 1, num_filter
                 c = filter(fc)
                 do j = 1, nlevgrnd
-                   cur_data%data_real_2d(c,j) = tkmg(c,j)
+                   cur_data%data_real_2d(c,j) = tkmg_col(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -156,7 +163,7 @@ contains
              do fc = 1, num_filter
                 c = filter(fc)
                 do j = 1, nlevgrnd
-                   cur_data%data_real_2d(c,j) = tkdry(c,j)
+                   cur_data%data_real_2d(c,j) = tkdry_col(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -165,7 +172,7 @@ contains
              do fc = 1, num_filter
                 c = filter(fc)
                 do j = 1, nlevgrnd
-                   cur_data%data_real_2d(c,j) = cellorg(c,j)
+                   cur_data%data_real_2d(c,j) = cellorg_col(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -174,7 +181,7 @@ contains
              do fc = 1, num_filter
                 c = filter(fc)
                 do j = 1, nlevgrnd
-                   cur_data%data_real_2d(c,j) = cellclay(c,j)
+                   cur_data%data_real_2d(c,j) = cellclay_col(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -183,7 +190,7 @@ contains
              do fc = 1, num_filter
                 c = filter(fc)
                 do j = 1, nlevgrnd
-                   cur_data%data_real_2d(c,j) = cellsand(c,j)
+                   cur_data%data_real_2d(c,j) = cellsand_col(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -192,7 +199,7 @@ contains
              do fc = 1, num_filter
                 c = filter(fc)
                 do j = 1, nlevgrnd
-                   cur_data%data_real_2d(c,j) = bd(c,j)
+                   cur_data%data_real_2d(c,j) = bd_col(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -201,7 +208,7 @@ contains
              do fc = 1, num_filter
                 c = filter(fc)
                 do j = 1, nlevgrnd
-                   cur_data%data_real_2d(c,j) = watfc(c,j)
+                   cur_data%data_real_2d(c,j) = watfc_col(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -225,7 +232,7 @@ contains
     ! Pack data from ALM soilstate_vars for EM
     !
     ! !USES:
-    use elm_varpar             , only : nlevsoi, nlevgrnd, nlevsno
+    use elm_varpar             , only : nlevgrnd
     !
     implicit none
     !
@@ -237,14 +244,14 @@ contains
     type(soilstate_type)   , intent(in) :: soilstate_vars
     !
     ! !LOCAL_VARIABLES:
-    integer                             :: fp,p,j
+    integer                             :: fp,p,j,k
     class(emi_data), pointer            :: cur_data
     logical                             :: need_to_pack
     integer                             :: istage
     integer                             :: count
 
     associate(& 
-         rootfr => soilstate_vars%rootfr_patch   &
+         rootfr_patch => soilstate_vars%rootfr_patch   &
          )
 
     count = 0
@@ -269,7 +276,7 @@ contains
              do fp = 1, num_filter
                 p = filter(fp)
                 do j = 1, nlevgrnd
-                   cur_data%data_real_2d(p,j) = rootfr(p,j)
+                   cur_data%data_real_2d(p,j) = rootfr_patch(p,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -293,7 +300,7 @@ contains
     ! Unpack data for ALM soilstate_vars from EM
     !
     ! !USES:
-    use elm_varpar             , only : nlevsoi, nlevgrnd, nlevsno
+    use elm_varpar             , only : nlevgrnd
     !
     implicit none
     !
@@ -305,14 +312,14 @@ contains
     type(soilstate_type)   , intent(in) :: soilstate_vars
     !
     ! !LOCAL_VARIABLES:
-    integer                             :: fc,c,j
+    integer                             :: fc,c,j,k
     class(emi_data), pointer            :: cur_data
     logical                             :: need_to_pack
     integer                             :: istage
     integer                             :: count
 
     associate(& 
-         smp_l => soilstate_vars%smp_l_col   &
+         smp_l_col => soilstate_vars%smp_l_col   &
          )
 
     count = 0
@@ -337,7 +344,7 @@ contains
              do fc = 1, num_filter
                 c = filter(fc)
                 do j = 1, nlevgrnd
-                   smp_l(c,j) = cur_data%data_real_2d(c,j)
+                   smp_l_col(c,j) = cur_data%data_real_2d(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.

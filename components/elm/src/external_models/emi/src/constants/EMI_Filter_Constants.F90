@@ -9,5 +9,7 @@ module EMI_Filter_Constants
   integer, parameter, public :: L2E_FILTER_NUM_NOLAKEC                           = 1204
   integer, parameter, public :: L2E_FILTER_NOLAKEC_AND_NOURBANC                  = 1205
   integer, parameter, public :: L2E_FILTER_NUM_NOLAKEC_AND_NOURBANC              = 1206
+  integer, parameter, public :: L2E_FILTER_SOILC                                 = 1207
+  integer, parameter, public :: L2E_FILTER_NUM_SOILC                             = 1208
 
 end module EMI_Filter_Constants

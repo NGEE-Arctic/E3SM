@@ -11,6 +11,7 @@ module CarbonStateUpdate1Mod
   use elm_varcon              , only : dzsoi_decomp
   use elm_varctl              , only : nu_com, use_c13, use_c14
   use elm_varctl              , only : use_pflotran, pf_cmode, use_fates
+  use elm_varctl              , only : use_alquimia
   use pftvarcon               , only : iscft
   use CNDecompCascadeConType  , only : decomp_cascade_type
   use CNStateType             , only : cnstate_type
@@ -235,6 +236,11 @@ contains
             end do
          end if
 
+        if(.not. use_alquimia) then
+         ! for EMI-alquimia interface, the following won't pass from PF-BGC or later-on transport
+         ! but, since there is no literring pass to PF-BGC either, still the above are needed (but TODO a check for nfert and nfix for CROP)
+         ! and following-up SoilLitDecompTransp() still needed as well.
+
          ! litter and SOM HR fluxes
          do k = 1, ndecomp_cascade_transitions
             do j = 1,nlevdecomp
@@ -260,6 +266,8 @@ contains
                end do
             end if
          end do
+
+        endif  ! .not. use_alquimia
 
       endif   !end if is_active_betr_bgc()
 

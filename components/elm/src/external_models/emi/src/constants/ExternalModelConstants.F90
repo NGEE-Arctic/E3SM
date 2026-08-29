@@ -27,6 +27,10 @@ module ExternalModelConstants
   integer, public, parameter :: EM_ID_STUB                                       = 500
   integer, parameter, public :: EM_STUB_SOIL_HYDRO_STAGE                         = 501
   integer, parameter, public :: EM_STUB_SOIL_THERMAL_STAGE                       = 502
+  
+  integer, public, parameter :: EM_ID_ALQUIMIA                                   = 600
+  integer, public, parameter :: EM_ALQUIMIA_SOLVE_STAGE                          = 601
+  integer, public, parameter :: EM_ALQUIMIA_COLDSTART_STAGE                      = 602
 
   ! ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   ! IDs for variable sent from ALM to External Model

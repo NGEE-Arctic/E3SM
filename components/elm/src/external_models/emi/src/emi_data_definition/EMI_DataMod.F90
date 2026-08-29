@@ -36,14 +36,14 @@ module EMI_DataMod
      character (len=10) :: dim3_name
      character (len=10) :: dim4_name
 
-     character (len=24) :: dim1_beg_name
-     character (len=24) :: dim2_beg_name
-     character (len=24) :: dim3_beg_name
-     character (len=24) :: dim4_beg_name
-     character (len=24) :: dim1_end_name
-     character (len=24) :: dim2_end_name
-     character (len=24) :: dim3_end_name
-     character (len=24) :: dim4_end_name
+     character (len=32) :: dim1_beg_name
+     character (len=32) :: dim2_beg_name
+     character (len=32) :: dim3_beg_name
+     character (len=32) :: dim4_beg_name
+     character (len=32) :: dim1_end_name
+     character (len=32) :: dim2_end_name
+     character (len=32) :: dim3_end_name
+     character (len=32) :: dim4_end_name
 
      integer :: dim1_beg, dim1_end
      integer :: dim2_beg, dim2_end
@@ -1273,10 +1273,22 @@ contains
     use EMI_WaterStateType_DataMod
     use EMI_TemperatureType_DataMod
     use EMI_ColumnType_Constants
+    use EMI_ColumnEnergyStateType_Constants
+    use EMI_ColumnEnergyStateType_DataMod
+    use EMI_ColumnWaterStateType_Constants
+    use EMI_ColumnWaterStateType_DataMod
+    use EMI_ColumnWaterFluxType_Constants
+    use EMI_ColumnWaterFluxType_DataMod
     use EMI_Filter_Constants
     use EMI_Landunit_Constants
     use EMI_CNCarbonStateType_DataMod
     use EMI_CNCarbonStateType_Constants
+    use EMI_CNCarbonFluxType_DataMod
+    use EMI_CNCarbonFluxType_Constants
+    use EMI_CNNitrogenStateType_DataMod
+    use EMI_CNNitrogenStateType_Constants
+    use EMI_CNNitrogenFluxType_DataMod
+    use EMI_CNNitrogenFluxType_Constants
     use EMI_DataDimensionMod, only : dimname_begg
     use EMI_DataDimensionMod, only : dimname_endg
     use EMI_DataDimensionMod, only : dimname_begl
@@ -1308,15 +1320,15 @@ contains
     integer                                :: ndim
     character (len=32)                     :: name_val
     character (len=128)                    :: long_name_val
-    character (len=24)                     :: units_val
-    character (len=24)                     :: dim1_beg_name
-    character (len=24)                     :: dim2_beg_name
-    character (len=24)                     :: dim3_beg_name
-    character (len=24)                     :: dim4_beg_name
-    character (len=24)                     :: dim1_end_name
-    character (len=24)                     :: dim2_end_name
-    character (len=24)                     :: dim3_end_name
-    character (len=24)                     :: dim4_end_name
+    character (len=32)                     :: units_val
+    character (len=32)                     :: dim1_beg_name
+    character (len=32)                     :: dim2_beg_name
+    character (len=32)                     :: dim3_beg_name
+    character (len=32)                     :: dim4_beg_name
+    character (len=32)                     :: dim1_end_name
+    character (len=32)                     :: dim2_end_name
+    character (len=32)                     :: dim3_end_name
+    character (len=32)                     :: dim4_end_name
     logical                                :: is_int_type
     logical                                :: is_real_type
     logical                                :: data_present
@@ -1410,6 +1422,54 @@ contains
             dim3_beg_name, dim3_end_name, dim4_beg_name, dim4_end_name, &
             data_found)
     end if
+    
+    if (.not.data_found) then
+       call EMI_CNNitrogenStateType_DataInfoByID(data_id, id_val, &
+            name_val, long_name_val, units_val, is_int_type, is_real_type, ndim, &
+            dim1_beg_name, dim1_end_name, dim2_beg_name, dim2_end_name, &
+            dim3_beg_name, dim3_end_name, dim4_beg_name, dim4_end_name, &
+            data_found)
+    end if
+    
+    if (.not.data_found) then
+       call EMI_CNCarbonFluxType_DataInfoByID(data_id, id_val, &
+            name_val, long_name_val, units_val, is_int_type, is_real_type, ndim, &
+            dim1_beg_name, dim1_end_name, dim2_beg_name, dim2_end_name, &
+            dim3_beg_name, dim3_end_name, dim4_beg_name, dim4_end_name, &
+            data_found)
+    end if
+
+    if (.not.data_found) then
+       call EMI_CNNitrogenFluxType_DataInfoByID(data_id, id_val, &
+           name_val, long_name_val, units_val, is_int_type, is_real_type, ndim, &
+           dim1_beg_name, dim1_end_name, dim2_beg_name, dim2_end_name, &
+           dim3_beg_name, dim3_end_name, dim4_beg_name, dim4_end_name, &
+           data_found)
+    end if
+
+    if (.not.data_found) then
+      call EMI_ColumnEnergyStateType_DataInfoByID(data_id, id_val, &
+           name_val, long_name_val, units_val, is_int_type, is_real_type, ndim, &
+           dim1_beg_name, dim1_end_name, dim2_beg_name, dim2_end_name, &
+           dim3_beg_name, dim3_end_name, dim4_beg_name, dim4_end_name, &
+           data_found)
+   end if
+
+   if (.not.data_found) then
+      call EMI_ColumnWaterStateType_DataInfoByID(data_id, id_val, &
+           name_val, long_name_val, units_val, is_int_type, is_real_type, ndim, &
+           dim1_beg_name, dim1_end_name, dim2_beg_name, dim2_end_name, &
+           dim3_beg_name, dim3_end_name, dim4_beg_name, dim4_end_name, &
+           data_found)
+   end if
+
+   if (.not.data_found) then
+      call EMI_ColumnWaterFluxType_DataInfoByID(data_id, id_val, &
+           name_val, long_name_val, units_val, is_int_type, is_real_type, ndim, &
+           dim1_beg_name, dim1_end_name, dim2_beg_name, dim2_end_name, &
+           dim3_beg_name, dim3_end_name, dim4_beg_name, dim4_end_name, &
+           data_found)
+   end if
 
     if (.not.data_found) then
        select case(data_id)
@@ -1437,6 +1497,28 @@ contains
           dim1_beg_name = dimname_one
           dim1_end_name = dimname_one
           data_found    = .true.
+
+      case (L2E_FILTER_SOILC)
+         id_val        = L2E_FILTER_SOILC
+         name_val      = 'Soil filter'
+         long_name_val = 'Soil filter: ALM to External Model'
+         units_val     = '[-]'
+         is_int_type   = .true.
+         ndim          = 1
+         dim1_beg_name = dimname_one
+         dim1_end_name = dimname_col_one_based_idx
+         data_found    = .true.
+
+      case (L2E_FILTER_NUM_SOILC)
+         id_val        = L2E_FILTER_NUM_SOILC
+         name_val      = 'Number of soil filter'
+         long_name_val = 'Number of soil filter: ALM to External Model'
+         units_val     = '[-]'
+         is_int_type   = .true.
+         ndim          = 1
+         dim1_beg_name = dimname_one
+         dim1_end_name = dimname_one
+         data_found    = .true.
 
        case (L2E_FILTER_NOLAKEC)
           id_val        = L2E_FILTER_HYDROLOGYC

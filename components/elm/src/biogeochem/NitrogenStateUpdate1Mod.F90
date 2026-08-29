@@ -20,6 +20,7 @@ module NitrogenStateUpdate1Mod
   use tracer_varcon          , only : is_active_betr_bgc
   ! bgc interface & pflotran:
   use elm_varctl             , only : use_pflotran, pf_cmode
+  use elm_varctl             , only : use_alquimia
   ! forest fertilization experiment
   use elm_time_manager       , only : get_curr_date
   use CNStateType            , only : fert_type , fert_continue, fert_dose, fert_start, fert_end
@@ -181,6 +182,11 @@ contains
             end do
          end if
 
+        if(.not. use_alquimia) then
+         ! for EMI-alquimia interface, the following won't pass from PF-BGC or later-on transport
+         ! but, since there is no literring pass to PF-BGC either, still the above are needed (but TODO a check for nfert and nfix for CROP)
+         ! and following-up SoilLitDecompTransp() still needed as well.
+
          ! decomposition fluxes
          do k = 1, ndecomp_cascade_transitions
             do j = 1, nlevdecomp
@@ -254,6 +260,7 @@ contains
 
             end do ! end of column loop
          end do
+        endif ! if (.not. use_alquimia)
 
       endif  !end if is_active_betr_bgc
 

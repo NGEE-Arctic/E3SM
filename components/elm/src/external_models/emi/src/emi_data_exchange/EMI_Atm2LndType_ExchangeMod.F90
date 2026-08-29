@@ -6,12 +6,17 @@ module EMI_Atm2LndType_ExchangeMod
   use elm_varctl                            , only : iulog
   use EMI_DataMod                           , only : emi_data_list, emi_data
   use EMI_DataDimensionMod                  , only : emi_data_dimension_list_type
-  use Atm2LndType                           , only : atm2lnd_type
-  use TopounitDataType                      , only : top_as
-  use ColumnType                            , only : col_pp
+  use Atm2LndType          , only : atm2lnd_type
   use EMI_Atm2LndType_Constants
   use EMI_CanopyStateType_Constants
   use EMI_ChemStateType_Constants
+  use EMI_CNCarbonStateType_Constants
+  use EMI_CNNitrogenStateType_Constants
+  use EMI_CNNitrogenFluxType_Constants
+  use EMI_CNCarbonFluxType_Constants
+  use EMI_ColumnEnergyStateType_Constants
+  use EMI_ColumnWaterStateType_Constants
+  use EMI_ColumnWaterFluxType_Constants
   use EMI_EnergyFluxType_Constants
   use EMI_SoilHydrologyType_Constants
   use EMI_SoilStateType_Constants
@@ -38,7 +43,6 @@ contains
     ! Pack data from ALM atm2lndtype_vars for EM
     !
     ! !USES:
-    use elm_varpar             , only : nlevsoi, nlevgrnd, nlevsno
     !
     implicit none
     !
@@ -50,15 +54,15 @@ contains
     type(atm2lnd_type)     , intent(in) :: atm2lndtype_vars
     !
     ! !LOCAL_VARIABLES:
-    integer                             :: fc,t,c,j
+    integer                             :: fc,c,j,k
     class(emi_data), pointer            :: cur_data
     logical                             :: need_to_pack
     integer                             :: istage
     integer                             :: count
 
     associate(& 
-         forc_pbot_downscaled => top_as%pbot , &
-         forc_t_downscaled    => top_as%tbot   &
+         forc_pbot_downscaled_col => atm2lndtype_vars%forc_pbot_downscaled_col , &
+         forc_t_downscaled_col    => atm2lndtype_vars%forc_t_downscaled_col      &
          )
 
     count = 0
@@ -82,16 +86,14 @@ contains
           case (L2E_STATE_FORC_PBOT_DOWNSCALED)
              do fc = 1, num_filter
                 c = filter(fc)
-                t = col_pp%topounit(c)
-                cur_data%data_real_1d(c) = forc_pbot_downscaled(t)
+                cur_data%data_real_1d(c) = forc_pbot_downscaled_col(c)
              enddo
              cur_data%is_set = .true.
 
           case (L2E_STATE_FORC_T_DOWNSCALED)
              do fc = 1, num_filter
                 c = filter(fc)
-                t = col_pp%topounit(c)
-                cur_data%data_real_1d(c) = forc_t_downscaled(t)
+                cur_data%data_real_1d(c) = forc_t_downscaled_col(c)
              enddo
              cur_data%is_set = .true.
 
@@ -114,7 +116,6 @@ contains
     ! Pack data from ALM atm2lndtype_vars for EM
     !
     ! !USES:
-    use elm_varpar             , only : nlevsoi, nlevgrnd, nlevsno
     !
     implicit none
     !
@@ -126,15 +127,15 @@ contains
     type(atm2lnd_type)     , intent(in) :: atm2lndtype_vars
     !
     ! !LOCAL_VARIABLES:
-    integer                             :: fg,g,j
+    integer                             :: fg,g,j,k
     class(emi_data), pointer            :: cur_data
     logical                             :: need_to_pack
     integer                             :: istage
     integer                             :: count
 
     associate(& 
-         forc_solad => atm2lndtype_vars%forc_solad_grc , &
-         forc_solai => atm2lndtype_vars%forc_solai_grc   &
+         forc_solad_grc => atm2lndtype_vars%forc_solad_grc , &
+         forc_solai_grc => atm2lndtype_vars%forc_solai_grc   &
          )
 
     count = 0
@@ -159,7 +160,7 @@ contains
              do fg = 1, num_filter
                 g = filter(fg)
                 do j = 1, 2
-                   cur_data%data_real_2d(g,j) = forc_solad(g,j)
+                   cur_data%data_real_2d(g,j) = forc_solad_grc(g,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -168,7 +169,7 @@ contains
              do fg = 1, num_filter
                 g = filter(fg)
                 do j = 1, 2
-                   cur_data%data_real_2d(g,j) = forc_solai(g,j)
+                   cur_data%data_real_2d(g,j) = forc_solai_grc(g,j)
                 enddo
              enddo
              cur_data%is_set = .true.

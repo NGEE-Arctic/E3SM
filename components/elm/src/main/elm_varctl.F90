@@ -538,6 +538,25 @@ module elm_varctl
   logical, public :: onset_gdd_extension = .false.
   !$acc declare create(onset_gdd_extension)
 
+  !----------------------------------------------------------
+  ! Alquimia external model
+  !----------------------------------------------------------
+  logical, public           :: use_alquimia         = .false.
+  character(len=256), public :: alquimia_inputfile   = 'alquimia_io/pflotran.in'
+  character(len=32), public :: alquimia_engine_name = 'pflotran'
+  character(len=32), public :: alquimia_IC_name     = 'initial' ! Initial condition
+  character(len=32), public :: alquimia_CO2_name    = 'CO2(aq)' ! Name of CO2 in reaction network
+  character(len=32), public :: alquimia_NH4_name    = 'NH4+' ! Name of NH4 in reaction network
+  character(len=32), public :: alquimia_NO3_name    = 'NO3-' ! Name in reaction network
+  character(len=32), public :: alquimia_Nimm_name   = 'Nimm' ! Name in reaction network
+  character(len=32), public :: alquimia_Nimp_name   = 'Nimp' ! Name in reaction network
+  character(len=32), public :: alquimia_Nmin_name   = 'Nmin' ! Name in reaction network
+  character(len=32), public :: alquimia_plantNO3uptake_name = 'Tracer' ! Name in reaction network
+  character(len=32), public :: alquimia_plantNH4uptake_name = 'Tracer2' ! Name in reaction network
+  character(len=32), public :: alquimia_plantNO3demand_name = 'Plant_NO3_demand'
+  character(len=32), public :: alquimia_plantNH4demand_name = 'Plant_NH4_demand'
+  logical, public           :: alquimia_handsoff    = .true.
+
   ! cpl_bypass
    character(len=fname_len), public :: metdata_type   = ' '    ! metdata type for CPL_BYPASS mode
    character(len=fname_len), public :: metdata_bypass = ' '    ! met data directory for CPL_BYPASS mode (site, qian, cru_ncep)

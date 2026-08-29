@@ -34,6 +34,9 @@ module elm_initializeMod
   use LandunitType           , only : lun_pp
   use ColumnType             , only : col_pp
   use ColumnDataType         , only : col_es
+  use ColumnDataType         , only : col_ws, col_wf
+  use ColumnDataType         , only : col_cs, col_cf
+  use ColumnDataType         , only : col_ns, col_nf
   use VegetationType         , only : veg_pp
   use VegetationDataType     , only : veg_es
 
@@ -561,6 +564,11 @@ contains
     use FATESFireFactoryMod   , only : scalar_lightning
     use FanStreamMod          , only : fanstream_init, fanstream_interp
     use dynFATESLandUseChangeMod, only : dynFatesLandUseInit
+
+    use elm_varctl               , only : use_alquimia
+    use ExternalModelConstants   , only : EM_ID_ALQUIMIA, EM_ALQUIMIA_COLDSTART_STAGE
+    use ExternalModelInterfaceMod, only : EMI_Driver, EMI_Init_EM
+
     !
     ! !ARGUMENTS
     implicit none
@@ -700,6 +708,11 @@ contains
     call hist_addfld1d (fname='ZII', units='m', &
          avgflag='A', long_name='convective boundary height', &
          ptr_col=col_pp%zii, default='inactive')
+
+    ! Alquimia initialization reads sizes for chemical arrays so it must be done before clm_inst_biogeophys (which initializes ChemStateType)
+    if (use_alquimia) then
+      call EMI_Init_EM(EM_ID_ALQUIMIA)
+    endif
 
     call elm_inst_biogeophys(bounds_proc)
 
@@ -1092,10 +1105,33 @@ contains
        call alm_fates%init_coldstart(canopystate_vars, soilstate_vars, frictionvel_vars)
     end if
 
-    ! topo_glc_mec was allocated in initialize1, but needed to be kept around through
-    ! initialize2 because it is used to initialize other variables; now it can be
-    ! deallocated
+    ! Through alquimia, equilibrate initial conditions and initialize data structure
+    if (use_alquimia .and. finidat == ' ' .and. .not.is_restart()) then
+      !$OMP PARALLEL DO PRIVATE (nc, bounds_clump)
+      do nc = 1,nclumps
+         call get_clump_bounds(nc, bounds_clump)
+         call EMI_Driver(                                    &
+            em_id             = EM_ID_ALQUIMIA             , &
+            em_stage          = EM_ALQUIMIA_COLDSTART_STAGE, &
+            clump_rank        = bounds_clump%clump_index   , &
+            dt                = dtime                      , &
+            soilstate_vars    = soilstate_vars             , &
+            carbonstate_vars  = col_cs                     , &
+            carbonflux_vars   = col_cf                     , &
+            nitrogenstate_vars= col_ns                     , &
+            nitrogenflux_vars = col_nf                     , &
+            waterstate_vars   = waterstate_vars            , &
+            soilhydrology_vars= soilhydrology_vars         , &
+            col_chem          = col_chem                   , &
+            num_soilc         = filter(nc)%num_soilc       , &
+            filter_soilc      = filter(nc)%soilc           , &
+            col_es            = col_es                     , &
+            col_ws            = col_ws                     , &
+            col_wf            = col_wf                      )
 
+      end do
+      !$OMP END PARALLEL DO
+    endif
 
 
     ! topo_glc_mec was allocated in initialize1, but needed to be kept around through

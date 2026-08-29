@@ -10,6 +10,9 @@ module EMI_DataDimensionMod
   use elm_varpar, only : nlevsno
   use elm_varpar, only : ndecomp_pools
   use elm_varpar, only : nlevdecomp_full
+  use elm_varpar, only : alquimia_num_primary, alquimia_num_minerals,&
+                         alquimia_num_surface_sites, alquimia_num_ion_exchange_sites, &
+                         alquimia_num_aux_doubles, alquimia_num_aux_ints
   use abortutils, only : endrun
   use elm_varctl, only : iulog
 
@@ -33,9 +36,15 @@ implicit none
     character(*), parameter :: dimname_col_one_based_idx = 'endc - begc + 1'
     character(*), parameter :: dimname_nlevdecomp_full   = 'nlevdecomp_full';
     character(*), parameter :: dimname_ndecomp_pools     = 'ndecomp_pools';
+    character(*), parameter :: dimname_alquimia_num_primary  = 'alquimia_num_primary';
+    character(*), parameter :: dimname_alquimia_num_minerals  = 'alquimia_num_minerals';
+    character(*), parameter :: dimname_alquimia_num_surface_sites  = 'alquimia_num_surface_sites';
+    character(*), parameter :: dimname_alquimia_num_ion_exchange_sites  = 'alquimia_num_ion_exchange_sites';
+    character(*), parameter :: dimname_alquimia_num_aux_doubles  = 'alquimia_num_aux_doubles';
+    character(*), parameter :: dimname_alquimia_num_aux_ints  = 'alquimia_num_aux_ints';
 
   type emi_data_dimension_type
-     character(len=24) :: name ! String labelling this IO type
+     character(len=32) :: name ! String labelling this IO type
 
      type(emi_data_dimension_type), pointer :: next
    contains
@@ -143,6 +152,19 @@ contains
     case (dimname_nlevdecomp_full)
        dim_value = nlevdecomp_full;
 
+    case (dimname_alquimia_num_primary)
+       dim_value = alquimia_num_primary
+    case (dimname_alquimia_num_minerals)
+       dim_value = alquimia_num_minerals
+    case (dimname_alquimia_num_surface_sites)
+       dim_value = alquimia_num_surface_sites
+    case (dimname_alquimia_num_ion_exchange_sites)
+       dim_value = alquimia_num_ion_exchange_sites
+    case (dimname_alquimia_num_aux_doubles)
+       dim_value = alquimia_num_aux_doubles
+    case (dimname_alquimia_num_aux_ints)
+       dim_value = alquimia_num_aux_ints
+
     case default
        write(iulog,*)'dim_name = ',dim_name
        call endrun(msg='Unknown dim_name while trying to get dimension value.')
@@ -186,6 +208,13 @@ contains
     call this%AddDimByName(dimname_col_one_based_idx)
     call this%AddDimByName(dimname_nlevdecomp_full)
     call this%AddDimByName(dimname_ndecomp_pools)
+
+    call this%AddDimByName(dimname_alquimia_num_primary)
+    call this%AddDimByName(dimname_alquimia_num_minerals)
+    call this%AddDimByName(dimname_alquimia_num_surface_sites)
+    call this%AddDimByName(dimname_alquimia_num_ion_exchange_sites)
+    call this%AddDimByName(dimname_alquimia_num_aux_doubles)
+    call this%AddDimByName(dimname_alquimia_num_aux_ints)
 
   end subroutine EMID_Dim_List_Init
 
@@ -258,7 +287,6 @@ contains
     cur_dim => this%first
     do
        if (.not.associated(cur_dim)) exit
-
        if (trim(cur_dim%name) .eq. dim_name) then
           call cur_dim%GetDimValue(bounds_clump, dim_name, dim_value)
           dim_found = .true.

@@ -332,6 +332,17 @@ module clm_varctl
   !----------------------------------------------------------
   logical, public :: use_em_stub = .false.
   !----------------------------------------------------------
+  ! Alquimia external model
+  !----------------------------------------------------------
+  logical, public           :: use_em_alquimia      = .false.
+  character(len=32), public :: alquimia_inputfile   = 'alquimia_io/pflotran.in'
+  character(len=32), public :: alquimia_engine_name = 'pflotran'
+  character(len=32), public :: alquimia_IC_name     = 'initial' ! Initial condition
+  character(len=32), public :: alquimia_CO2_name     = 'CO2(aq)' ! Initial condition
+  character(len=32), public :: alquimia_NH4_name     = 'NH4+' ! Initial condition
+  character(len=32), public :: alquimia_NO3_name     = 'NO3-' ! Initial condition
+  logical, public           :: alquimia_handsoff      = .true.
+  !----------------------------------------------------------
   ! To retrieve namelist
   !----------------------------------------------------------
   character(len=SHR_KIND_CL), public :: NLFilename_in ! Namelist filename

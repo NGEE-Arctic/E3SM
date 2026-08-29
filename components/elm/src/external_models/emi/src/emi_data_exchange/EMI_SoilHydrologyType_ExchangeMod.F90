@@ -4,12 +4,19 @@ module EMI_SoilHydrologyType_ExchangeMod
   use shr_log_mod                           , only : errMsg => shr_log_errMsg
   use abortutils                            , only : endrun
   use elm_varctl                            , only : iulog
-  use EMI_DataMod         , only : emi_data_list, emi_data
-  use EMI_DataDimensionMod , only : emi_data_dimension_list_type
-  use SoilHydrologyType                     , only : soilhydrology_type
+  use EMI_DataMod                           , only : emi_data_list, emi_data
+  use EMI_DataDimensionMod                  , only : emi_data_dimension_list_type
+  use SoilHydrologyType    , only : soilhydrology_type
   use EMI_Atm2LndType_Constants
   use EMI_CanopyStateType_Constants
   use EMI_ChemStateType_Constants
+  use EMI_CNCarbonStateType_Constants
+  use EMI_CNNitrogenStateType_Constants
+  use EMI_CNNitrogenFluxType_Constants
+  use EMI_CNCarbonFluxType_Constants
+  use EMI_ColumnEnergyStateType_Constants
+  use EMI_ColumnWaterStateType_Constants
+  use EMI_ColumnWaterFluxType_Constants
   use EMI_EnergyFluxType_Constants
   use EMI_SoilHydrologyType_Constants
   use EMI_SoilStateType_Constants
@@ -36,7 +43,7 @@ contains
     ! Pack data from ALM soilhydrology_vars for EM
     !
     ! !USES:
-    use elm_varpar             , only : nlevsoi, nlevgrnd, nlevsno
+    use elm_varpar             , only : nlevgrnd
     !
     implicit none
     !
@@ -48,16 +55,16 @@ contains
     type(soilhydrology_type) , intent(in) :: soilhydrology_vars
     !
     ! !LOCAL_VARIABLES:
-    integer                             :: fc,c,j
+    integer                             :: fc,c,j,k
     class(emi_data), pointer            :: cur_data
     logical                             :: need_to_pack
     integer                             :: istage
     integer                             :: count
 
     associate(& 
-         zwt      => soilhydrology_vars%zwt_col      , &
-         qflx_bot => soilhydrology_vars%qflx_bot_col , &
-         fracice  => soilhydrology_vars%fracice_col    &
+         zwt_col      => soilhydrology_vars%zwt_col      , &
+         qflx_bot_col => soilhydrology_vars%qflx_bot_col , &
+         fracice_col  => soilhydrology_vars%fracice_col    &
          )
 
     count = 0
@@ -81,14 +88,14 @@ contains
           case (L2E_STATE_WTD)
              do fc = 1, num_filter
                 c = filter(fc)
-                cur_data%data_real_1d(c) = zwt(c)
+                cur_data%data_real_1d(c) = zwt_col(c)
              enddo
              cur_data%is_set = .true.
 
           case (L2E_STATE_QCHARGE)
              do fc = 1, num_filter
                 c = filter(fc)
-                cur_data%data_real_1d(c) = qflx_bot(c)
+                cur_data%data_real_1d(c) = qflx_bot_col(c)
              enddo
              cur_data%is_set = .true.
 
@@ -96,7 +103,7 @@ contains
              do fc = 1, num_filter
                 c = filter(fc)
                 do j = 1, nlevgrnd
-                   cur_data%data_real_2d(c,j) = fracice(c,j)
+                   cur_data%data_real_2d(c,j) = fracice_col(c,j)
                 enddo
              enddo
              cur_data%is_set = .true.
@@ -120,7 +127,6 @@ contains
     ! Unpack data for ALM soilhydrology_vars from EM
     !
     ! !USES:
-    use elm_varpar             , only : nlevsoi, nlevgrnd, nlevsno
     !
     implicit none
     !
@@ -132,15 +138,15 @@ contains
     type(soilhydrology_type) , intent(in) :: soilhydrology_vars
     !
     ! !LOCAL_VARIABLES:
-    integer                             :: fc,c,j
+    integer                             :: fc,c,j,k
     class(emi_data), pointer            :: cur_data
     logical                             :: need_to_pack
     integer                             :: istage
     integer                             :: count
 
     associate(& 
-         zwt     => soilhydrology_vars%zwt_col     , &
-         qcharge => soilhydrology_vars%qcharge_col   &
+         zwt_col     => soilhydrology_vars%zwt_col     , &
+         qcharge_col => soilhydrology_vars%qcharge_col   &
          )
 
     count = 0
@@ -164,14 +170,14 @@ contains
           case (E2L_STATE_WTD)
              do fc = 1, num_filter
                 c = filter(fc)
-                zwt(c) = cur_data%data_real_1d(c)
+                zwt_col(c) = cur_data%data_real_1d(c)
              enddo
              cur_data%is_set = .true.
 
           case (E2L_FLUX_AQUIFER_RECHARGE)
              do fc = 1, num_filter
                 c = filter(fc)
-                qcharge(c) = cur_data%data_real_1d(c)
+                qcharge_col(c) = cur_data%data_real_1d(c)
              enddo
              cur_data%is_set = .true.
 

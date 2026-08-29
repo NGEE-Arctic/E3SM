@@ -49,9 +49,14 @@ module CNPBudgetMod
   integer, parameter :: f_prod100c_loss        =  7
   integer, parameter :: f_som_c_leached        =  8
   integer, parameter :: f_som_c_yield          =  9
-  integer, parameter :: f_dwt_conv_cflux       = 10
-  integer, parameter :: f_dwt_seedc_to_leaf    = 11
-  integer, parameter :: f_dwt_seedc_to_deadstem= 12
+  integer, parameter :: f_DOC_runoff           = 10
+  integer, parameter :: f_DIC_runoff           = 11
+  integer, parameter :: f_CH4_flux             = 12
+  integer, parameter :: f_dwt_conv_cflux       = 13
+  integer, parameter :: f_dwt_seedc_to_leaf    = 14
+  integer, parameter :: f_dwt_seedc_to_deadstem= 15
+  
+
 
   integer, parameter, public :: c_f_size = f_dwt_seedc_to_deadstem
 
@@ -66,6 +71,9 @@ module CNPBudgetMod
        '      decomposition loss from 100-year product pool', &
        '                 SOM C loss from vertical transport', &
        '                                         SOM C loss', &
+       '                                        DOC leached', &
+       '                                        DIC leached', &
+       '                             CH4 flux to atmosphere', &
        '          flux to atmosphere due to dynamic weights', &
        '         seed source to leaf due to dynamic weights', &
        '   seed source to dead steam due to dynamic weights'  &
@@ -73,27 +81,27 @@ module CNPBudgetMod
        
        
   ! N inputs
-  integer, parameter :: f_ndep_to_sminn        = 13
-  integer, parameter :: f_nfix_to_ecosysn      = 14
-  integer, parameter :: f_nfix_to_sminn        = 15
-  integer, parameter :: f_supplement_to_sminn  = 16
-  integer, parameter :: f_fert_to_sminn        = 17
-  integer, parameter :: f_soyfixn_to_sminn     = 18
-  integer, parameter :: f_supplement_to_plantn = 19
-  integer, parameter :: f_nfert_dose           = 20
+  integer, parameter :: f_ndep_to_sminn        = 16
+  integer, parameter :: f_nfix_to_ecosysn      = 17
+  integer, parameter :: f_nfix_to_sminn        = 18
+  integer, parameter :: f_supplement_to_sminn  = 19
+  integer, parameter :: f_fert_to_sminn        = 20
+  integer, parameter :: f_soyfixn_to_sminn     = 21
+  integer, parameter :: f_supplement_to_plantn = 22
+  integer, parameter :: f_nfert_dose           = 23
 
   ! N outputs
-  integer, parameter :: f_denit                = 21
-  integer, parameter :: f_fire_ploss           = 22
-  integer, parameter :: f_n2o_nit              = 23
-  integer, parameter :: f_smin_no3_leached     = 24
-  integer, parameter :: f_smin_no3_runoff      = 25
-  integer, parameter :: f_sminn_leached        = 26
-  integer, parameter :: f_col_prod1n_loss      = 27
-  integer, parameter :: f_col_prod10n_loss     = 28
-  integer, parameter :: f_col_prod100n_loss    = 29
-  integer, parameter :: f_som_n_leached        = 30
-  integer, parameter :: f_som_n_yield          = 31
+  integer, parameter :: f_denit                = 24
+  integer, parameter :: f_fire_ploss           = 25
+  integer, parameter :: f_n2o_nit              = 26
+  integer, parameter :: f_smin_no3_leached     = 27
+  integer, parameter :: f_smin_no3_runoff      = 28
+  integer, parameter :: f_sminn_leached        = 29
+  integer, parameter :: f_col_prod1n_loss      = 30
+  integer, parameter :: f_col_prod10n_loss     = 31
+  integer, parameter :: f_col_prod100n_loss    = 32
+  integer, parameter :: f_som_n_leached        = 33
+  integer, parameter :: f_som_n_yield          = 34
 
   integer, parameter, public :: n_f_size = f_som_n_yield - f_dwt_seedc_to_deadstem
 
@@ -121,24 +129,24 @@ module CNPBudgetMod
        /)
 
   ! P inputs
-  integer, parameter :: f_primp_to_labilep     = 32
-  integer, parameter :: f_supplement_to_sminp  = 33
-  integer, parameter :: f_supplement_to_plantp = 34
-  integer, parameter :: f_pfert_dose           = 35
+  integer, parameter :: f_primp_to_labilep     = 35
+  integer, parameter :: f_supplement_to_sminp  = 36
+  integer, parameter :: f_supplement_to_plantp = 37
+  integer, parameter :: f_pfert_dose           = 38
 
   ! P outputs
-  integer, parameter :: f_secondp_to_occlp     = 36
-  integer, parameter :: f_sminp_leached        = 37
-  integer, parameter :: f_col_fire_ploss       = 38
-  integer, parameter :: f_solutionp            = 39
-  integer, parameter :: f_labilep              = 40
-  integer, parameter :: f_secondp              = 41
-  integer, parameter :: f_col_prod1p_loss      = 42
-  integer, parameter :: f_col_prod10p_loss     = 43
-  integer, parameter :: f_col_prod100p_loss    = 44
-  integer, parameter :: f_som_p_yield          = 45
-  integer, parameter :: f_labilep_yield        = 46
-  integer, parameter :: f_secondp_yield        = 47
+  integer, parameter :: f_secondp_to_occlp     = 39
+  integer, parameter :: f_sminp_leached        = 40
+  integer, parameter :: f_col_fire_ploss       = 41
+  integer, parameter :: f_solutionp            = 42
+  integer, parameter :: f_labilep              = 43
+  integer, parameter :: f_secondp              = 44
+  integer, parameter :: f_col_prod1p_loss      = 45
+  integer, parameter :: f_col_prod10p_loss     = 46
+  integer, parameter :: f_col_prod100p_loss    = 47
+  integer, parameter :: f_som_p_yield          = 48
+  integer, parameter :: f_labilep_yield        = 49
+  integer, parameter :: f_secondp_yield        = 50
 
   integer, parameter, public :: p_f_size = f_secondp_yield - f_som_n_yield
 
@@ -663,6 +671,9 @@ contains
          nf = f_dwt_conv_cflux        ; budg_fluxL(nf,ip) = budg_fluxL(nf,ip) - grc_dwt_conv_cflux(g)        *af
          nf = f_dwt_seedc_to_leaf     ; budg_fluxL(nf,ip) = budg_fluxL(nf,ip) + grc_dwt_seedc_to_leaf(g)     *af
          nf = f_dwt_seedc_to_deadstem ; budg_fluxL(nf,ip) = budg_fluxL(nf,ip) + grc_dwt_seedc_to_deadstem(g) *af
+         nf = f_DOC_runoff            ; budg_fluxL(nf,ip) = budg_fluxL(nf,ip) - grc_cf%DOC_runoff(g)         *af
+         nf = f_DIC_runoff            ; budg_fluxL(nf,ip) = budg_fluxL(nf,ip) - grc_cf%DIC_runoff(g)         *af
+         nf = f_CH4_flux              ; budg_fluxL(nf,ip) = budg_fluxL(nf,ip) - grc_cf%ch4flux(g)            *af
 
          ! states
          ns = s_totc_beg              ; budg_stateL(ns,ip) = budg_stateL(ns,ip) + beg_totc(g)              *af
