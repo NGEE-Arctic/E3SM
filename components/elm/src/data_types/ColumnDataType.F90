@@ -511,7 +511,6 @@ module ColumnDataType
     real(r8), pointer :: qflx_gross_infl_soil (:)   => null() ! gross infiltration, before considering the evaporation
     real(r8), pointer :: qflx_adv             (:,:) => null() ! advective flux across different soil layer interfaces [mm H2O/s] [+ downward]
     real(r8), pointer :: qflx_rootsoi         (:,:) => null() ! root and soil water exchange [mm H2O/s] [+ into root]
-    real(r8), pointer :: qflx_tran_veg_sat    (:)   => null() ! Transpiration from saturated zone
     real(r8), pointer :: dwb                  (:)   => null() !  water mass change [+ increase] [mm H2O/s]
     real(r8), pointer :: qflx_infl            (:)   => null() ! infiltration (mm H2O /s)
     real(r8), pointer :: qflx_surf            (:)   => null() ! surface runoff (mm H2O /s)
@@ -6154,7 +6153,6 @@ contains
     allocate(this%qflx_gross_infl_soil   (begc:endc))             ; this%qflx_gross_infl_soil (:)   = spval
     allocate(this%qflx_adv               (begc:endc,0:nlevgrnd))  ; this%qflx_adv             (:,:) = spval
     allocate(this%qflx_rootsoi           (begc:endc,1:nlevgrnd))  ; this%qflx_rootsoi         (:,:) = spval
-    allocate(this%qflx_tran_veg_sat      (begc:endc))             ; this%qflx_tran_veg_sat    (:)   = spval
     allocate(this%dwb                    (begc:endc))             ; this%dwb                  (:)   = spval
     allocate(this%qflx_infl              (begc:endc))             ; this%qflx_infl            (:)   = spval
     allocate(this%qflx_surf              (begc:endc))             ; this%qflx_surf            (:)   = spval
@@ -6451,6 +6449,7 @@ contains
     end do
 
     ! TAI
+    this%qflx_adv          (begc:endc,0:nlevgrnd) = 0._r8
     this%qflx_drain_vr     (begc:endc,1:nlevgrnd) = 0._r8
     this%qflx_lat_aqu      (begc:endc)            = 0._r8
     this%qflx_lat_aqu_layer(begc:endc,1:nlevgrnd) = 0._r8
