@@ -67,6 +67,9 @@ Module SoilHydrologyType
      real(r8), pointer :: ice_col           (:,:)   => null()! col VIC soil ice (kg/m2) for VIC soil layers
      real(r8), pointer :: fover             (:)     => null()! decay factor for surface runoff
      real(r8), pointer :: pc                (:)     => null()! surface water threshold probability
+     ! Tidal
+     real(r8), pointer :: ht_above_stream   (:)     => null()! Column height difference from stream
+     real(r8), pointer :: dist_from_stream  (:)     => null()! Column distance from stream
 
      real(r8), pointer :: ar_col            (:,:)   => null()! col anisotropic ratio
 
@@ -163,6 +166,10 @@ contains
     allocate(this%pc                (begg:endg))                 ; this%pc                (:)     = spval
 
     allocate(this%ar_col            (begc:endc,nlevgrnd))        ; this%ar_col            (:,:)   = 25.0_r8
+    ! TAI
+    allocate(this%ht_above_stream   (begc:endc))                 ; this%ht_above_stream   (:)   = spval
+    allocate(this%dist_from_stream  (begc:endc))                 ; this%dist_from_stream  (:)   = spval
+
 
   end subroutine InitAllocate
 

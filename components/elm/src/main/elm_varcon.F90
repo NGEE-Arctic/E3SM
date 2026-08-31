@@ -11,6 +11,7 @@ module elm_varcon
   use shr_const_mod , only: SHR_CONST_CPICE,SHR_CONST_CPDAIR,SHR_CONST_LATVAP
   use shr_const_mod , only: SHR_CONST_LATSUB,SHR_CONST_LATICE,SHR_CONST_RHOFW
   use shr_const_mod , only: SHR_CONST_RHOICE,SHR_CONST_TKFRZ,SHR_CONST_REARTH
+  use shr_const_mod , only: SHR_CONST_TKFRZSW
   use shr_const_mod , only: SHR_CONST_PDB, SHR_CONST_PI, SHR_CONST_CDAY
   use shr_const_mod , only: SHR_CONST_RGAS
   use elm_varpar    , only: numrad, nlevgrnd, nlevlak, nlevdecomp_full
@@ -62,6 +63,7 @@ module elm_varcon
   real(r8) :: tkice  = 2.290_r8                             ! thermal conductivity of ice   [W/m/K]
   real(r8) :: tkwat  = 0.57_r8                              ! thermal conductivity of water [W/m/K]
   real(r8), parameter :: tfrz   = SHR_CONST_TKFRZ                      ! freezing temperature [K]
+  real(r8), parameter :: tfrzsw = SHR_CONST_TKFRZSW         ! freezing temperature of saltwater [K]
   real(r8), parameter :: tcrit  = 2.5_r8                    ! critical temperature to determine rain or snow
   real(r8) :: o2_molar_const = 0.209_r8                     ! constant atmospheric O2 molar ratio (mol/mol)
   real(r8) :: oneatm = 1.01325e5_r8                         ! one standard atmospheric pressure [Pa]

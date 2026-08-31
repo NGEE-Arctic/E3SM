@@ -454,6 +454,7 @@ module ColumnDataType
     real(r8), pointer :: eflx_hs_top_snow        (:)   => null() ! heat flux on top snow layer (W/m2)
     real(r8), pointer :: eflx_hs_soil            (:)   => null() ! heat flux on soil [W/m2
     real(r8), pointer :: eflx_sabg_lyr           (:,:) => null() ! absorbed solar radiation (col,lyr) (W/m2)
+    real(r8), pointer :: eflx_sh_tide            (:)   => null() !sensible heat flux from tide
     ! Derivatives of energy fluxes
     real(r8), pointer :: eflx_dhsdT              (:)   => null() ! deriv. of energy flux into surface layer wrt temp (W/m2/K)
     ! Latent heat terms
@@ -510,6 +511,7 @@ module ColumnDataType
     real(r8), pointer :: qflx_gross_infl_soil (:)   => null() ! gross infiltration, before considering the evaporation
     real(r8), pointer :: qflx_adv             (:,:) => null() ! advective flux across different soil layer interfaces [mm H2O/s] [+ downward]
     real(r8), pointer :: qflx_rootsoi         (:,:) => null() ! root and soil water exchange [mm H2O/s] [+ into root]
+    real(r8), pointer :: qflx_tran_veg_sat    (:)   => null() ! Transpiration from saturated zone
     real(r8), pointer :: dwb                  (:)   => null() !  water mass change [+ increase] [mm H2O/s]
     real(r8), pointer :: qflx_infl            (:)   => null() ! infiltration (mm H2O /s)
     real(r8), pointer :: qflx_surf            (:)   => null() ! surface runoff (mm H2O /s)
@@ -5970,6 +5972,8 @@ contains
     allocate(this%errseb               (begc:endc))              ; this%errseb               (:)   = spval
     allocate(this%errsol               (begc:endc))              ; this%errsol               (:)   = spval
     allocate(this%errlon               (begc:endc))              ; this%errlon               (:)   = spval
+    ! TAI
+    allocate(this%eflx_sh_tide         (begc:endc))              ; this%eflx_sh_tide         (:)   = spval
 
     !-----------------------------------------------------------------------
     ! initialize history fields for select members of col_ef
@@ -6039,6 +6043,11 @@ contains
           avgflag='A', long_name='phase-change temperature increment before resetting layer to freezing point', &
           ptr_col=this%tinc, default='active')
 
+    this%eflx_sh_tide(begc:endc) = spval
+     call hist_addfld1d (fname='SH_TIDE', units='watt/m^2', &
+          avgflag='A', long_name='Heat flux at interface of TAI', &
+           ptr_col=this%eflx_sh_tide, default='inactive')
+
     this%errsoi(begc:endc) = spval
      call hist_addfld1d (fname='ERRSOI',  units='W/m^2',  &
           avgflag='A', long_name='soil/lake energy conservation error', &
@@ -6058,6 +6067,8 @@ contains
           this%eflx_urban_ac(c)      = 0._r8
           this%eflx_urban_heat(c)    = 0._r8
        end if
+       ! TAI
+       this%eflx_sh_tide(c)          = 0._r8
     end do
 
     this%tinc(begc:endc,:)  = 0._r8
@@ -6143,6 +6154,7 @@ contains
     allocate(this%qflx_gross_infl_soil   (begc:endc))             ; this%qflx_gross_infl_soil (:)   = spval
     allocate(this%qflx_adv               (begc:endc,0:nlevgrnd))  ; this%qflx_adv             (:,:) = spval
     allocate(this%qflx_rootsoi           (begc:endc,1:nlevgrnd))  ; this%qflx_rootsoi         (:,:) = spval
+    allocate(this%qflx_tran_veg_sat      (begc:endc))             ; this%qflx_tran_veg_sat    (:)   = spval
     allocate(this%dwb                    (begc:endc))             ; this%dwb                  (:)   = spval
     allocate(this%qflx_infl              (begc:endc))             ; this%qflx_infl            (:)   = spval
     allocate(this%qflx_surf              (begc:endc))             ; this%qflx_surf            (:)   = spval

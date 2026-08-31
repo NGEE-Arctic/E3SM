@@ -564,6 +564,7 @@ module elm_varctl
    character(len=fname_len), public :: metdata_biases = ' '    ! met biases files for CPL_BYPASS mode
    character(len=fname_len), public :: co2_file       = ' '    ! co2 file for CPL_BYPASS mode
    character(len=fname_len), public :: aero_file      = ' '    ! aerosol deposition file for CPL_BYPASS mode
+   character(len=fname_len), public :: tide_file      = ' '    ! Tide height and salinity for CPL_BYPASS
 
   !$acc declare create(use_fates)
 

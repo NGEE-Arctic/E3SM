@@ -164,6 +164,15 @@ module VegetationPropertiesType
      real(r8), pointer :: crit_gdd1(:)     => null()   !Deciduous pheonlogy critical GDD intercept
      real(r8), pointer :: crit_gdd2(:)     => null()   !Deciduous pheonlogy critical GDD slope
 
+     !salinity response parameters
+     real(r8), allocatable :: sal_threshold(:)       !Threshold for salinity effects (ppt)
+     real(r8), allocatable :: sal_opt(:)             !Salinity at which optimal biomass occurs (ppt)
+     real(r8), allocatable :: sal_tol(:)             !Salinity tolerance; width parameter for Gaussian distribution (ppt -1)
+
+     real(r8), allocatable :: waterlevel_threshold(:)       !Threshold for water level effects (mm above soil surface)
+     real(r8), allocatable :: waterlevel_opt(:)             !Water level at which optimal biomass occurs (mm)
+     real(r8), allocatable :: waterlevel_tol(:)             !Water level tolerance; width parameter for Gaussian distribution (mm)
+
    contains
    procedure, public :: Init => veg_vp_init
 
@@ -207,6 +216,7 @@ contains
     use pftvarcon , only : crit_gdd1, crit_gdd2
     ! snow/vegetation interactions (NGEE Arctic IM3)
     use pftvarcon , only : bendresist, stocking, vegshape, taper
+    use pftvarcon , only : sal_threshold, sal_opt, sal_tol, waterlevel_threshold, waterlevel_opt, waterlevel_tol
     !
 
     class (vegetation_properties_type) :: this
@@ -349,6 +359,14 @@ contains
     allocate(this%vegshape(0:numpft))                            ; this%vegshape(:)              =spval
     allocate(this%stocking(0:numpft))                            ; this%stocking(:)              =spval
     allocate(this%taper(0:numpft))                               ; this%taper(:)                 =spval
+ 
+    allocate( this%sal_threshold(0:numpft))                      ; this%sal_threshold(:)         =spval
+    allocate( this%sal_opt(0:numpft))                            ; this%sal_opt(:)               =spval
+    allocate( this%sal_tol(0:numpft))                            ; this%sal_tol(:)               =spval
+
+    allocate( this%waterlevel_threshold(0:numpft))               ; this%waterlevel_threshold(:)  =spval
+    allocate( this%waterlevel_opt(0:numpft))                     ; this%waterlevel_opt(:)        =spval
+    allocate( this%waterlevel_tol(0:numpft))                     ; this%waterlevel_tol(:)        =spval
 
     do m = 0,numpft
 
@@ -471,6 +489,13 @@ contains
         this%vmax_nfix(m)      = vmax_nfix(m)
         this%km_nfix(m)        = km_nfix(m)
         this%vmax_ptase(m)     = vmax_ptase(m)
+
+        this%sal_threshold(m)  = sal_threshold(m)
+        this%sal_opt(m)        = sal_opt(m)
+        this%sal_tol(m)        = sal_tol(m)
+        this%waterlevel_threshold(m)  = waterlevel_threshold(m)
+        this%waterlevel_opt(m)        = waterlevel_opt(m)
+        this%waterlevel_tol(m)        = waterlevel_tol(m)
 
         do j = 1 , nlevdecomp
            this%decompmicc_patch_vr(m,j) = decompmicc_patch_vr(j,m)

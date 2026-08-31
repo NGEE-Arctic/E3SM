@@ -99,6 +99,8 @@ module elm_varpar
   character(len=256), public, parameter :: elmfates_carbon_only = 'carbon_only'
   character(len=256), public, parameter :: elmfates_cnp         = 'cnp'
   
+  integer, parameter :: max_tide_coeffs = 37 ! Number in NOAA tide tables
+
   ! constants for decomposition cascade
 
   integer :: i_met_lit 
