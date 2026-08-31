@@ -617,6 +617,9 @@ contains
          g = col_pp%gridcell(c)
          ! check for near zero slopes, set minimum value
          col_pp%topo_slope(c) = max(tslope(g), 0.2_r8)
+#if (defined MARSH) 
+         col_pp%topo_slope(c) = max(tslope(g), 0.2e-5_r8)
+#endif
       end do
       deallocate(tslope)
 

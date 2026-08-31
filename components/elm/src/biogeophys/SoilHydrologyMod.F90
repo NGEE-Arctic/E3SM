@@ -313,6 +313,12 @@ contains
      use subgridAveMod    , only : c2g
      use abortutils       , only : endrun
      use elm_time_manager , only : get_curr_date, get_curr_time
+#ifdef MARSH
+      use pftvarcon       , only : num_tide_comps, tide_baseline,tide_coeff_period, tide_coeff_phase, tide_coeff_amp
+      use pftvarcon       , only : sfcflow_ratescale, qflx_h2osfc_surfrate
+      use elm_varctl      , only : tide_file
+#endif
+     use elm_time_manager , only : get_step_size
      use elm_varcon       , only : secspday
      !
      ! !ARGUMENTS:
@@ -367,6 +373,24 @@ contains
      real(r8) :: top_icefrac                                ! temporary, ice fraction in top VIC layers
      real(r8) :: h2osoi_left_vol1                           ! temporary, available volume in the first soil layer
      real(r8) :: pc                                         ! temporary, threhold for surface water storage to outflow
+
+     ! variables for MARSH
+     real(r8) :: dzmm(bounds%begc:bounds%endc,1:nlevsoi)   ! layer thickness (mm)
+     real(r8) :: ka_up, zwt_up
+     real(r8) :: s_node
+     integer  :: jwt(bounds%begc:bounds%endc)
+     integer  :: yr, mon, day, tod               !
+     integer  :: days, seconds               !
+     integer  :: ii
+     !-----------------------------------------------------------------------
+     ! BAM additions for gradual snow/ice control (11/12/25)
+     !-----------------------------------------------------------------------
+     real(r8), parameter :: snow_full  = 0.10_r8   ! [m] snow depth below which full tidal forcing allowed
+     real(r8), parameter :: snow_none  = 0.15_r8   ! [m] snow depth above which no forcing
+     real(r8), parameter :: ice_free   = 0.25_r8   ! [-] icefrac below which full forcing
+     real(r8), parameter :: ice_frozen = 0.40_r8   ! [-] icefrac above which no forcing
+
+     real(r8) :: snow_factor, ice_factor, forcing_factor
      !-----------------------------------------------------------------------
 
      associate(                                                    &
@@ -456,6 +480,34 @@ contains
              icefrac(c,j) = min(1._r8,vol_ice(c,j)/watsat(c,j))
           end do
        end do
+
+#ifdef MARSH
+       do j = 1,nlevbed
+          do fc = 1, num_hydrologyc
+             c = filter_hydrologyc(fc)
+             dzmm(c,j) = dz(c,j)*1.e3_r8
+          end do
+       end do
+       ka_up = 0._r8
+
+       !compute jwt index
+       ! The layer index of the first unsaturated layer, i.e., the layer right
+       ! above the water table
+
+       do fc = 1, num_hydrologyc
+          c = filter_hydrologyc(fc)
+          jwt(c) = nlevbed
+          qflx_lat_aqu(c) = 0._r8
+          qflx_tide(c) = 0._r8
+          ! allow jwt to equal zero when zwt is in top layer
+          do j = 1,nlevbed
+             if(zwt(c) <= zi(c,j)) then
+                jwt(c) = j-1
+                exit
+             end if
+          enddo
+       enddo
+#endif
 
        do fc = 1, num_hydrologyc
           c  = filter_hydrologyc(fc)
@@ -613,6 +665,12 @@ contains
                 
              else
                 ! limit runoff to value of storage above S(pc)
+#ifdef MARSH
+                qflx_tide(c) = 0._r8
+                if (h2osfc(c) .gt. 0._r8) then
+                   qflx_h2osfc_surf(c) = min(qflx_h2osfc_surfrate*h2osfc(c)**2.0_r8,h2osfc(c) / dtime)
+                endif
+#endif
                 if(h2osfc(c) >= h2osfc_thresh(c) .and. h2osfcflag/=0) then
                    ! spatially variable k_wet
                    k_wet=1.0_r8 * sin((rpi/180._r8) * col_pp%topo_slope(c))
@@ -664,6 +722,119 @@ contains
              if(h2osfcflag==0) then
                 qflx_h2osfc_drain(c)= max(0._r8,h2osfc(c)/dtime) !ensure no h2osfc
              endif
+
+#ifdef MARSH
+               call get_curr_time(days, seconds)
+               h2osfc_tide(c) = 0.0_r8
+               if(tide_file .ne. ' ') then
+#ifdef CPL_BYPASS
+                  ! If external forcing tide file is specified then use that via coupler bypass
+                  ! At some point should make this so it doesn't require bypass (can use normal coupler)
+                  ! Indexing assumes that tide forcing is a time series of hourly values
+                  ! Time dimension is tricky if it could be gridded or not... 
+                  h2osfc_tide(c) = (atm2lnd_vars%tide_height(g,1+mod(int((days*secspday+seconds)/3600),atm2lnd_vars%tide_forcing_len)))*1000 !convert m to mm
+                  col_ws%salinity(c) = atm2lnd_vars%tide_salinity(g,1+mod(int((days*secspday+seconds)/3600),atm2lnd_vars%tide_forcing_len))
+                  salinity(c) = col_ws%salinity(c)
+                  col_ws%nitrate_tide(c) = atm2lnd_vars%tide_nitrate(g,1+mod(int((days*secspday+seconds)/3600),atm2lnd_vars%tide_forcing_len))
+                  ! write(iulog,*) h2osfc_tide
+                  ! write(iulog,*),'grid cell',g,'column',c,'tide_height',h2osfc_tide(c),'salinity',col_ws%salinity(c)
+#endif
+               else
+                  do ii=1,num_tide_comps
+                     h2osfc_tide(c) = h2osfc_tide(c) + tide_coeff_amp(ii) * sin(2.0_r8*SHR_CONST_PI*(1/tide_coeff_period(ii)*(days*secspday+seconds) + tide_coeff_phase(ii)))
+                  enddo
+               endif
+
+                h2osfc_tide(c) = h2osfc_tide(c) + tide_baseline - ht_above_stream(c)*1000._r8
+                ! Limit h2osfc_tide to above bedrock level
+                h2osfc_tide(c) = max(h2osfc_tide(c),-zi(c,nlevbed-1)*1000_r8)
+
+               !compute lateral subsurface flux
+               if (jwt(c) .lt. nlevbed) then
+                  do j=nlevbed,jwt(c)+1,-1
+                  s_node = max(h2osoi_vol(c,j)/watsat(c,j), 0.01_r8)
+                  s_node = min(1.0_r8, s_node)
+                  s1 = 0.5_r8*(1.0+s_node)
+                  s1 = min(1._r8, s1)
+                  ! for upland flow into tidal channel
+                  ka_up = ka_up+(hksat(c,j)*s1**(2._r8*bsw(c,j)+3._r8))* &
+                           dzmm(c,j)/sum(dzmm(c,jwt(c)+1:nlevbed))
+                  end do
+               else
+                  s_node = max(h2osoi_vol(c,jwt(c))/watsat(c,jwt(c)), 0.01_r8)
+                  s_node = min(1.0_r8, s_node)
+                  s1 = 0.5_r8*(1.0+s_node)
+                  s1 = min(1._r8, s1)
+                  ! for upland flow into tidal channel
+                  ka_up = ka_up+(hksat(c,jwt(c))*s1**(2._r8*bsw(c,jwt(c))+3._r8))
+               end if
+               ka_up = max(ka_up, 1e-5_r8)
+
+               zwt_up = zwt(c)
+               zwt_up = zwt_up - h2osfc(c)/1000._r8
+
+
+               !-----------------------------------------------------------------------
+               ! Gradual snow + ice control on tidal water forcing for polygonal tundra (BAM 11/12/25)
+               !-----------------------------------------------------------------------
+               
+               ! safety precaution: ensure qflx_lat_aqu is reset to 0 before calculating just in case
+               qflx_lat_aqu(c) = 0._r8
+               
+               ! Snow factor ramps from 1 to 0 as snow depth increases from snow_full to snow_none
+               if (snow_depth(c) <= snow_full) then
+                  snow_factor = 1._r8
+               else if (snow_depth(c) >= snow_none) then
+                  snow_factor = 0._r8
+               else
+                  snow_factor = 1._r8 - (snow_depth(c) - snow_full) / (snow_none - snow_full)
+               endif
+
+               ! Ice factor ramps from 1 to 0 as ice fraction increases from ice_free to ice_frozen
+               if (icefrac(c,2) <= ice_free) then
+                  ice_factor = 1._r8
+               else if (icefrac(c,2) >= ice_frozen) then
+                  ice_factor = 0._r8
+               else
+                  ice_factor = 1._r8 - (icefrac(c,2) - ice_free) / (ice_frozen - ice_free)
+               endif
+
+               ! Combined forcing factor (0 = off, 1 = full forcing)
+               forcing_factor = max(0._r8, min(1._r8, snow_factor * ice_factor))
+
+               !compute base lateral flux before applying the forcing_factor adjustments
+               qflx_lat_aqu(c) = 2._r8 * ka_up * (h2osfc_tide(c)/1000._r8 - (h2osfc(c)/1000._r8 - zwt(c))) / max(dist_from_stream(c), 1.0_r8)
+
+               ! Apply forcing factor to calculated base lateral subsurface flux
+               ! this scales both inflow and outflow (meaning can be +-)
+               !qflx_lat_aqu(c) = forcing_factor * qflx_lat_aqu(c)!if forcing_factor is small but non-0 having this here dramtically weakens base flux before applying the below surface-based correction terms
+               ! For dry polygons (negative tide height), only allow drainage, not inflow
+               if (h2osfc_tide(c) < 0._r8 .and. qflx_lat_aqu(c) > 0._r8) then
+                  qflx_lat_aqu(c) = 0._r8
+               endif
+
+               ! --- Apply gradual control to lateral water flux ---
+               if (forcing_factor > 0._r8) then
+                  if (h2osfc_tide(c) > 0._r8 .and. h2osfc_tide(c) > h2osfc(c)) then
+                     qflx_lat_aqu(c) = qflx_lat_aqu(c) + forcing_factor * &
+                        min((h2osfc_tide(c) - h2osfc(c)) * sfcflow_ratescale, h2osfc_tide(c) * 0.5_r8 / dtime)
+                  else if (h2osfc(c) > 0._r8 .and. h2osfc(c) > h2osfc_tide(c)) then
+                     qflx_lat_aqu(c) = qflx_lat_aqu(c)- &
+                        min((h2osfc(c) - h2osfc_tide(c)) * sfcflow_ratescale, h2osfc(c) * 0.5_r8 / dtime)
+                  else
+                     qflx_lat_aqu(c) = 0._r8
+                  endif
+               else
+                  ! Frozen or deep snow OR no tidal forcing connection (dry polygons) -> drain slowly (prevent pond buildup)
+                  if (h2osfc(c) > 0._r8) then
+                     qflx_lat_aqu(c) = - min(h2osfc(c) * sfcflow_ratescale, h2osfc(c) * 0.5_r8 / dtime)
+                  else
+                     qflx_lat_aqu(c) = 0._r8
+                  endif
+               endif
+                
+#endif
+
 
              !7. remove drainage from h2osfc and add to qflx_infl
              h2osfc(c) = h2osfc(c) - qflx_h2osfc_drain(c) * dtime
@@ -825,6 +996,8 @@ contains
      real(r8) :: q_perch_max
      real(r8) :: dflag=0._r8
      real(r8) :: qcharge_temp
+     real(r8) :: qflx_lat_aqu_tot
+     integer  :: days, seconds  
      !-----------------------------------------------------------------------
 
      associate(                                                            &
@@ -853,6 +1026,14 @@ contains
 
           qflx_irrig         =>    col_wf%qflx_irrig         , & ! Input:  [real(r8) (:)   ]  irrigation flux (mm H2O /s)
           qflx_grnd_irrig_col=>    col_wf%qflx_grnd_irrig    , & ! Output: [real(r8) (:)   ]  col real groundwater irrigation flux (mm H2O /s)
+                        
+#ifdef MARSH
+          icefrac            =>    soilhydrology_vars%icefrac_col      , &  !Output: [real(r8) (:,:) ]      
+          qflx_surf_input    =>    col_wf%qflx_surf_input    , & ! Output: [real(r8) (:,:) ] surface runoff input to hollow (mmH2O/s)
+          qflx_lat_aqu       =>    col_wf%qflx_lat_aqu       , & ! Output: [real(r8) (:,:) ] total lateral flow
+          qflx_lat_aqu_layer =>    col_wf%qflx_lat_aqu_layer , & ! Output: [real(r8) (:,:) ] lateral flow for each layer
+          qflx_tide          =>    col_wf%qflx_tide          , & ! Output: [real(r8) (:,:) ]
+#endif
 
           zwt                =>    soilhydrology_vars%zwt_col            , & ! Output: [real(r8) (:)   ]  water table depth (m)
           zwt_perched        =>    soilhydrology_vars%zwt_perched_col    , & ! Output: [real(r8) (:)   ]  perched water table depth (m)
@@ -987,6 +1168,105 @@ contains
           endif
           qcharge(c) = qcharge_temp
        enddo
+
+#ifdef MARSH
+       !Compute lateral fluxes between Hummock and Hollow (code by XS)
+       ! Water table changes due to lateral flux between hommock and hollow in aquifer
+       do fc = 1, num_hydrologyc
+           c = filter_hydrologyc(fc)
+
+           qflx_lat_aqu_layer(c,:) = 0.0
+    
+       ! use analytical expression for aquifer specific yield
+             rous = watsat(c,nlevbed) &
+                  * ( 1. - (1.+1.e3*zwt(c)/sucsat(c,nlevbed))**(-1./bsw(c,nlevbed)))
+             rous=max(rous,0.02_r8)
+    
+             qflx_rsub_sat(c) = 0._r8
+       !-  water table is below the soil column -----------------------------------
+             if(jwt(c) == nlevbed) then
+              if (qflx_lat_aqu(c).gt.0._r8) then
+                wa(c)  = wa(c) + qflx_lat_aqu(c) * dtime
+               !wt(c)  = wa(c)
+                zwt(c) = zwt(c) - (qflx_lat_aqu(c) * dtime)/1000._r8/rous
+                h2osoi_liq(c,nlevbed) =  h2osoi_liq(c,nlevbed)+max(0._r8,(wa(c)-5000._r8))
+              wa(c)  = min(wa(c), 5000._r8)
+            else
+              wa(c)  = wa(c) + qflx_lat_aqu(c) * dtime
+             !wt(c)  = wa(c)
+              zwt(c) = zwt(c) - qflx_lat_aqu(c) *dtime/1000._r8/rous
+              h2osoi_liq(c,nlevbed) =h2osoi_liq(c,nlevbed)+max(0._r8,(wa(c)-5000._r8))
+             wa(c)  = min(wa(c), 5000._r8)
+           endif
+          else
+   !-- water table within soil layers 1-9  -------------------------------------
+   ! try to raise water table to account for lateral flux qflx_lat_aqu
+             qflx_lat_aqu_tot = qflx_lat_aqu(c)  * dtime
+             if(qflx_lat_aqu_tot > 0.) then !rising water table
+                do j = jwt(c)+1, 1,-1
+   ! use analytical expression for specific yield
+                   s_y = watsat(c,j) &
+                       * ( 1. -  (1.+1.e3*zwt(c)/sucsat(c,j))**(-1./bsw(c,j)))
+                   s_y=max(s_y,0.02_r8)
+   
+                   qflx_lat_aqu_layer(c,j)=min(qflx_lat_aqu_tot,(s_y*(zwt(c) - zi(c,j-1))*1.e3))
+                   qflx_lat_aqu_layer(c,j)=max(qflx_lat_aqu_layer(c,j),0._r8)
+                   h2osoi_liq(c,j) = h2osoi_liq(c,j) + qflx_lat_aqu_layer(c,j)
+                   qflx_lat_aqu_tot = qflx_lat_aqu_tot - qflx_lat_aqu_layer(c,j)
+                   !new code test DMR 4/29/13
+                   if(s_y > 0._r8) zwt(c) = zwt(c) - qflx_lat_aqu_layer(c,j)/s_y/1000._r8
+                   if (qflx_lat_aqu_tot <= 0.) then
+                     exit
+                   else if (j .eq. 1) then
+                       ! if (c .eq. 2) then !hollow:  send excess to surface water
+                          h2osfc(c) = h2osfc(c) + qflx_lat_aqu_tot !DMR 6/13/13
+                       ! else               !hummock:  send to drainage
+                       !   qflx_rsub_sat(c) = qflx_lat_aqu_tot / dtime
+                       ! end if
+                   end if
+                 end do
+              else ! deepening water table (negative lateral flux)
+                !Remove from surface water first if available
+                if (h2osfc(c) .gt. 0) then ! .and. maxval(icefrac(c,1:jwt(c)+1)) .le. 0.9) then
+                  h2osfc(c) = h2osfc(c) + qflx_lat_aqu_tot
+                  qflx_lat_aqu_tot = 0._r8
+                  if (h2osfc(c) .lt. 0) then
+                    qflx_lat_aqu_tot = h2osfc(c)
+                    h2osfc(c) = 0._r8 
+                  end if
+                end if
+                do j = jwt(c)+1, nlevbed
+   
+   ! use analytical expression for specific yield
+                   s_y = watsat(c,j) &
+                        * ( 1. -  (1.+1.e3*zwt(c)/sucsat(c,j))**(-1./bsw(c,j)))
+                   s_y=max(s_y,0.02_r8)
+                   qflx_lat_aqu_layer(c,j)=max(qflx_lat_aqu_tot,-(s_y*(zi(c,j) - zwt(c))*1.e3))
+                   qflx_lat_aqu_layer(c,j)=min(qflx_lat_aqu_layer(c,j),0._r8)
+                   h2osoi_liq(c,j) = h2osoi_liq(c,j) + qflx_lat_aqu_layer(c,j)
+                   qflx_lat_aqu_tot = qflx_lat_aqu_tot - qflx_lat_aqu_layer(c,j)
+   
+                   if (qflx_lat_aqu_tot >= 0.) then
+                      zwt(c) = zwt(c) - qflx_lat_aqu_layer(c,j)/s_y/1000._r8
+                      exit
+                   else
+                      zwt(c) = zi(c,j)
+                   endif
+                enddo
+                if (qflx_lat_aqu_tot > 0.) zwt(c) = zwt(c) - qflx_lat_aqu_tot/1000._r8/rous
+             endif
+   !-- recompute jwt for following calculations  ---------------------------------
+   ! allow jwt to equal zero when zwt is in top layer
+             jwt(c) = nlevbed
+             do j = 1,nlevbed
+                if(zwt(c) <= zi(c,j)) then
+                   jwt(c) = j-1
+                   exit
+                end if
+             enddo
+          endif
+       enddo
+#endif
 
 
        !==  BASEFLOW ==================================================
@@ -1240,6 +1520,13 @@ contains
           qflx_drain_vr      =>    col_wf%qflx_drain_vr      , & ! Output: [real(r8) (:)   ] sub-surface runoff (mm H2O /time step)
 
           h2osoi_liq         =>    col_ws%h2osoi_liq        , & ! Output: [real(r8) (:,:) ] liquid water (kg/m2)
+#ifdef MARSH
+          qflx_surf_input    =>    col_wf%qflx_surf_input      , & ! Output: [real(r8) (:,:) ] surface runoff input to hollow (mmH2O/s)
+          qflx_lat_aqu       =>    col_wf%qflx_lat_aqu         , & ! Output: [real(r8) (:,:) ] total lateral flow
+          qflx_lat_aqu_layer =>    col_wf%qflx_lat_aqu_layer   , & ! Output: [real(r8) (:,:) ] lateral flow for each layer
+          qflx_adv           =>    col_wf%qflx_adv             , & ! Input:  [real(r8) (:,:) ] vertical water flux between layers (mm/s)
+          !salinity           =>    col_ws%salinity             , & ! Input:  [real(r8) (:,:)   ] salinity concentration (ppt)
+#endif
           h2osoi_ice         =>    col_ws%h2osoi_ice          & ! Output: [real(r8) (:,:) ] ice lens (kg/m2)
           )
 
@@ -1478,6 +1765,9 @@ contains
                         - exp(-3._r8))/(1.0_r8-exp(-3._r8))
                    imped=(1._r8 - fracice_rsub(c))
                    rsub_top_max = 5.5e-3_r8
+#if (defined MARSH)                   
+                   rsub_top_max = rsub_top_globalmax
+#endif
                 end if
              else
                 if (use_vichydro) then

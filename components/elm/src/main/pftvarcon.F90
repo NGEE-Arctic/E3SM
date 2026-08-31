@@ -408,6 +408,7 @@ contains
     integer :: noncropmax       ! max non-crop pft index (to check when 'create_crop_landunit' is true)
     real(r8) :: local_iscft      ! a local transfer of iscft from logical to integer for use in error checks
     character(len=32) :: subname = 'pftconrd'              ! subroutine name
+    character(len=256):: tempname                          ! For use in reading parameter names from netcdf file
     !
     ! Expected PFT names: The names expected on the paramfile file and the order they are expected to be in.
     ! NOTE: similar types are assumed to be together, first trees (ending with broadleaf_deciduous_boreal_tree
@@ -1111,6 +1112,57 @@ contains
     call ncd_io('rsub_top_globalmax', rsub_top_globalmax, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if (.not. readv) rsub_top_globalmax = 10._r8
     !if ( .not. readv) call endrun(msg='ERROR:  error in reading in pft data'//errMsg(__FILE__,__LINE__))
+
+#ifdef MARSH
+    ! Tidal cycle parameters
+    ! Defaults from Teri's hard coded numbers
+    ! Multiple parameters specified in params file like tide_coeff_amp_1, tide_coeff_amp_2, ...
+    call ncd_io('tide_baseline',tide_baseline, 'read', ncid, readvar=readv, posNOTonfile=.true.)
+    if (.not. readv) tide_baseline = 0.0_r8
+    do i=1,max_tide_coeffs
+      write(tempname,'(I0)') i
+      call ncd_io('tide_coeff_amp_'//trim(tempname),tide_coeff_amp(i), 'read', ncid, readvar=readv, posNOTonfile=.true.)
+      if (.not. readv) then
+         ! write(iulog,*) "Stopped looking for tidal components after not finding ",'tide_coeff_amp_'//trim(tempname)
+         num_tide_comps=i-1
+         exit
+      else
+         num_tide_comps=i
+      endif
+      call ncd_io('tide_coeff_period_'//trim(tempname),tide_coeff_period(i), 'read', ncid, readvar=readv, posNOTonfile=.true.)
+      if (.not. readv) call endrun(msg="Error: Must specify amp, period, and phase for each tide component: i = "//trim(tempname))
+      call ncd_io('tide_coeff_phase_'//trim(tempname),tide_coeff_phase(i), 'read', ncid, readvar=readv, posNOTonfile=.true.)
+      if (.not. readv) call endrun(msg="Error: Must specify amp, period, and phase for each tide component: i = "//trim(tempname))
+   enddo
+   if(num_tide_comps == 0) then
+      ! write(iulog,*) "No tidal coefficients found in parameter file. 
+      ! Using Teri's 2-component fit values for GCREW site as default"
+      num_tide_comps = 1
+      tide_coeff_amp(1) = 0.0_r8
+      tide_coeff_period(1) = 1.0_r8/0.00003_r8
+      tide_coeff_phase(1) = 0.0_r8
+   endif
+   call ncd_io('sfcflow_ratescale',sfcflow_ratescale, 'read', ncid, readvar=readv, posNOTonfile=.true.)
+   if (.not. readv) sfcflow_ratescale = 7.0e-5_r8 ! Probably better to have default be zero for safety
+   call ncd_io('qflx_h2osfc_surfrate', qflx_h2osfc_surfrate, 'read', ncid, readvar=readv, posNOTonfile=.true.)
+   if ( .not. readv) qflx_h2osfc_surfrate = 1.0e-7_r8
+
+   ! salinity parameters
+   call ncd_io('sal_threshold', sal_threshold(:), 'read', ncid, readvar=readv, posNOTonfile=.true.)
+   if ( .not. readv ) sal_threshold(:) = 50.0e6_r8         !placeholder value for now - update with more accurate
+   call ncd_io('sal_opt', sal_opt(:), 'read', ncid, readvar=readv, posNOTonfile=.true.)
+   if ( .not. readv ) sal_opt(:) = 0.0_r8 
+   call ncd_io('sal_tol', sal_tol(:), 'read', ncid, readvar=readv, posNOTonfile=.true.)
+   if ( .not. readv ) sal_tol(:) = 50.0_r8 
+
+   call ncd_io('waterlevel_threshold', waterlevel_threshold(:), 'read', ncid, readvar=readv, posNOTonfile=.true.)
+   if ( .not. readv ) waterlevel_threshold(:) = 50.0e6_r8 ! Default turned off with very deep surface water
+   call ncd_io('waterlevel_opt', waterlevel_opt(:), 'read', ncid, readvar=readv, posNOTonfile=.true.)
+   if ( .not. readv ) waterlevel_opt(:) = 0.0_r8 
+   call ncd_io('waterlevel_tol', waterlevel_tol(:), 'read', ncid, readvar=readv, posNOTonfile=.true.)
+   if ( .not. readv ) waterlevel_tol(:) = 50.0_r8 
+#endif
+
     call ncd_io('fnr', fnr, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv) call endrun(msg='ERROR:  error in reading in pft data'//errMsg(__FILE__,__LINE__))
     call ncd_io('act25', act25, 'read', ncid, readvar=readv, posNOTonfile=.true.)
