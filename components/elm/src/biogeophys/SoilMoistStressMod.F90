@@ -305,6 +305,7 @@ contains
   !--------------------------------------------------------------------------------
   subroutine calc_root_moist_stress_clm45default(bounds, &
        nlevgrnd, fn, filterp, rootfr_unf, &
+       soilhydrology_vars, &
        soilstate_vars, energyflux_vars)
     !
     ! DESCRIPTIONS
@@ -318,8 +319,10 @@ contains
     use VegetationPropertiesType     , only : veg_vp
     use SoilStateType        , only : soilstate_type
     use EnergyFluxType       , only : energyflux_type
-    use VegetationType            , only : veg_pp
-    use elm_varctl       , only : use_hydrstress
+    use VegetationType       , only : veg_pp
+    use VegetationDataType   , only : veg_wf
+    use elm_varctl           , only : use_hydrstress
+    use SoilHydrologyType    , only : soilhydrology_type
     !
     ! !ARGUMENTS:
     implicit none
@@ -330,11 +333,13 @@ contains
     real(r8)               , intent(in)    :: rootfr_unf(bounds%begp: , 1: )
     type(energyflux_type)  , intent(inout) :: energyflux_vars
     type(soilstate_type)   , intent(inout) :: soilstate_vars
+    type(soilhydrology_type),intent(in)    :: soilhydrology_vars
     !
     ! !LOCAL VARIABLES:
     real(r8), parameter :: btran0 = 0.0_r8  ! initial value
     real(r8) :: smp_node, s_node  !temporary variables
     real(r8) :: smp_node_lf       !temporary variable
+    real(r8) :: waterlevel        ! Combining surface water/water table for plant stress
     integer :: p, f, j, c, l      !indices
     !------------------------------------------------------------------------------
 
@@ -357,6 +362,15 @@ contains
          btran2        => energyflux_vars%btran2_patch      , & ! Output: [real(r8) (:)   ]  integrated soil water stress square
          rresis        => energyflux_vars%rresis_patch      , & ! Output: [real(r8) (:,:) ]  root soil water stress (resistance) by layer (0-1)  (nlevgrnd)
 
+#ifdef MARSH
+         sal_opt       => veg_vp%sal_opt                       , & ! Input: [real(r8) (:) ] Salinity at which optimal biomass occurs (ppt)
+         sal_tol       => veg_vp%sal_tol                       , & ! Input: [real(r8) (:) ] Salinity tolerance; width parameter for Gaussian distribution (ppt -1)
+         sal_threshold => veg_vp%sal_threshold                 , & ! Input: [real(r8) (:) ] Threshold for salinity effects (ppt)
+         osm_inhib     => veg_wf%osm_inhib                     , & ! Input: [real(r8) (:) ] osmotic inhibition factor
+         floodf        => veg_wf%floodf                        , & ! Input: [real(r8) (:) ] Flood factor to reduce growth when plants submerged
+         h2osfc        => col_ws%h2osfc                        , & ! Input: [real(r8) (:) ] surface water (mm)
+         salinity      => col_ws%salinity                      , & ! Input: [real(r8) (:) ] Salinity concentration ppt
+#endif
          h2osoi_vol    => col_ws%h2osoi_vol    , & ! Input:  [real(r8) (:,:) ]  volumetric soil water (0<=h2osoi_vol<=watsat) [m3/m3]
          h2osoi_liqvol => col_ws%h2osoi_liqvol   & ! Output: [real(r8) (:,:) ]  liquid volumetric moisture, will be used for BeTR
          )
@@ -380,6 +394,28 @@ contains
 
                rresis(p,j) = min( (eff_porosity(c,j)/watsat(c,j))* &
                     (smp_node - smpsc(veg_pp%itype(p))) / (smpso(veg_pp%itype(p)) - smpsc(veg_pp%itype(p))), 1._r8)
+
+#ifdef MARSH
+               ! Using osm_inhib to change root uptake representing osmotic salinity stress
+               ! Otherwise, with tidal code salinity of the adjacent water body is used
+                  if (salinity(c) .ge. sal_threshold(veg_pp%itype(p))) then
+                     osm_inhib(p) = exp(-0.5*((salinity(c)-sal_opt(veg_pp%itype(p)))/sal_tol(veg_pp%itype(p)))**2._r8)
+                     rresis(p,j) = rresis(p,j)*osm_inhib(p)
+                  endif
+
+               !use floodf to change root water uptake as a function of water level
+               !to represent saturation/inundation stress
+               if(h2osfc(c) .gt. 0._r8) then
+                  waterlevel = h2osfc(c) ! mm, with positive meaning above soil surface
+               else
+                  waterlevel = - soilhydrology_vars%zwt_col(c)*1000_r8
+               endif
+               if (waterlevel .gt. veg_vp%waterlevel_threshold(veg_pp%itype(p))) then
+                  floodf(p) = exp(-0.5*((waterlevel-veg_vp%waterlevel_opt(veg_pp%itype(p)))/veg_vp%waterlevel_tol(veg_pp%itype(p)))**2._r8)
+                  rresis(p,j) = rresis(p,j)*floodf(p)        
+               endif
+#endif
+
                if (.not. (perchroot .or. perchroot_alt) ) then
                   rootr(p,j) = rootfr(p,j)*rresis(p,j)
                else
@@ -422,6 +458,7 @@ contains
 
   !--------------------------------------------------------------------------------
   subroutine calc_root_moist_stress(bounds, nlevgrnd, fn, filterp, &
+       soilhydrology_vars, &
        canopystate_vars, energyflux_vars,  soilstate_vars)
     !
     ! DESCRIPTIONS
@@ -435,6 +472,7 @@ contains
     use CanopyStateType , only : canopystate_type
     use EnergyFluxType  , only : energyflux_type
     use SoilStateType   , only : soilstate_type
+    use SoilHydrologyType   , only : soilhydrology_type
     !
     ! !ARGUMENTS:
     implicit none
@@ -445,6 +483,7 @@ contains
     type(canopystate_type) , intent(in)    :: canopystate_vars
     type(energyflux_type)  , intent(inout) :: energyflux_vars
     type(soilstate_type)   , intent(inout) :: soilstate_vars
+    type(soilhydrology_type)   , intent(inout) :: soilhydrology_vars
     !
     ! !LOCAL VARIABLES:
     integer :: p, f, j, c, l                                   ! indices
@@ -475,6 +514,7 @@ contains
             filterp = filterp,                          &
             energyflux_vars=energyflux_vars,            &
             soilstate_vars=soilstate_vars,              &
+            soilhydrology_vars=soilhydrology_vars,      &
             rootfr_unf=rootfr_unf(bounds%begp:bounds%endp,1:nlevgrnd))
 
     case default
