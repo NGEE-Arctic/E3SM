@@ -799,7 +799,7 @@ contains
             filter(nc)%num_nolakeurbanp, filter(nc)%nolakeurbanp,                        &
             atm2lnd_vars, canopystate_vars, cnstate_vars, energyflux_vars,               &
             frictionvel_vars, soilstate_vars, solarabs_vars, surfalb_vars,               &
-            ch4_vars, photosyns_vars )
+            ch4_vars, photosyns_vars, soilhydrology_vars)
        call t_stopf('canflux')
 
        ! Fluxes for all urban landunits
