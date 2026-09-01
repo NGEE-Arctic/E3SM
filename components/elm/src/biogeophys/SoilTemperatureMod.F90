@@ -1579,13 +1579,25 @@ contains
 
 
 
-               if (h2osoi_ice(c,j) > 0. .AND. t_soisno(c,j) > tfrz) then
-                  imelt(c,j) = 1
-                  !             tinc(c,j) = t_soisno(c,j) - tfrz
-                  tinc(c,j) = tfrz - t_soisno(c,j)
-                  t_soisno(c,j) = tfrz
-               endif
+               if (t_soisno(c,j) > tfrz) then
 
+                  if (h2osoi_ice(c,j) > 0._r8) then
+                     imelt(c,j) = 1
+
+                  else if (use_polygonal_tundra .and. &
+                           lun_pp%ispolygon(l) .and. &
+                           excess_ice(c,j) > 0._r8) then
+                     imelt(c,j) = 1
+
+                  endif
+
+                  if (imelt(c,j) == 1) then
+                     tinc(c,j) = tfrz - t_soisno(c,j)
+                     t_soisno(c,j) = tfrz
+                  endif
+
+               endif
+               
                ! from Zhao (1997) and Koren (1999)
                supercool(c,j) = 0.0_r8
                if (col_pp%is_soil(c) .or. col_pp%is_crop(c) .or. col_pp%itype(c) == icol_road_perv) then
