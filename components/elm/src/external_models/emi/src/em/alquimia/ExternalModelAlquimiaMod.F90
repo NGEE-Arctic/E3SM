@@ -1278,6 +1278,7 @@ end subroutine EMAlquimia_Coldstart
               ! Step the chemistry solver, including advection/diffusion and timestep cutting capability for whole column
               ! Need to set surface and lateral boundary condition concentrations
           ! Surface boundary condition should be atmosphere unless there is surface water?
+          ! Lateral boundary condition in MARSH mode would be saltwater if we are in the marsh column
           ! If we're in the tidal column and we want to keep track, it's concentrations in water flowing out of the marsh... Makes it trickier
           ! Need to save lateral flow for C balance
               surf_flux(:) = 0.0_r8 ! Positive means into soil
@@ -1292,6 +1293,49 @@ end subroutine EMAlquimia_Coldstart
               ! write(iulog,*),__LINE__,'lat_flow',qflx_lat_aqu_l2e(c,:)/dt
               ! This changes total_mobile_l2e so we need to make sure we aren't using that for conservation checks
 
+#ifdef MARSH
+              ! Set lateral (tidal flooding) and surface (infiltration) boundary conditions for salinity
+              ! Boundary conditions are in mol/m3 of H2O (NOT mol/L). Salinity in parts per thousand (g/kg = g/L = kg/m3)
+              ! 1 ppt = 1000 g salt/m3 water / (35.453 g Cl/mol Cl * 1.8066 g salt/g Cl)
+              if(this%chloride_pool_number>0) then
+                lat_bc(this%chloride_pool_number) = flood_salinity_l2e(c)/(35.453*.0018066_r8)
+                if (this%sulfate_pool_number>0) then
+                  lat_bc(this%sulfate_pool_number) = flood_salinity_l2e(c)/.0018066_r8*0.14_r8/96.06_r8 ! Ratio from Jiaze's manuscript
+                endif
+                if(this%sodium_pool_number>0) lat_bc(this%sodium_pool_number) = flood_salinity_l2e(c)/.0018066_r8*0.5769_r8/22.989_r8
+                if(this%sulfide_pool_number>0) lat_bc(this%sulfide_pool_number) = flood_salinity_l2e(c)/.0018066_r8*1e-9_r8/33.1_r8
+                ! Assuming ocean water pH is 8 at salinity of 30 and freshwater pH is 6 at salinity of zero !BAM adjusted to 7 for true neutral
+                if(this%Hplus_pool_number>0) lat_bc(this%Hplus_pool_number) = 10**(-(7+flood_salinity_l2e(c)*2.0/30.0))
+                
+                if(this%NO3_pool_number>0) lat_bc(this%NO3_pool_number) = flood_nitrate_l2e(c)*1000
+
+                ! Need to distinguish between tidal flooding and rainfall infiltration. Doing based on h2osfc but not sure if that's correct
+                ! Now that we have tide height info, we could use that instead. But this won't be correct while tide is going down
+                if (h2osfc_l2e(c)>0) then
+                  surf_bc(this%chloride_pool_number) = flood_salinity_l2e(c)/(35.453*.0018066_r8)
+                  if (this%sulfate_pool_number>0) then
+                    surf_bc(this%sulfate_pool_number) = flood_salinity_l2e(c)/.0018066_r8*0.14_r8/96.06_r8 ! Ratio from Jiaze's manuscript
+                  endif
+                  if(this%sodium_pool_number>0) surf_bc(this%sodium_pool_number) = flood_salinity_l2e(c)/.0018066_r8*0.5769_r8/22.989_r8
+                  if(this%sulfide_pool_number>0) surf_bc(this%sulfide_pool_number) = flood_salinity_l2e(c)/.0018066_r8*1e-9_r8/33.1_r8
+                  if(this%Hplus_pool_number>0) surf_bc(this%Hplus_pool_number) = 10**(-(6+flood_salinity_l2e(c)*2.0/30.0))
+                  
+                  if(this%NO3_pool_number>0) surf_bc(this%NO3_pool_number) = flood_nitrate_l2e(c)*1000
+                else
+                  surf_bc(this%chloride_pool_number) = 0.0_r8
+                  if (this%sulfate_pool_number>0) then
+                    surf_bc(this%sulfate_pool_number) = 0.0_r8
+                  endif
+                  if(this%sodium_pool_number>0) surf_bc(this%sodium_pool_number) = 0.0_r8
+                  if(this%sulfide_pool_number>0) surf_bc(this%sulfide_pool_number) = 0.0_r8
+                  if(this%Hplus_pool_number>0) surf_bc(this%Hplus_pool_number) = 10**(-(7+0.0_r8*2.0/30.0))
+
+                endif
+
+              endif
+
+              ! if (c .ne. 2) then ! skip chemistry for the tidal channel column
+#endif
               ! Limit velocity of vertical water flux to 1 cm/hour for now (for purposes of advection)
               ! do j = 0, nlevdecomp 
               !   if(qflx_adv_l2e(c,j) > 10.0/dt) then
