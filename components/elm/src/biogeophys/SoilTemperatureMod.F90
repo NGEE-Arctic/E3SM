@@ -1581,9 +1581,17 @@ contains
 
                if (t_soisno(c,j) > tfrz) then
 
-                  if (h2osoi_ice(c,j) > 0._r8 .or. excess_ice(c,j) > 0._r8) then
+                  if (h2osoi_ice(c,j) > 0._r8) then
                      imelt(c,j) = 1
-                     
+
+                  else if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
+                     ! excess_ice is allocated only for polygonal tundra; guard
+                     ! the access so the unallocated pointer is never read when
+                     ! polygonal tundra is disabled
+                     if (excess_ice(c,j) > 0._r8) then
+                        imelt(c,j) = 1
+                     end if
+
                   endif
 
                   if (imelt(c,j) == 1) then
