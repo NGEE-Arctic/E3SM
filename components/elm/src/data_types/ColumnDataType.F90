@@ -1885,6 +1885,9 @@ contains
        this%h2osoi_ice_old(c,:) = this%h2osoi_ice(c,:)
        if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
          ! Initialize volumetric fraction to 36%
+         ! This estimate comes from field observations on the AK north slope
+         ! Future development should replace this with best available ground
+         ! ice maps.
          this%excess_ice_volfrac(c,:) = 0.36_r8
          
          ! Convert to mass (kg/m2)
@@ -1894,7 +1897,7 @@ contains
          
          this%iwp_subsidence(c) = 0._r8
          
-         ! set initial microtopographic parameters
+         ! set initial microtopographic parameters derived from high-res ATS simulations
          if (lun_pp%polygontype(l) .eq. ilowcenpoly) then
             this%iwp_microrel(c) = 0.4_r8
             this%iwp_exclvol(c) = 0.2_r8
