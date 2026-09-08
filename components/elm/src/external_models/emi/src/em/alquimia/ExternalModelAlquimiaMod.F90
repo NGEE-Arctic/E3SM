@@ -79,7 +79,6 @@ module ExternalModelAlquimiaMod
     integer :: index_l2e_state_tide_height
     integer :: index_l2e_state_flood_salinity
     integer :: index_l2e_state_flood_nitrate
-    integer :: index_l2e_flux_qflx_drain
     
     ! Solve data returned to land model
     integer :: index_e2l_state_decomp_cpools
@@ -385,15 +384,15 @@ contains
     ! Water flow
     id                                   = L2E_FLUX_SOIL_QFLX_ADV_COL
     call l2e_list%AddDataByID(id, number_em_stages, em_stages, index)
-    this%index_l2e_flux_qflx_adv      = index
+    this%index_l2e_flux_qflx_adv         = index
 
     id                                   = L2E_FLUX_SOIL_QFLX_LAT_COL
     call l2e_list%AddDataByID(id, number_em_stages, em_stages, index)
     this%index_l2e_flux_qflx_lat_aqu_layer      = index
 
-    id                                   = L2E_FLUX_SOIL_QFLX_DRAIN_VR
-    call l2e_list%AddDataByID(id, number_em_stages, em_stages, index)
-    this%index_l2e_flux_qflx_drain       = index
+    !id                                   = L2E_FLUX_SOIL_QFLX_DRAIN_VR
+    !call l2e_list%AddDataByID(id, number_em_stages, em_stages, index)
+    !this%index_l2e_flux_qflx_drain       = index
 
     id                                   = L2E_STATE_SALINITY_COL
     call l2e_list%AddDataByID(id, number_em_stages, em_stages, index)
@@ -1060,7 +1059,7 @@ contains
     integer                              :: max_cuts
 
     real(r8) , pointer, dimension(:,:)   :: porosity_l2e
-    real(r8) , pointer, dimension(:,:)   :: qflx_adv_l2e, qflx_lat_aqu_l2e, qflx_drain_l2e
+    real(r8) , pointer, dimension(:,:)   :: qflx_adv_l2e, qflx_lat_aqu_l2e
     real(r8) , pointer, dimension(:)     :: h2osfc_l2e, wtd_l2e, tide_height_l2e
     real(r8) , pointer, dimension(:)     :: flood_salinity_l2e, flood_nitrate_l2e
 
@@ -1103,7 +1102,10 @@ contains
     real(r8)                             :: DON_before, excess_NO3_uptake, excess_NH4_uptake
     real(r8)                             :: totalC_before, totalN_before, totalC_after, totalN_after
     real(r8)                             :: Nflux, Cflux
-    real(r8) , dimension(nlevdecomp)     :: liq_frac
+
+    real(r8) , dimension(nlevdecomp)     :: liq_frac, total_sat
+    real(r8) , dimension(nlevdecomp+1)   :: qflx_adv_tmp
+    real(r8) , dimension(nlevdecomp)     :: qflx_lat_aqu_tmp
 
     ! Setting these to the values in PFLOTRAN clm_rspfuncs.F90
     real(r8), parameter                  :: natomw = 14.0067d0 ! Value in clmvarcon is 14.007
@@ -1140,7 +1142,6 @@ contains
     call l2e_list%GetPointerToReal2D(this%index_l2e_state_temperature_soil , temperature)       ! K
     call l2e_list%GetPointerToReal2D(this%index_l2e_state_h2osoi_liqvol,     h2o_liqvol)        ! m3/m3
     call l2e_list%GetPointerToReal2D(this%index_l2e_state_h2osoi_icevol,     h2o_icevol)        ! m3/m3
-    ! call l2e_list%GetPointerToReal2D(this%index_l2e_state_h2osoi_ice,      h2o_ice)           ! kg/m2
 
     ! Pool turnover rate constants calculated in ELM, incorporating T and moisture effects (1/s)
     call l2e_list%GetPointerToReal3D(this%index_l2e_soil_pool_decomp_k, decomp_k)
@@ -1148,7 +1149,6 @@ contains
     call l2e_list%GetPointerToReal2D(this%index_l2e_flux_plantNdemand,       plantNdemand_l2e)
     call l2e_list%GetPointerToReal2D(this%index_l2e_flux_qflx_adv,           qflx_adv_l2e)
     call l2e_list%GetPointerToReal2D(this%index_l2e_flux_qflx_lat_aqu_layer, qflx_lat_aqu_l2e) ! ELM units are mm/m2 (integrated over time step)
-    call l2e_list%GetPointerToReal2D(this%index_l2e_flux_qflx_drain,         qflx_drain_l2e)
 
     call l2e_list%GetPointerToReal1D(this%index_l2e_state_wtd,               wtd_l2e)
     call l2e_list%GetPointerToReal1D(this%index_l2e_state_h2osfc,            h2osfc_l2e)
@@ -1356,10 +1356,14 @@ contains
              endif
 
              ! Reset diagnostic N immobilization, mineralization
-             if(this%Nimm_pool_number>0) total_immobile_l2e(c,j,this%Nimm_pool_number) = minval
-             if(this%Nimp_pool_number>0) total_immobile_l2e(c,j,this%Nimp_pool_number) = minval
-             if(this%Nmin_pool_number>0) total_immobile_l2e(c,j,this%Nmin_pool_number) = minval
-
+             if(this%hrimm_pool_number>0) total_immobile_l2e(c,j,this%hrimm_pool_number) = minval
+             if(this%hrimm_pool_number>0) total_mobile_l2e(c,j,this%hrimm_pool_number)   = minval
+             if(this%Nimm_pool_number>0) total_immobile_l2e(c,j,this%Nimm_pool_number)   = minval
+             if(this%Nimm_pool_number>0) total_mobile_l2e(c,j,this%Nimm_pool_number)     = minval
+             if(this%Nimp_pool_number>0) total_immobile_l2e(c,j,this%Nimp_pool_number)   = minval
+             if(this%Nimp_pool_number>0) total_mobile_l2e(c,j,this%Nimp_pool_number)     = minval
+             if(this%Nmin_pool_number>0) total_immobile_l2e(c,j,this%Nmin_pool_number)   = minval
+             if(this%Nmin_pool_number>0) total_mobile_l2e(c,j,this%Nmin_pool_number)     = minval
              if(this%plantNO3uptake_pool_number>0) total_immobile_l2e(c,j,this%plantNO3uptake_pool_number) = minval
              if(this%plantNO3uptake_pool_number>0) total_mobile_l2e(c,j,this%plantNO3uptake_pool_number)   = minval
              if(this%plantNH4uptake_pool_number>0) total_immobile_l2e(c,j,this%plantNH4uptake_pool_number) = minval
@@ -1381,8 +1385,10 @@ contains
 
              if(h2o_liqvol(c,j)+h2o_icevol(c,j)>0) then
                 liq_frac(j) = h2o_liqvol(c,j)/(h2o_liqvol(c,j)+h2o_icevol(c,j))
+                total_sat(j)= (h2o_liqvol(c,j)+h2o_icevol(c,j))/porosity_l2e(c,j)
              else
                 liq_frac(j) = 0.0_r8
+                total_sat(j) = 0.0_r8
              endif
 
              do k=1, this%chem_sizes%num_primary
@@ -1468,68 +1474,35 @@ contains
        ! Limit velocity of vertical water flux to 1 cm/hour for now (for purposes of advection)
        ! Higher velocities tend to produce negative solute concentrations and crash the model
        ! (TODO: needs further thinking)
-       ! do j = 0, nlevdecomp
-       !   if(qflx_adv_l2e(c,j) > 10.0/dt) then
-       !     qflx_adv_l2e(c,j) = 10.0/dt
-       !   elseif(qflx_adv_l2e(c,j) < -10.0/dt) then
-       !     qflx_adv_l2e(c,j) = -10.0/dt
-       !   endif
-       !   ! Enforce a small downward flow
-       !   ! if(abs(qflx_adv_l2e(c,j))<1e-4)  qflx_adv_l2e(c,j) = 1e-4_r8
-       ! enddo
-
-       ! Add subsurface drainage flux to bottom layer of lateral flow
-       ! write(iulog,*) 'QFLX_DRAIN',qflx_drain_l2e(c,1:nlevdecomp)*dt
-       ! write(iulog,*) 'QFLX_LAT_AQU',qflx_lat_aqu_l2e(c,1:nlevdecomp)*dt
-       ! Lateral flow and drainage both calculated in hydrology from the top down. But maybe in reality
-       ! it makes more sense to drain from the bottom up, or from the tide water level up.
-       ! Maybe lateral drainage is faster above tide level? Currently still doing from the top down.
-       ! qflx_lat_aqu_l2e(c,1:nlevdecomp) = qflx_lat_aqu_l2e(c,1:nlevdecomp) - qflx_drain_l2e(c,1:nlevdecomp)
-
-       ! Probably makes more sense to do hydrology stuff in the hydrology modules... Here for now
-       ! Above tide level, 75% of tide-driven outgoing lateral flux goes laterally from layer and 25% goes downward and out the next lower layer (compounding)
-       ! This actually seems to make the high-salinity problem worse, if anything though...
-       ! do k=1,nlevdecomp-1
-       !   if(zi(c,k+1)>-1e-3_r8*tide_height_l2e(c)) exit
-       ! enddo
-       ! do j=1,k
-       !   if(qflx_lat_aqu_l2e(c,j) < 0.0_r8) then
-       !     qflx_lat_aqu_l2e(c,j+1) = qflx_lat_aqu_l2e(c,j+1) + qflx_lat_aqu_l2e(c,j)*0.25
-       !     qflx_adv_l2e(c,j) = qflx_adv_l2e(c,j) + qflx_lat_aqu_l2e(c,j)*0.25/dt
-       !     qflx_lat_aqu_l2e(c,j) = qflx_lat_aqu_l2e(c,j) - qflx_lat_aqu_l2e(c,j)*0.25
-       !   endif
-       ! enddo
-
-       qflx_adv_l2e(c,1:nlevdecomp-1) = max(sum(qflx_drain_l2e(c,1:nlevdecomp))/dt,-10.0/dt)
-       qflx_adv_l2e(c,nlevdecomp)     = 0.0_r8
-       qflx_adv_l2e(c,0)              = max(min(qflx_adv_l2e(c,0),sum(qflx_drain_l2e(c,1:nlevdecomp))/dt),-10.0/dt)
-
-       ! Do drainage above frozen layer
-       do j=1,nlevdecomp
-            if((h2o_liqvol(c,j))/porosity_l2e(c,j)<0.7_r8 .or. (liq_frac(j)<0.5)) then
-                 qflx_adv_l2e(c,j) = 0.0_r8
-            endif
-            qflx_lat_aqu_l2e(c,j) = qflx_lat_aqu_l2e(c,j) - (qflx_adv_l2e(c,j-1)-qflx_adv_l2e(c,j))*dt
+       qflx_adv_tmp(:) = 0._r8
+       do j = 0, nlevdecomp
+          if(qflx_adv_l2e(c,j) > 10.0/dt) then
+            qflx_adv_tmp(j+1) = -10.0/dt
+          elseif(qflx_adv_l2e(c,j) < -10.0/dt) then
+            qflx_adv_tmp(j+1) = 10.0/dt
+          else
+            qflx_adv_tmp(j+1) = - qflx_adv_l2e(c,j)
+          endif
+          !! Enforce a small downward flow
+          !! if(abs(qflx_adv_l2e(c,j))<1e-4)  qflx_adv_l2e(c,j) = 1e-4_r8
        enddo
 
+       qflx_lat_aqu_tmp(:) = 0._r8
+       do j=1,nlevdecomp
+            ! Do transport in layers over a critical liq. water fraction or saturation
+            if((h2o_liqvol(c,j))/porosity_l2e(c,j)<0.7_r8 .or. (liq_frac(j)<0.5_r8)) then
+                 qflx_adv_l2e(c,j) = 0.0_r8
+            endif
 
-
-       ! Problem: in elm_driver, vertical water movement and lateral (tidal) flow are calculated, then BGC, then drainage.
-       ! So including drainage here is inconsistent order of operations (actually applying drainage from previous time step)
-
-              ! Enforce some groundwater exchange by adding a small drainage flux that increases with depth
-              ! Not sure if this is actually a good idea – would be better to actually have hydrology right
-              ! Realistically there should be some inputs so some species (like H+) don't get too depleted
-              ! From talking with Saubhagya, probably we should have a freshwater inflow boundary condition
-              ! do j = 0, nlevdecomp
-              !   qflx_lat_aqu_l2e(c,j) = qflx_lat_aqu_l2e(c,j) - 1.0e-5*dt * dz(c,j)
-              ! enddo
+           !
+           qflx_lat_aqu_tmp(j) = qflx_lat_aqu_l2e(c,j) ! /dt ! NOT SURE if divided by dt here
+       enddo
 
        call run_column_onestep(this, &
                   dt,       &
                   0,        &
                   max_cuts, &
-                  !
+                  ! bgc
                   water_density_l2e(c,:),    &
                   aqueous_pressure_l2e(c,:), &
                   total_mobile_l2e(c,:,:),   &
@@ -1541,14 +1514,14 @@ contains
                   cation_exchange_capacity_l2e(c,:,:),      &
                   aux_doubles_l2e(c,:,:),   &
                   aux_ints_l2e(c,:,:),      &
-                  !
+                  ! transport
                   porosity_l2e(c,:),        &
                   temperature(c,:),         &
                   dz(c,:),                  &
-                  (h2o_liqvol(c,:)+h2o_icevol(c,:))/porosity_l2e(c,:),    &    ! Water content as fraction of saturation
-                  liq_frac(:),                      &      ! Liquid fraction of soil water
-                  -qflx_adv_l2e(c,0:nlevdecomp),    &      ! Vertical water flux (mm/s)
-                  qflx_lat_aqu_l2e(c,:)/dt,         &      ! Horizontal water flux (depth-resolved) mm/s
+                  total_sat(:),             &      ! total ice+liq vol saturation
+                  liq_frac(:),              &      ! Liquid fraction of total soil ice+liq
+                  qflx_adv_tmp(:),          &      ! Vertical water flux (mm/s)
+                  qflx_lat_aqu_tmp(:),      &      ! Horizontal water flux (depth-resolved) mm/s
                   lat_bc,                   &      ! Lateral flux concentration boundary condition
                   lat_flux,                 &      ! Output: Lateral flux of each solute
                   surf_bc,                  &      ! Surface boundary condition
@@ -2485,90 +2458,6 @@ contains
   !
   !---------------------------------------------------------------------------------------------------------------------------------------
   !
-  recursive subroutine run_onestep(this, &
-                                   dt, num_cuts, max_cuts)
-    
-    !
-    use c_f_interface_module, only : c_f_string_ptr
-    
-    implicit none
-    
-    class(em_alquimia_type)              :: this
-    integer,intent(out)                  :: max_cuts
-    integer,intent(in)                   :: num_cuts
-    real(r8),intent(in)                  :: dt
-    
-    ! local variables
-    real(r8) :: actual_dt,porosity
-    character(512) :: msg
-    character(kind=C_CHAR,len=kAlquimiaMaxStringLength) :: status_message
-    integer :: ncuts2, ncuts, ii
-    
-    !------------------------------------
-    max_cuts = num_cuts
-    actual_dt = dt/(2**num_cuts)
-    
-    ncuts=0
-    ncuts2=0
-    
-    porosity=this%chem_state%porosity
-
-    call this%chem%ReactionStepOperatorSplit(this%chem_engine,     &
-                                             actual_dt,            &
-                                             this%chem_properties, &
-                                             this%chem_state,      &
-                                             this%chem_aux_data,   &
-                                             this%chem_status)
-
-    ! Reset porosity because Pflotran tends to mess it up
-    this%chem_state%porosity = porosity
-
-    if (this%chem_status%converged) then
-      ! Success. Can get aux output and finish execution of the subroutine
-      ! Get auxiliary output
-      call this%chem%getAuxiliaryOutput(this%chem_engine,     &
-                                        this%chem_properties, &
-                                        this%chem_state,      &
-                                        this%chem_aux_data,   &
-                                        this%chem_aux_output, &
-                                        this%chem_status)
-      if(this%chem_status%error /= 0) then
-        call c_f_string_ptr(this%chem_status%message,status_message)
-        call endrun(msg='Alquimia error in ReactionStepOperatorSplit: '//status_message)
-      endif
-
-    !
-    else
-      ! Solve did not converge. Cut timestep, and bail out if too short
-
-      if(actual_dt/2 < min_dt) then
-        call c_f_string_ptr(this%chem_status%message,status_message)
-        write(msg,'(a,i3,a,f5.2,a,i4)') "Error: Alquimia ReactionStepOperatorSplit failed to converge after ",num_cuts," cuts to dt = ",actual_dt,' s. Newton iterations = ',this%chem_status%num_newton_iterations!,' Layer = ',j!," Col = ",c
-        call print_alquimia_state(this)
-        call endrun(msg=msg)
-
-      else
-        ! If we are not at minimum timestep yet, cut and keep going
-        ! Need to run the step two times because we have cut the timestep in half
-
-        call run_onestep(this,                &
-                         dt, num_cuts+1, ncuts)
-
-        if(ncuts>max_cuts) max_cuts=ncuts
-        
-        ! The second one starts from the maximum number of cuts from the first one so it doesn't waste time retrying a bunch of failed timestep lengths
-         do ii=1,2**(max_cuts-(num_cuts+1))
-           call run_onestep(this, dt,ncuts,ncuts2)
-           if(ncuts2>max_cuts) max_cuts=ncuts2
-         enddo
-
-      endif
-
-    !
-    endif
-      
-  end subroutine run_onestep
-
   !
   !---------------------------------------------------------------------------------------------------------------------------------------
   !
@@ -2624,8 +2513,9 @@ contains
                                               cation_exchange_capacity(:,:),      &
                                               aux_doubles(:,:)
       integer,intent(inout)                :: aux_ints(:,:)
-      real(r8),intent(in),dimension(:)     :: porosity, temperature, volume, saturation, lat_flow
-      real(r8),intent(in),dimension(:)     :: adv_flux
+      real(r8),intent(in)                  :: temperature(:)
+      real(r8),intent(in)                  :: porosity(:),volume(:),saturation(:)
+      real(r8),intent(in)                  :: adv_flux(:),lat_flow(:)
       real(r8),intent(in)                  :: lat_bc(:), surf_bc(:), liq_frac(:)
       real(r8),intent(inout)               :: surf_flux(:), lat_flux(:) ! Total (cumulative) surface flux in time step. Units of mol/time step
 
@@ -2670,23 +2560,23 @@ contains
         sat(j) = min(max(saturation(j),0.01_r8),1.0_r8)
       enddo
 
-      ! First half of vertical transport
+      ! First half of vertical transport of a single column
       call run_vert_transport(this,           &
                               actual_dt/2_r8, &
                               total_mobile,   &
                               free_mobile,    &
-                              porosity(:),    &
-                              temperature(:), &
-                              volume(:),      &
-                              saturation(:),  &
-                              liq_frac(:),    &
-                              adv_flux(:),    &
-                              lat_flow(:),    &
+                              porosity,       &
+                              temperature,    &
+                              volume,         &
+                              saturation,     &
+                              liq_frac,       &
+                              adv_flux,       &
+                              lat_flow,       &
                               lat_bc,  lat_flux_step,  &
                               surf_bc, surf_flux_step, &
                               transport_change_rate)
 
-      !
+      ! layer-wised alquimia-PFbgc calling
       do j=1,nlevdecomp
 
         ! Update properties from ELM
@@ -2779,38 +2669,7 @@ contains
       
       enddo ! Layer loop
 
-      ! the following may not be in correct place
-      ! if(actual_dt<=-60.0_r8) then
-        !   do j=1,nlevdecomp
-        !         ! Update properties from ELM
-        !     this%chem_state%porosity =    porosity(j)
-        !     this%chem_state%temperature = temperature(j) - 273.15
-        !     this%chem_properties%volume = volume(j)
-        !     this%chem_properties%saturation = sat(j) ! Set minimum saturation to stop concentrations from blowing up at low soil moisture
-        !     call this%copy_ELM_to_Alquimia(j,water_density,&
-        !                                       aqueous_pressure,&
-        !                                       total_mobile,&
-        !                                       total_immobile,&
-        !                                       mineral_volume_fraction,&
-        !                                       mineral_specific_surface_area,&
-        !                                       surface_site_density,&
-        !                                       cation_exchange_capacity,&
-        !                                       aux_doubles,&
-        !                                       aux_ints)
-        !     call run_onestep(this,dt,num_cuts,ncuts)
-        !     call this%copy_Alquimia_to_ELM(j,water_density_tmp,&
-        !                                     aqueous_pressure_tmp,&
-        !                                     total_mobile_tmp,free_mobile_tmp,&
-        !                                     total_immobile_tmp,&
-        !                                     mineral_volume_fraction_tmp,&
-        !                                     mineral_specific_surface_area_tmp,&
-        !                                     surface_site_density_tmp,&
-        !                                     cation_exchange_capacity_tmp,&
-        !                                     aux_doubles_tmp,&
-        !                                     aux_ints_tmp)
-        !   enddo
-      ! endif
-    
+
       if(.not. this%chem_status%converged) then
             ! If we are not at minimum timestep yet, cut and keep going
         
@@ -2827,6 +2686,7 @@ contains
           ! Need to run the step two times because we have cut the timestep in half
           call run_column_onestep(this, &
               dt, num_cuts+1, ncuts,    &
+              !
               water_density,     &
               aqueous_pressure,  &
               total_mobile,      &
@@ -2838,6 +2698,7 @@ contains
               cation_exchange_capacity,      &
               aux_doubles,       &
               aux_ints,          &
+              !
               porosity,          &
               temperature,       &
               volume,            &
@@ -2855,6 +2716,7 @@ contains
           do ii=1,2**(max_cuts-(num_cuts+1))
             call run_column_onestep(this,    &
               dt, ncuts, ncuts2, &
+              !
               water_density,     &
               aqueous_pressure,  &
               total_mobile,      &
@@ -2866,6 +2728,7 @@ contains
               cation_exchange_capacity,      &
               aux_doubles,       &
               aux_ints,          &
+              !
               porosity,          &
               temperature,       &
               volume,            &
@@ -2950,20 +2813,27 @@ contains
 
       class(em_alquimia_type)           :: this
       real(r8),intent(inout)            :: total_mobile(:,:), free_mobile(:,:)
-      ! integer,intent(in)                :: c
       real(r8),intent(in)               :: actual_dt
-      real(r8),intent(in),dimension(:)  :: porosity,temperature,volume,saturation,lat_flow
-      real(r8),intent(in),dimension(:)  :: adv_flux
-      real(r8),intent(in),dimension(:)  :: lat_bc, surf_bc, liq_frac
+      ! layer-dim
+      real(r8),intent(in)               :: temperature(:)
+      real(r8),intent(in)               :: porosity(:),volume(:),saturation(:)
+      real(r8),intent(in)               :: lat_flow(:), liq_frac(:)
+      real(r8),intent(in)               :: adv_flux(:)                ! nlevdevcomp+1
+      ! species-dim
+      real(r8),intent(in)               :: lat_bc(:), surf_bc(:)
       real(r8),intent(out)              :: surf_flux_step(this%chem_sizes%num_primary), lat_flux_step(this%chem_sizes%num_primary) ! Total (cumulative) surface flux in time step. Units of mol/time step
       real(r8),intent(out)              :: transport_change_rate(nlevdecomp,this%chem_sizes%num_primary)
 
       ! local variables
-      real(r8) :: diffus(nlevdecomp), sat(nlevdecomp), dissolved_frac(0:nlevdecomp), source_term(nlevdecomp,this%chem_sizes%num_primary)
-      real(r8) :: surf_adv_step(this%chem_sizes%num_primary),surf_equil_step(nlevdecomp,this%chem_sizes%num_primary)
+      real(r8) :: diffus(nlevdecomp), sat(nlevdecomp), dissolved_frac(0:nlevdecomp)
+      real(r8) :: surf_adv_step(this%chem_sizes%num_primary)
       ! real(r8) :: bot_adv_step(this%chem_sizes%num_primary)
+      real(r8) :: surf_equil_step(nlevdecomp,this%chem_sizes%num_primary)
+      real(r8) :: source_term(nlevdecomp,this%chem_sizes%num_primary)
+
       real(r8) :: gas_pressure,water_pressure,ebul_flux,ebul_atmo_frac,atmo_pressure,total_resist,effective_diffus
       real(r8) :: temp_r
+      real(r8) :: src_tmp(nlevdecomp), adv_tmp(nlevdecomp+1)
 
       integer :: ii,j,k
 
@@ -2984,7 +2854,16 @@ contains
         ! Need to set boundary condition concentrations for adv flux (top layer infiltration) and lateral flux (source)
 
         ! Skip species that are not actually mobile
-        if(k == this%plantNH4uptake_pool_number .or. k == this%plantNO3uptake_pool_number) cycle
+        if(k == this%hrimm_pool_number .or. &
+           k == this%Nimm_pool_number .or. &
+           k == this%Nmin_pool_number .or. &
+           k == this%Nimp_pool_number .or. &
+           k == this%plantNH4demand_pool_number .or. &
+           k == this%plantNO3demand_pool_number .or. &
+           k == this%plantNH4uptake_pool_number .or. &
+           k == this%plantNO3uptake_pool_number) then
+          cycle
+        endif
 
         !
         if(this%is_dissolved_gas(k)) then
@@ -3034,7 +2913,11 @@ contains
                                    * dzsoi_decomp(j) * porosity(j) ! mol/m3                                       ! Convert from concentration to mass using pore volume
 
             ! Make sure equilibration step doesn't take gas concentration below zero
-            if((surf_equil_step(j,k)/dzsoi_decomp(j) < 0.0_r8) .and. (abs(surf_equil_step(j,k)/dzsoi_decomp(j)) > abs(total_mobile(j,k)))) surf_equil_step(j,k) = -abs(total_mobile(j,k))*0.95_r8*dzsoi_decomp(j)
+            if((surf_equil_step(j,k)/dzsoi_decomp(j) < 0.0_r8) &
+             .and. (abs(surf_equil_step(j,k)/dzsoi_decomp(j)) > abs(total_mobile(j,k)))) then
+               surf_equil_step(j,k) = -abs(total_mobile(j,k))*0.95_r8*dzsoi_decomp(j)
+            endif
+
           enddo
 
           ! Eventually replace this with calculation using actual saturation/ebullition concentration
@@ -3082,12 +2965,16 @@ contains
           endif
           lat_flux_step(k) = lat_flux_step(k) + source_term(j,k)*dzsoi_decomp(j)*actual_dt
 
+          ! data-passing tmp_r
+          src_tmp(j) = source_term(j,k)+surf_equil_step(j,k)/(dzsoi_decomp(j)*actual_dt)
+          adv_tmp(j) = adv_flux(j)*1e-3*dissolved_frac(j)
         enddo !j; nlevdecomp
+        adv_tmp(nlevdecomp+1) = adv_flux(nlevdecomp+1)*1e-3*dissolved_frac(nlevdecomp)
 
         ! adv_flux units are mm H2O/s
         if(adv_flux(1)<0.0_r8) then ! Downward flow uses surface boundary condition
             surf_adv_step(k) = - adv_flux(1)*1e-3_r8*surf_bc(k)*dissolved_frac(0)*actual_dt
-        else ! Upward flow uses surface layer concentration. Should this concentration be per bulk volume or per water volume?
+        elseif(adv_flux(1)>0.0_r8) then ! Upward flow uses surface layer concentration. Should this concentration be per bulk volume or per water volume?
             surf_adv_step(k) = - adv_flux(1)*1e-3_r8*total_mobile(1,k)*dissolved_frac(1)*actual_dt
         endif
         ! if(adv_flux(c,nlevdecomp+1)<0.0_r8) then
@@ -3097,17 +2984,25 @@ contains
         ! At this point, total_mobile is stored as mol/m3 bulk (ELM side). Dividing by porosity*saturation converts to mol/m3 water
         ! Note adv_flux is defined in advection_diffusion as <0 being downward
 
-        call advection_diffusion(total_mobile(1:nlevdecomp,k),                                             &
-                                 adv_flux(1:nlevdecomp+1)*1e-3*dissolved_frac(0:nlevdecomp),               &
-                                 diffus(1:nlevdecomp),                                                     &
-                                 source_term(1:nlevdecomp,k)+ &
-                                   surf_equil_step(1:nlevdecomp,k)/(dzsoi_decomp(1:nlevdecomp)*actual_dt), &
-                                 surf_bc(k),                                                               &
-                                 actual_dt,                                                                &
+        call advection_diffusion(total_mobile(1:nlevdecomp,k),          &
+                                 adv_tmp(1:nlevdecomp+1),               &
+                                 diffus(1:nlevdecomp),                  &
+                                 src_tmp(1:nlevdecomp),                 &
+                                 surf_bc(k),                            &
+                                 actual_dt,                             &
                                  transport_change_rate(1:nlevdecomp,k))
 
-        ! At this point perhaps we should go through and re-equilibrate dissolved gases in top layer if unsaturated?
-        total_mobile(1:nlevdecomp,k) = total_mobile(1:nlevdecomp,k) + transport_change_rate(1:nlevdecomp,k)*actual_dt
+        ! reset alquimia-PFbgc mobile species after advection-diffusion
+        do j=1,nlevdecomp
+          total_mobile(j,k) = total_mobile(j,k) + transport_change_rate(j,k)*actual_dt
+          ! checking
+          if(isnan(total_mobile(j,k))) then
+
+
+            write(iulog,*) __LINE__,'Chem spec',k,'layer',j,total_mobile(:,k)
+            call endrun(msg="Mobile species is NaN after EM-alquimia vertical transport!")
+          endif
+        enddo
 
         ! Save surface equil in transport_change_rate in case it needs to be undone after failed alquimia solve
         ! This is done after applying transport_change_rate to total_mobile so it's not double counted
