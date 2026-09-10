@@ -6,7 +6,8 @@ module CNStateType
   use abortutils     , only : endrun
   use spmdMod        , only : masterproc
   use elm_varpar     , only : nlevsno, nlevgrnd, nlevlak, nlevsoifl, nlevsoi, crop_prog
-  use elm_varpar     , only : ndecomp_cascade_transitions, nlevdecomp, nlevdecomp_full, more_vertlayers  
+  use elm_varpar     , only : ndecomp_cascade_transitions, nlevdecomp, nlevdecomp_full
+  use elm_varpar     , only : interp_soil_texture
   use elm_varcon     , only : spval, ispval, c14ratio, grlnd
   use landunit_varcon, only : istsoil, istcrop
   use elm_varpar     , only : nlevsno, nlevgrnd, nlevlak, crop_prog 
@@ -751,7 +752,7 @@ contains
     call ncd_pio_openfile (ncid, locfn, 0)
 
     call ncd_inqdlen(ncid,dimid,nlevsoifl,name='nlevsoi')
-    if ( .not. more_vertlayers )then
+    if ( .not. interp_soil_texture )then
        if ( nlevsoifl /= nlevsoi )then
           call endrun(msg=' ERROR: Number of soil layers on file does NOT match the number being used'//&
                errMsg(__FILE__, __LINE__))

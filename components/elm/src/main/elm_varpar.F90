@@ -29,6 +29,13 @@ module elm_varpar
   ! 'USER_DEFINED'. Consumed by initVerticalMod to build the grid.
   character(len=16), public :: soil_layerstruct = 'UNSET'
 
+  ! .true. when the model soil grid differs from the nlevsoifl-layer input
+  ! grid, so surface-dataset soil properties (sand/clay/organic) must be
+  ! interpolated onto the model layers rather than copied one-to-one.
+  ! Set in elm_varpar_init. True for every structure except 10SL_3.5m
+  ! (reproduces the legacy more_vertlayers behavior for 10SL vs 23SL).
+  logical, public :: interp_soil_texture = .false.
+
   ! Note - model resolution is read in from the surface dataset
   integer, parameter :: numharvest = 5 ! number of harvest types
   integer, parameter :: iac_npft = 17  ! number of veg pfts (index 0 for bare ground)
@@ -289,6 +296,11 @@ contains
        call shr_sys_abort(trim(subname)//' ERROR: unrecognized soil_layerstruct = '// &
             trim(soil_layerstruct))
     end select
+
+    ! Soil properties must be interpolated onto the model grid for every
+    ! structure whose soil layers do not map one-to-one to the input file
+    ! (i.e. everything except the standard 10SL_3.5m column).
+    interp_soil_texture = ( trim(soil_layerstruct) /= '10SL_3.5m' )
 
     if (use_vichydro) then
        nlayert     =  nlayer + (nlevgrnd -nlevsoi)
