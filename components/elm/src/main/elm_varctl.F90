@@ -398,6 +398,22 @@ module elm_varctl
   logical, public :: use_noio            = .false.
   logical, public :: use_var_soil_thick  = .false.
   logical, public :: squareomfrac        = .true.   ! use squared organic matter fraction in soil calculations
+
+  !----------------------------------------------------------
+  ! Soil vertical layer structure selection (ported from CTSM)
+  !   soil_layerstruct_predefined : named predefined structure, one of
+  !     '10SL_3.5m','23SL_3.5m','20SL_8.5m','49SL_10m','4SL_2m'. 'UNSET'
+  !     defers to the legacy more_vertlayers boolean for backwards
+  !     compatibility.
+  !   soil_layerstruct_userdefined : user-supplied vector of layer
+  !     thicknesses dzsoi (m); its non-default length sets nlevgrnd.
+  !   soil_layerstruct_userdefined_nlevsoi : number of hydrologically
+  !     active soil layers when using the user-defined vector.
+  ! Predefined and user-defined are mutually exclusive (see controlMod).
+  !----------------------------------------------------------
+  character(len=16), public :: soil_layerstruct_predefined          = 'UNSET'
+  real(r8),          public :: soil_layerstruct_userdefined(99)      = rundef
+  integer,           public :: soil_layerstruct_userdefined_nlevsoi  = iundef
   logical, public :: use_T_rho_dependent_snowthk     = .false.
   logical, public :: use_atm_downscaling_to_topunit  = .false.
   character(len = SHR_KIND_CS), public :: precip_downscaling_method  = 'ERMM' ! Precip downscaling method values can be ERMM or FNM
@@ -566,6 +582,9 @@ module elm_varctl
   !$acc declare copyin(use_noio           )
   !$acc declare copyin(use_var_soil_thick )
   !$acc declare copyin(squareomfrac       )
+  !$acc declare copyin(soil_layerstruct_predefined)
+  !$acc declare copyin(soil_layerstruct_userdefined)
+  !$acc declare copyin(soil_layerstruct_userdefined_nlevsoi)
   !$acc declare copyin(tw_irr)
   !$acc declare copyin(use_vsfm                   )
   !$acc declare copyin(vsfm_use_dynamic_linesearch)

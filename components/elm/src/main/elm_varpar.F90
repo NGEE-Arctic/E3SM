@@ -11,6 +11,10 @@ module elm_varpar
   use elm_varctl   , only: iulog, create_crop_landunit, irrigate
   use elm_varctl   , only: use_vichydro
   use elm_varctl   , only: use_extrasnowlayers, iac_present
+  use elm_varctl   , only: soil_layerstruct_predefined
+  use elm_varctl   , only: soil_layerstruct_userdefined
+  use elm_varctl   , only: soil_layerstruct_userdefined_nlevsoi
+  use elm_varctl   , only: rundef, iundef
 
   !
   ! !PUBLIC TYPES:
@@ -18,6 +22,19 @@ module elm_varpar
   save
   !
   logical, public :: more_vertlayers = .false. ! true => run with more vertical soil layers
+
+  ! Resolved soil layer structure name, set in elm_varpar_init from the
+  ! namelist controls (or from more_vertlayers for backwards compat).
+  ! One of: '10SL_3.5m','23SL_3.5m','20SL_8.5m','49SL_10m','4SL_2m',
+  ! 'USER_DEFINED'. Consumed by initVerticalMod to build the grid.
+  character(len=16), public :: soil_layerstruct = 'UNSET'
+
+  ! .true. when the model soil grid differs from the nlevsoifl-layer input
+  ! grid, so surface-dataset soil properties (sand/clay/organic) must be
+  ! interpolated onto the model layers rather than copied one-to-one.
+  ! Set in elm_varpar_init. True for every structure except 10SL_3.5m
+  ! (reproduces the legacy more_vertlayers behavior for 10SL vs 23SL).
+  logical, public :: interp_soil_texture = .false.
 
   ! Note - model resolution is read in from the surface dataset
   integer, parameter :: numharvest = 5 ! number of harvest types
@@ -164,6 +181,7 @@ contains
     !
     character(len=32) :: subname = 'elm_varpar_init'  ! subroutine name
     integer           :: max_fates_veg ! temporary over-writes natpft_size w/ FATES
+    integer           :: j             ! loop index over user-defined soil layers
     !------------------------------------------------------------------------------
 
     ! Crop settings and consistency checks
@@ -216,13 +234,73 @@ contains
 
     nlevsoifl   =  10
     nlevurb     =  5
-    if ( .not. more_vertlayers )then
-       nlevsoi     =  nlevsoifl
-       nlevgrnd    =  15
+
+    ! -----------------------------------------------------------------
+    ! Resolve the soil layer structure (ported from CTSM). Precedence:
+    !   1. an explicit user-defined dzsoi vector
+    !   2. a named predefined structure (soil_layerstruct_predefined)
+    !   3. the legacy more_vertlayers boolean (backwards compatible)
+    ! For the two node-based 3.5 m structures we also (re)set
+    ! more_vertlayers so that the existing soil-texture interpolation
+    ! paths (SoilStateType, SoilHydrologyType, CNStateType) remain
+    ! bit-for-bit for pre-existing configurations.
+    ! -----------------------------------------------------------------
+    if ( soil_layerstruct_userdefined_nlevsoi /= iundef .or. &
+         soil_layerstruct_userdefined(1) /= rundef ) then
+       soil_layerstruct = 'USER_DEFINED'
+    else if ( trim(soil_layerstruct_predefined) /= 'UNSET' ) then
+       soil_layerstruct = trim(soil_layerstruct_predefined)
+    else if ( more_vertlayers ) then
+       soil_layerstruct = '23SL_3.5m'
     else
-       nlevsoi     =  8  + nlev_equalspace
-       nlevgrnd    =  15 + nlev_equalspace
+       soil_layerstruct = '10SL_3.5m'
     end if
+
+    select case ( trim(soil_layerstruct) )
+    case ( '10SL_3.5m' )
+       nlevsoi         = nlevsoifl              ! 10
+       nlevgrnd        = 15
+       more_vertlayers = .false.
+    case ( '23SL_3.5m' )
+       nlevsoi         = 8  + nlev_equalspace   ! 23
+       nlevgrnd        = 15 + nlev_equalspace   ! 30
+       more_vertlayers = .true.
+    case ( '20SL_8.5m' )
+       nlevsoi         = 20
+       nlevgrnd        = nlevsoi + 5            ! 25 (5 bedrock layers)
+       more_vertlayers = .false.
+    case ( '49SL_10m' )
+       nlevsoi         = 49
+       nlevgrnd        = nlevsoi + 5            ! 54 (5 bedrock layers)
+       more_vertlayers = .false.
+    case ( '4SL_2m' )
+       nlevsoi         = 4
+       nlevgrnd        = 5
+       more_vertlayers = .false.
+    case ( 'USER_DEFINED' )
+       if ( soil_layerstruct_userdefined_nlevsoi == iundef ) then
+          call shr_sys_abort(trim(subname)//' ERROR: soil_layerstruct_userdefined_nlevsoi'// &
+               ' must be set when soil_layerstruct_userdefined is used')
+       end if
+       nlevsoi  = soil_layerstruct_userdefined_nlevsoi
+       nlevgrnd = 0
+       do j = 1, size(soil_layerstruct_userdefined)
+          if ( soil_layerstruct_userdefined(j) /= rundef ) nlevgrnd = nlevgrnd + 1
+       end do
+       if ( nlevsoi >= nlevgrnd ) then
+          call shr_sys_abort(trim(subname)//' ERROR: soil_layerstruct_userdefined_nlevsoi'// &
+               ' must be less than the number of user-defined soil layers')
+       end if
+       more_vertlayers = .false.
+    case default
+       call shr_sys_abort(trim(subname)//' ERROR: unrecognized soil_layerstruct = '// &
+            trim(soil_layerstruct))
+    end select
+
+    ! Soil properties must be interpolated onto the model grid for every
+    ! structure whose soil layers do not map one-to-one to the input file
+    ! (i.e. everything except the standard 10SL_3.5m column).
+    interp_soil_texture = ( trim(soil_layerstruct) /= '10SL_3.5m' )
 
     if (use_vichydro) then
        nlayert     =  nlayer + (nlevgrnd -nlevsoi)

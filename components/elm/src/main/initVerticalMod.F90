@@ -13,10 +13,12 @@ module initVerticalMod
   use decompMod      , only : bounds_type
   use spmdMod        , only : masterproc
   use elm_varpar     , only : more_vertlayers, nlevsno, nlevgrnd, nlevlak
+  use elm_varpar     , only : soil_layerstruct
   use elm_varpar     , only : toplev_equalspace, nlev_equalspace
   use elm_varpar     , only : nlevsoi, nlevsoifl, nlevurb, nlevslp
   use elm_varpar     , only : nlevdecomp, scalez, zecoeff
   use elm_varctl     , only : fsurdat, iulog, use_var_soil_thick
+  use elm_varctl     , only : soil_layerstruct_userdefined
   use elm_varctl     , only : use_vancouver, use_mexicocity, use_vertsoilc, use_extralakelayers, use_extrasnowlayers
   use elm_varctl     , only : use_erosion, use_polygonal_tundra
   use elm_varcon     , only : zlak, dzlak, zsoi, dzsoi, zisoi, dzsoi_decomp, spval, grlnd
@@ -103,10 +105,13 @@ contains
     call ncd_inqdlen(ncid, dimid, nlevsoifl, name='nlevsoi')
 
 
-    if ( .not. more_vertlayers ) then
+    if ( trim(soil_layerstruct) == '10SL_3.5m' ) then
        !    Removed the requirement for nlevsoifl to match nlevsoi, but we make sure the
        ! number of input layers do not exceed the maximum allocated, to avoid segmentation
        ! violation errors.
+       !    Only the standard 10SL_3.5m structure adopts the surface-file soil-level count.
+       ! The 23SL_3.5m and the thickness-based / user-defined structures keep the nlevsoi
+       ! fixed by the structure and interpolate the surface-dataset soil properties onto it.
        if ( nlevsoifl > nlevgrnd ) then
           call shr_sys_abort(' ERROR: Number of soil layers on file exceeds the maximum number of layers allowed (nlevgrnd)'//&
                errMsg(__FILE__, __LINE__))
@@ -131,69 +136,139 @@ contains
     ! 
     ! Note: vertical profile of snow is not initialized here - but below
     ! --------------------------------------------------------------------
-    ! Try to read soil information from the file.
-    allocate (zsoi_in(nlevsoi))
-    call ncd_io(ncid=ncid, varname='ZSOI', flag='read', data=zsoi_in, dim1name=grlnd, readvar=readvar)
-    if ( readvar ) then
-       ! -----------------------------------------------------------------
-       !    File contains soil information. We must complete the soil depth information for
-       ! layers beneath nlevsoi, using the original scaling parameters for increasing the
-       ! depth of the layers, but acknowledging that the layer must be beneath the deepest
-       ! input soil layer.
-       ! -----------------------------------------------------------------
-       zsoi(1:nlevsoi) = zsoi_in(1:nlevsoi)
-       do j = nlevsoi+1, nlevgrnd
-          zsoi(j) = zsoi(nlevsoi) + &
-             scalez*(exp(zecoeff*(j -0.5_r8))-exp(zecoeff*(nlevsoi-0.5_r8)))
-       end do
+    ! --------------------------------------------------------------------
+    !    Soil layers and interfaces are built by one of two methods
+    ! (ported from CTSM initVerticalMod):
+    !  * node-based (10SL_3.5m, 23SL_3.5m): node depths zsoi are defined
+    !    first (optionally inherited from the surface dataset ZSOI), then
+    !    thicknesses dzsoi and interfaces zisoi are derived from the nodes.
+    !  * thickness-based (20SL_8.5m, 49SL_10m, 4SL_2m, and user-defined):
+    !    thicknesses dzsoi are prescribed directly, interfaces zisoi are the
+    !    cumulative sum, and nodes zsoi are the interface midpoints. The
+    !    surface-dataset ZSOI is intentionally not used for these.
+    ! The structure name and nlevsoi/nlevgrnd are resolved in elm_varpar_init.
+    ! --------------------------------------------------------------------
+    select case ( trim(soil_layerstruct) )
 
+    case ( '10SL_3.5m', '23SL_3.5m' )
+       ! ---- node-based ----
+       ! Try to read soil information from the file.
+       allocate (zsoi_in(nlevsoi))
+       call ncd_io(ncid=ncid, varname='ZSOI', flag='read', data=zsoi_in, dim1name=grlnd, readvar=readvar)
+       if ( readvar ) then
+          ! --------------------------------------------------------------
+          !    File contains soil information. We must complete the soil depth information for
+          ! layers beneath nlevsoi, using the original scaling parameters for increasing the
+          ! depth of the layers, but acknowledging that the layer must be beneath the deepest
+          ! input soil layer.
+          ! --------------------------------------------------------------
+          zsoi(1:nlevsoi) = zsoi_in(1:nlevsoi)
+          do j = nlevsoi+1, nlevgrnd
+             zsoi(j) = zsoi(nlevsoi) + &
+                scalez*(exp(zecoeff*(j -0.5_r8))-exp(zecoeff*(nlevsoi-0.5_r8)))
+          end do
 
-    elseif ( more_vertlayers )then
-       ! replace standard exponential grid with a grid that starts out exponential, 
-       ! then has several evenly spaced layers, then finishes off exponential. 
-       ! this allows the upper soil to behave as standard, but then continues 
-       ! with higher resolution to a deeper depth, so that, for example, permafrost
-       ! dynamics are not lost due to an inability to resolve temperature, moisture, 
-       ! and biogeochemical dynamics at the base of the active layer
-       do j = 1, toplev_equalspace
-          zsoi(j) = scalez*(exp(zecoeff*(j-0.5_r8))-1._r8)    !node depths
-       enddo
+       elseif ( more_vertlayers )then
+          ! replace standard exponential grid with a grid that starts out exponential,
+          ! then has several evenly spaced layers, then finishes off exponential.
+          ! this allows the upper soil to behave as standard, but then continues
+          ! with higher resolution to a deeper depth, so that, for example, permafrost
+          ! dynamics are not lost due to an inability to resolve temperature, moisture,
+          ! and biogeochemical dynamics at the base of the active layer
+          do j = 1, toplev_equalspace
+             zsoi(j) = scalez*(exp(zecoeff*(j-0.5_r8))-1._r8)    !node depths
+          enddo
 
-       do j = toplev_equalspace+1,toplev_equalspace + nlev_equalspace
-          zsoi(j) = zsoi(j-1) + thick_equal
-       enddo
+          do j = toplev_equalspace+1,toplev_equalspace + nlev_equalspace
+             zsoi(j) = zsoi(j-1) + thick_equal
+          enddo
 
-       do j = toplev_equalspace + nlev_equalspace +1, nlevgrnd
-          zsoi(j) = scalez*(exp(zecoeff*((j - nlev_equalspace)-0.5_r8))-1._r8) + nlev_equalspace * thick_equal
-       enddo
-    else
+          do j = toplev_equalspace + nlev_equalspace +1, nlevgrnd
+             zsoi(j) = scalez*(exp(zecoeff*((j - nlev_equalspace)-0.5_r8))-1._r8) + nlev_equalspace * thick_equal
+          enddo
+       else
 
-       ! -----------------------------------------------------------------
-       !    Soil layers not available from the input, and no additional layers needed. Use the
-       ! default soil thickness settings.
-       ! -----------------------------------------------------------------
-       !NOTE:  Workaround due to compiler issue with nvhpc 25.x when using -Ktrap=fp
+          ! --------------------------------------------------------------
+          !    Soil layers not available from the input, and no additional layers needed. Use the
+          ! default soil thickness settings.
+          ! --------------------------------------------------------------
+          !NOTE:  Workaround due to compiler issue with nvhpc 25.x when using -Ktrap=fp
 #ifdef CPRNVIDIA
-          call ieee_set_flag(ieee_all,.false.)
-          call ieee_set_halting_mode(ieee_inexact, .false.)
+             call ieee_set_flag(ieee_all,.false.)
+             call ieee_set_halting_mode(ieee_inexact, .false.)
 #endif
-       do j = 1, nlevgrnd
-          zsoi(j) = scalez*(exp(zecoeff*(dble(j)-0.5_r8))-1._r8)    !node depths
+          do j = 1, nlevgrnd
+             zsoi(j) = scalez*(exp(zecoeff*(dble(j)-0.5_r8))-1._r8)    !node depths
+          enddo
+       end if
+       deallocate(zsoi_in)
+
+       dzsoi(1) = 0.5_r8*(zsoi(1)+zsoi(2))             !thickness b/n two interfaces
+       do j = 2,nlevgrnd-1
+          dzsoi(j)= 0.5_r8*(zsoi(j+1)-zsoi(j-1))
        enddo
-    end if
-    deallocate(zsoi_in)
+       dzsoi(nlevgrnd) = zsoi(nlevgrnd)-zsoi(nlevgrnd-1)
 
-    dzsoi(1) = 0.5_r8*(zsoi(1)+zsoi(2))             !thickness b/n two interfaces
-    do j = 2,nlevgrnd-1
-       dzsoi(j)= 0.5_r8*(zsoi(j+1)-zsoi(j-1))
-    enddo
-    dzsoi(nlevgrnd) = zsoi(nlevgrnd)-zsoi(nlevgrnd-1)
+       zisoi(0) = 0._r8
+       do j = 1, nlevgrnd-1
+          zisoi(j) = 0.5_r8*(zsoi(j)+zsoi(j+1))         !interface depths
+       enddo
+       zisoi(nlevgrnd) = zsoi(nlevgrnd) + 0.5_r8*dzsoi(nlevgrnd)
 
-    zisoi(0) = 0._r8
-    do j = 1, nlevgrnd-1
-       zisoi(j) = 0.5_r8*(zsoi(j)+zsoi(j+1))         !interface depths
-    enddo
-    zisoi(nlevgrnd) = zsoi(nlevgrnd) + 0.5_r8*dzsoi(nlevgrnd)
+    case ( '20SL_8.5m', '49SL_10m', '4SL_2m', 'USER_DEFINED' )
+       ! ---- thickness-based ----
+       ! Prescribe the layer thicknesses; the surface-dataset ZSOI is not used.
+       if ( trim(soil_layerstruct) == 'USER_DEFINED' ) then
+          do j = 1, nlevgrnd
+             dzsoi(j) = soil_layerstruct_userdefined(j)   ! user-entered dzsoi vector
+          end do
+       else if ( trim(soil_layerstruct) == '49SL_10m' ) then
+          ! 10 m soil column, nlevsoi = 49
+          do j = 1, 10
+             dzsoi(j) = 1.e-2_r8     ! 10-mm layers
+          enddo
+          do j = 11, 19
+             dzsoi(j) = 1.e-1_r8     ! 100-mm layers
+          enddo
+          do j = 20, nlevsoi+1       ! 300-mm layers
+             dzsoi(j) = 3.e-1_r8
+          enddo
+          do j = nlevsoi+2, nlevgrnd ! 10-m bedrock layers
+             dzsoi(j) = 10._r8
+          enddo
+       else if ( trim(soil_layerstruct) == '20SL_8.5m' ) then
+          do j = 1, 4  ! linear increase in layer thickness of...
+             dzsoi(j) = j * 0.02_r8                     ! ...2 cm each layer
+          enddo
+          do j = 5, 13
+             dzsoi(j) = dzsoi(4) + (j - 4) * 0.04_r8    ! ...4 cm each layer
+          enddo
+          do j = 14, nlevsoi
+             dzsoi(j) = dzsoi(13) + (j - 13) * 0.10_r8  ! ...10 cm each layer
+          enddo
+          do j = nlevsoi + 1, nlevgrnd  ! bedrock layers
+             dzsoi(j) = dzsoi(nlevsoi) + (((j - nlevsoi) * 25._r8)**1.5_r8) / 100._r8
+          enddo
+       else if ( trim(soil_layerstruct) == '4SL_2m' ) then
+          dzsoi(1) = 0.1_r8
+          dzsoi(2) = 0.3_r8
+          dzsoi(3) = 0.6_r8
+          dzsoi(4) = 1.0_r8
+          dzsoi(5) = 1.0_r8
+       end if
+
+       zisoi(0) = 0._r8
+       do j = 1, nlevgrnd
+          zisoi(j) = sum(dzsoi(1:j))                    !interface depths (cumulative)
+       enddo
+       do j = 1, nlevgrnd
+          zsoi(j) = 0.5_r8*(zisoi(j-1) + zisoi(j))       !node depths (interface midpoints)
+       enddo
+
+    case default
+       call shr_sys_abort(' ERROR: unrecognized soil_layerstruct='//trim(soil_layerstruct)// &
+            errmsg(__FILE__, __LINE__))
+    end select
 
     if (masterproc) then
        write(iulog, *) 'zsoi', zsoi(:) 
@@ -202,12 +277,10 @@ contains
     end if
 
     ! define a vertical grid spacing such that it is the normal dzsoi if nlevdecomp =nlevgrnd, or else 1 meter
+    ! (dzsoi_decomp == dzsoi is bit-for-bit with the previous node-based
+    !  formula and is also correct for the thickness-based structures)
     if (use_vertsoilc) then
-       dzsoi_decomp(1) = 0.5_r8*(zsoi(1)+zsoi(2))             !thickness b/n two interfaces
-       do j = 2,nlevgrnd-1
-          dzsoi_decomp(j)= 0.5_r8*(zsoi(j+1)-zsoi(j-1))
-       enddo
-       dzsoi_decomp(nlevgrnd) = zsoi(nlevgrnd)-zsoi(nlevgrnd-1)
+       dzsoi_decomp(1:nlevgrnd) = dzsoi(1:nlevgrnd)
     else
        dzsoi_decomp(1) = 1.
     end if
