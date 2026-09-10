@@ -13,6 +13,7 @@ module initVerticalMod
   use decompMod      , only : bounds_type
   use spmdMod        , only : masterproc
   use elm_varpar     , only : more_vertlayers, nlevsno, nlevgrnd, nlevlak
+  use elm_varpar     , only : soil_layerstruct
   use elm_varpar     , only : toplev_equalspace, nlev_equalspace
   use elm_varpar     , only : nlevsoi, nlevsoifl, nlevurb, nlevslp
   use elm_varpar     , only : nlevdecomp, scalez, zecoeff
@@ -131,6 +132,19 @@ contains
     ! 
     ! Note: vertical profile of snow is not initialized here - but below
     ! --------------------------------------------------------------------
+    ! The thickness-based predefined structures and the user-defined
+    ! structure are resolved in elm_varpar_init but their grid construction
+    ! is not yet implemented here (see porting plan, Phase 2). Abort cleanly
+    ! rather than fall through to the node-based exponential grid, which
+    ! would silently produce an incorrect column for these structures.
+    select case ( trim(soil_layerstruct) )
+    case ( '10SL_3.5m', '23SL_3.5m' )
+       ! node-based grids handled below (via more_vertlayers)
+    case default
+       call shr_sys_abort(' ERROR: soil_layerstruct='//trim(soil_layerstruct)// &
+            ' grid construction not yet implemented in initVertical'//errmsg(__FILE__, __LINE__))
+    end select
+
     ! Try to read soil information from the file.
     allocate (zsoi_in(nlevsoi))
     call ncd_io(ncid=ncid, varname='ZSOI', flag='read', data=zsoi_in, dim1name=grlnd, readvar=readvar)
