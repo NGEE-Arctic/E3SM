@@ -108,7 +108,12 @@ _TESTS = {
             "ERS.r05_r05.IELM.elm-lnd_rof_2way",
             "ERS.r05_r05.IELM.elm-V2_ELM_MOSART_features",
             "ERS.ELM_USRDAT.IELM.elm-surface_water_dynamics",
-            "ERS.ELM_USRDAT.IELM.elm-finetop_rad"
+            "ERS.ELM_USRDAT.IELM.elm-finetop_rad",
+            "SMS.ne4pg2_ne4pg2.I1850CNPRDCTCBC.elm-soil_10SL_3.5m",
+            "SMS.ne4pg2_ne4pg2.I1850CNPRDCTCBC.elm-soil_23SL_3.5m",
+            "SMS.ne4pg2_ne4pg2.I1850CNPRDCTCBC.elm-soil_20SL_8.5m",
+            "SMS.ne4pg2_ne4pg2.I1850CNPRDCTCBC.elm-soil_49SL_10m",
+            "SMS.ne4pg2_ne4pg2.I1850CNPRDCTCBC.elm-soil_4SL_2m"
             )
         },
 
