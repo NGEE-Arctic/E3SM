@@ -866,6 +866,9 @@ contains
     real(r8) :: f_exice                   ! fraction of layer that is excess ice
     real(r8) :: dz_soil                   ! depth of layer subject to soil tk scheme
     character(len=64) :: event
+    real(r8) :: serial_thk       ! DEBUG
+    real(r8) :: parallel_thk     ! DEBUG
+    real(r8) :: geometric_thk    ! DEBUG
     
     real(r8), parameter :: rho_ice     = 917._r8
     real(r8) :: k_snw_vals(5)
@@ -1032,8 +1035,19 @@ contains
                      thk(c,j) = (dksat - tkdry(c,j))*dke + tkdry(c,j)   
                   endif
                   if (use_polygonal_tundra .and. f_exice .gt. 0._r8) then
-                     ! Modify thk for excess ice using sum of resistances
-                     thk(c,j) = 1._r8 / ((1._r8-f_exice)/thk(c,j) + f_exice/tkice)
+                     ! Modify thk to account for excess ice. The "true" conductivity
+                     ! depends on the vertical vs horizontal orientation of excess ice.
+                     ! If vertical, thk should mimic a parallel circuit. If horizontal, 
+                     ! a serial circuit. Not knowing the distribution a priori, we choose
+                     ! a geometric mean thk here which should sit between the parallel and
+                     ! serial limits.
+                     serial_thk = f_exice*tkice + (1._r8-f_exice)*thk(c,j)
+                     parallel_thk = 1._r8 / ((1._r8-f_exice)/thk(c,j) + f_exice/tkice)
+                     thk(c,j) = exp(f_exice*log(tkice) + (1._r8-f_exice)*log(thk(c,j)))
+                     ! thk(c,j) = 1._r8 / ((1._r8-f_exice)/thk(c,j) + f_exice/tkice)
+                     ! DEBUG TEST for understanding:
+                     geometric_thk = thk(c,j)
+                     write(iulog,*) "Arithmetic, geometric, and harmonic, c and j:", serial_thk, parallel_thk, geometric_thk, c, j
                   endif
                   if (j > nlevbed) thk(c,j) = thk_bedrock
                else if (lun_pp%itype(l) == istice .OR. lun_pp%itype(l) == istice_mec) then
