@@ -57,6 +57,11 @@ _TESTS = {
             "ERS.ELM_USRDAT.I1850CNPRDCTCBC.elm-usrpft_arctic_onsetgdd_I1850CNPRDCTCBC",
             "ERS.1x1_icycape.I1850GSWCNPRDCTCBC.elm-polygonal_tundra",
             "SMS_Ly1.ELM_USRDAT.I1850CNPRDCTCBC.elm-kilocraft",
+            "SMS_Ld1_P1x1.1x1_icycape.I1850CNPRDCTCBC.elm-soil_10SL_3p5m",
+            "SMS_Ld1_P1x1.1x1_icycape.I1850CNPRDCTCBC.elm-soil_23SL_3p5m",
+            "SMS_Ld1_P1x1.1x1_icycape.I1850CNPRDCTCBC.elm-soil_20SL_8p5m",
+            "SMS_Ld1_P1x1.1x1_icycape.I1850CNPRDCTCBC.elm-soil_49SL_10m",
+            "SMS_Ld1_P1x1.1x1_icycape.I1850CNPRDCTCBC.elm-soil_4SL_2m",
             )
         },
 
@@ -108,12 +113,7 @@ _TESTS = {
             "ERS.r05_r05.IELM.elm-lnd_rof_2way",
             "ERS.r05_r05.IELM.elm-V2_ELM_MOSART_features",
             "ERS.ELM_USRDAT.IELM.elm-surface_water_dynamics",
-            "ERS.ELM_USRDAT.IELM.elm-finetop_rad",
-            "SMS.ne4pg2_ne4pg2.I1850CNPRDCTCBC.elm-soil_10SL_3p5m",
-            "SMS.ne4pg2_ne4pg2.I1850CNPRDCTCBC.elm-soil_23SL_3p5m",
-            "SMS.ne4pg2_ne4pg2.I1850CNPRDCTCBC.elm-soil_20SL_8p5m",
-            "SMS.ne4pg2_ne4pg2.I1850CNPRDCTCBC.elm-soil_49SL_10m",
-            "SMS.ne4pg2_ne4pg2.I1850CNPRDCTCBC.elm-soil_4SL_2m"
+            "ERS.ELM_USRDAT.IELM.elm-finetop_rad"
             )
         },
 
