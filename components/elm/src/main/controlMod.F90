@@ -668,9 +668,21 @@ contains
                ' soil_layerstruct_userdefined_nlevsoi must be set together.'//&
                errMsg(__FILE__, __LINE__))
        end if
-       if ( trim(soil_layerstruct_predefined) /= 'UNSET' .and. more_vertlayers ) then
-          call endrun(msg=' ERROR: soil_layerstruct_predefined and the legacy'// &
-               ' more_vertlayers cannot both be set.'//errMsg(__FILE__, __LINE__))
+       ! Handle legacy more_vertlayers flag: automatically set soil_layerstruct_predefined
+       ! if not already set, or error if set to an inconsistent value
+       if ( more_vertlayers ) then
+          if ( trim(soil_layerstruct_predefined) == 'UNSET' ) then
+             soil_layerstruct_predefined = '23SL_3.5m'
+             if (masterproc) then
+                write(iulog,*) 'more_vertlayers=.true. detected; automatically setting'// &
+                     ' soil_layerstruct_predefined = 23SL_3.5m'
+             end if
+          else if ( trim(soil_layerstruct_predefined) /= '23SL_3.5m' ) then
+             call endrun(msg=' ERROR: more_vertlayers=.true. requires'// &
+                  ' soil_layerstruct_predefined=23SL_3.5m (or leave it unset),'// &
+                  ' but found '//trim(soil_layerstruct_predefined)//'.'// &
+                  errMsg(__FILE__, __LINE__))
+          end if
        end if
 
     endif   ! end of if-masterproc if-block
