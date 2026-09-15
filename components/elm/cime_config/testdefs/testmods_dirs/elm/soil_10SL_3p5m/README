@@ -1,0 +1,4 @@
+Test with 10 soil layer / 15 ground layer structure (standard ~3.5m depth).
+This is the default soil layer structure configuration.
+The directory name spells the decimal point as 'p' because CIME test names are
+split on '.'; the namelist value set here is '10SL_3.5m'.

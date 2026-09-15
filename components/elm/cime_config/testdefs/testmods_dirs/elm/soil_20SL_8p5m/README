@@ -1,2 +1,4 @@
 Test with 20 soil layer / 25 ground layer structure (~8.5m soil depth, 5 bedrock layers).
 This configuration extends soil depth for deep permafrost and groundwater studies.
+The directory name spells the decimal point as 'p' because CIME test names are
+split on '.'; the namelist value set here is '20SL_8.5m'.
