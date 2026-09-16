@@ -6,7 +6,7 @@ Module SoilHydrologyType
   use spmdMod               , only : masterproc, mpicom
   use abortutils            , only : endrun
   use elm_varpar            , only : nlevgrnd, nlayer, nlayert, nlevsoi
-  use elm_varpar            , only : more_vertlayers, nlevsoifl, toplev_equalspace
+  use elm_varpar            , only : interp_soil_texture, nlevsoifl, toplev_equalspace
   use elm_varcon            , only : zsoi, dzsoi, zisoi, spval
   use elm_varctl            , only : iulog, use_lnd_rof_two_way
   use SharedParamsMod     , only : ParamsShareInst
@@ -472,13 +472,13 @@ contains
                 ! do nothing
              else  
                   do lev = 1,nlevgrnd
-                    if ( more_vertlayers )then
-                      ! duplicate clay and sand values from last soil layer
+                    if ( interp_soil_texture )then
+                      ! interpolate clay/sand/organic onto the model grid
                       if (lev .eq. 1) then
                          clay    = clay3d(g,ti,1)
                          sand    = sand3d(g,ti,1)
                          om_frac = max(0.0_r8, min(organic3d(g,ti,1)/organic_max, 1._r8))
-                      else if (lev <= nlevsoi) then
+                      else if (lev <= nlevsoi .and. zisoi(lev) < zisoifl(nlevsoifl)) then
                          do j = 1,nlevsoifl-1
                             if (zisoi(lev) >= zisoifl(j) .AND. zisoi(lev) < zisoifl(j+1)) then
                                clay    = clay3d(g,ti,j+1)
@@ -486,7 +486,7 @@ contains
                                om_frac = max(0.0_r8, min(organic3d(g,ti,j+1)/organic_max, 1._r8))
                             endif
                          end do
-                      else
+                      else ! target interface at/below source data bottom: use deepest source layer
                          clay    = clay3d(g,ti,nlevsoifl)
                          sand    = sand3d(g,ti,nlevsoifl)
                          om_frac = 0._r8

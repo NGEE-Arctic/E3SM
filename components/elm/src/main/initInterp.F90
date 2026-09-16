@@ -41,6 +41,7 @@ module initInterpMod
   private :: interp_1d_double
   private :: interp_1d_int
   private :: interp_2d_double
+  private :: get_levinterp_coord
 
   ! Private data
  
@@ -1075,6 +1076,8 @@ contains
     ! local variables
     integer             :: ni,no               ! indices
     integer             :: ji, jj, index_lower ! indices
+    integer             :: nsno_i              ! number of snow layers on input grid
+    integer             :: first_ground_i      ! index of first ground node on input grid
     integer             :: status              ! netCDF return code
     integer             :: lev                 ! temporary
     integer             :: start(2), count(2)
@@ -1096,6 +1099,28 @@ contains
          dim1name=trim(vec_dimname), switchdim=switchdimo)
 
     if (nlevi == nlevo) then
+
+       ! Equal level counts are remapped by a per-level index copy below,
+       ! which is only physically correct when the two grids share the same
+       ! node coordinates. Two different soil layer structures can have equal
+       ! level counts but different layer thicknesses, in which case an index
+       ! copy would silently misalign the column. Guard the soil grids by
+       ! comparing coordinates and refuse the ambiguous remap; coordinate
+       ! interpolation (below) requires the target grid to have more levels
+       ! than the source grid. Non-soil dimensions have no zsoi coordinate
+       ! and are left to the index copy unchanged.
+       if (trim(lev_dimname) == 'levgrnd' .or. trim(lev_dimname) == 'levtot') then
+          allocate(zsoii(nlevi), zsoio(nlevo))
+          call get_levinterp_coord(ncidi, lev_dimname, nlevi, zsoii)
+          call get_levinterp_coord(ncido, lev_dimname, nlevo, zsoio)
+          if ( any(abs(zsoii - zsoio) > eps) ) then
+             call endrun(msg='ERROR: init_interp cannot remap between soil layer'// &
+                  ' structures with the same number of levels but different node depths;'// &
+                  ' the target grid must have more levels than the source grid'//&
+                  errMsg(__FILE__, __LINE__))
+          end if
+          deallocate(zsoii, zsoio)
+       end if
 
        ! Read in 1 level of input array at a time and do interpolation for just that level
 
@@ -1144,6 +1169,12 @@ contains
        end if
        call ncd_io(ncid=ncidi, varname=trim(varname), flag='read', data=rbuf2di)
 
+       ! Index of the first ground node on the input grid. Defaults to 1
+       ! (correct for a levgrnd grid and for the two legacy hardcoded cases,
+       ! keeping them bit-for-bit); overridden for the general levtot case
+       ! below, where the leading entries are dummy snow coordinates.
+       first_ground_i = 1
+
        if ( ( nlevi .eq. 15) .and. (nlevo .eq. 30) ) then
           !!! this is the case for variables on the levgrnd grid
           allocate(zsoii(nlevi), zsoio(nlevo))
@@ -1162,12 +1193,40 @@ contains
           zsoii(1:5) = (/ -5._r8, -4._r8, -3._r8, -2._r8, 0._r8 /)
           zsoio(1:5) = (/ -5._r8, -4._r8, -3._r8, -2._r8, 0._r8 /)
        else
-          call endrun(msg='ERROR: vertical grid must be either levgrnd or levtot'//&
-            errMsg(__FILE__, __LINE__))
+          !!! general case: interpolate between any pair of soil layer
+          !!! structures (10SL_3.5m, 20SL_8.5m, 49SL_10m, 4SL_2m or a
+          !!! user-defined grid). Node depths are read from each file's zsoi
+          !!! variable; for a levtot grid the leading snow layers are given
+          !!! dummy monotonic coordinates below the surface. The two special
+          !!! cases above are retained verbatim so the legacy 10SL_3.5m ->
+          !!! 23SL_3.5m interpolation stays bit-for-bit.
+          allocate(zsoii(nlevi), zsoio(nlevo))
+          call get_levinterp_coord(ncidi, lev_dimname, nlevi, zsoii, nsno_out=nsno_i)
+          call get_levinterp_coord(ncido, lev_dimname, nlevo, zsoio)
+          ! Clamp shallow output ground nodes to the first input ground node,
+          ! not to index 1 (which for a levtot grid is a dummy snow
+          ! coordinate); otherwise a shallow ground node could blend soil
+          ! state with a snow-layer value.
+          first_ground_i = nsno_i + 1
        endif
        !
        do ji = 1, nlevo
           doneloop = .false.
+          ! If the output layer is shallower than the shallowest input ground
+          ! node (possible for grids that are finer near the surface, e.g.
+          ! 10SL_3.5m -> 49SL_10m), copy the shallowest input ground value
+          ! rather than falling through to the jj==nlevi branch below (which
+          ! would wrongly assign the deepest input value) or interpolating
+          ! against a dummy snow coordinate. Clamping to first_ground_i (not
+          ! index 1) ensures a shallow ground node is never blended with a
+          ! snow-layer value on a levtot grid. This never triggers for the
+          ! legacy 10SL_3.5m -> 23SL_3.5m grids, whose surface nodes coincide,
+          ! so those cases remain bit-for-bit.
+          if (zsoio(ji) < zsoii(first_ground_i)) then
+             doneloop    = .true.
+             copylevels  = .true.
+             index_lower = first_ground_i
+          end if
           do jj = 1, nlevi
              if ( .not. doneloop) then
                 if ( (abs(zsoio(ji) - zsoii(jj))  <  eps ) .or. (jj .eq. nlevi) ) then
@@ -1229,6 +1288,63 @@ contains
     deallocate(rbuf2do)
 
   end subroutine interp_2d_double
+
+  !=======================================================================
+
+  subroutine get_levinterp_coord(ncid, lev_dimname, nlev, zsoi, nsno_out)
+
+    ! --------------------------------------------------------------------
+    ! Build a monotonically increasing vertical coordinate used by
+    ! interp_2d_double when regridding a restart variable between two soil
+    ! layer structures. For a levgrnd-type grid the node depths are read
+    ! directly from the file's zsoi variable. For a levtot-type grid the
+    ! leading nsno = nlev - nlevgrnd entries are snow layers, which are given
+    ! dummy monotonically increasing coordinates strictly below the surface
+    ! (all ground node depths are positive); the remaining entries hold the
+    ! ground node depths read from zsoi. This generalizes the two hardcoded
+    ! (15->30, 20->35) cases in interp_2d_double to arbitrary structures.
+    ! The optional nsno_out returns the number of leading snow (dummy)
+    ! entries (0 for a levgrnd grid), so the caller can identify the first
+    ! ground node and avoid clamping to a snow-layer coordinate.
+    ! --------------------------------------------------------------------
+    ! arguments
+    type(file_desc_t) , intent(inout) :: ncid
+    character(len=*)  , intent(in)    :: lev_dimname
+    integer           , intent(in)    :: nlev
+    real(r8)          , intent(out)   :: zsoi(nlev)
+    integer, optional , intent(out)   :: nsno_out
+    !
+    ! local variables
+    integer          :: status
+    integer          :: dimid
+    integer          :: nlevgrnd_f   ! number of ground layers on this file
+    integer          :: nsno         ! number of snow layers on this file
+    integer          :: k
+    type(Var_desc_t) :: vardesc
+    ! --------------------------------------------------------------------
+
+    if (trim(lev_dimname) == 'levtot') then
+       ! total grid: nlev = nsno + nlevgrnd. zsoi on the file covers the
+       ! ground layers only, so the snow layers are prepended with dummy
+       ! coordinates.
+       status = pio_inq_dimid (ncid, 'levgrnd', dimid)
+       status = pio_inq_dimlen(ncid, dimid, nlevgrnd_f)
+       nsno = nlev - nlevgrnd_f
+       do k = 1, nsno
+          zsoi(k) = real(k - nsno - 1, r8)   ! -nsno, ..., -1 (below surface)
+       end do
+       status = pio_inq_varid(ncid, 'zsoi', vardesc)
+       status = pio_get_var(ncid, vardesc, zsoi(nsno+1:nlev))
+    else
+       ! ground grid: node depths map one-to-one onto zsoi
+       nsno = 0
+       status = pio_inq_varid(ncid, 'zsoi', vardesc)
+       status = pio_get_var(ncid, vardesc, zsoi)
+    end if
+
+    if (present(nsno_out)) nsno_out = nsno
+
+  end subroutine get_levinterp_coord
 
   !=======================================================================
 
