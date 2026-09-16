@@ -240,10 +240,6 @@ contains
         if (atm2lnd_vars%loaded_bypassdata == 0) then
           !meteorological forcing
           if (index(metdata_type, 'qian') .gt. 0) then 
-<<<<<<< HEAD
-            atm2lnd_vars%metsource = 0   
-          else if (index(metdata_type,'cru') .gt. 0 .and. index(metdata_type,'jra') .le. 0) then
-=======
             atm2lnd_vars%metsource = 0
           else if (index(metdata_type,'crujra') .gt. 0) then
             ! add crujra.trendy metsource flag
@@ -251,7 +247,6 @@ contains
             ! to prevent setting the flag to base cru (1)
             atm2lnd_vars%metsource = 7     
           else if (index(metdata_type,'cru') .gt. 0) then
->>>>>>> 0f86691d89 (Extended lnd_import_export.F90 for using CRUJCRA.trendy met files)
             atm2lnd_vars%metsource = 1  
           else if (index(metdata_type,'site') .gt. 0) then 
             atm2lnd_vars%metsource = 2
