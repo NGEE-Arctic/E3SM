@@ -478,7 +478,7 @@ contains
                          clay    = clay3d(g,ti,1)
                          sand    = sand3d(g,ti,1)
                          om_frac = max(0.0_r8, min(organic3d(g,ti,1)/organic_max, 1._r8))
-                      else if (lev <= nlevsoi) then
+                      else if (lev <= nlevsoi .and. zisoi(lev) < zisoifl(nlevsoifl)) then
                          do j = 1,nlevsoifl-1
                             if (zisoi(lev) >= zisoifl(j) .AND. zisoi(lev) < zisoifl(j+1)) then
                                clay    = clay3d(g,ti,j+1)
@@ -486,7 +486,7 @@ contains
                                om_frac = max(0.0_r8, min(organic3d(g,ti,j+1)/organic_max, 1._r8))
                             endif
                          end do
-                      else
+                      else ! target interface at/below source data bottom: use deepest source layer
                          clay    = clay3d(g,ti,nlevsoifl)
                          sand    = sand3d(g,ti,nlevsoifl)
                          om_frac = 0._r8

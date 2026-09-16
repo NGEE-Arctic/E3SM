@@ -283,10 +283,31 @@ contains
                ' must be set when soil_layerstruct_userdefined is used')
        end if
        nlevsoi  = soil_layerstruct_userdefined_nlevsoi
+       ! Count nlevgrnd as the length of the leading contiguous block of
+       ! valid (non-rundef) thicknesses and validate the vector: the used
+       ! entries must form a positive, gap-free prefix. A valid entry that
+       ! follows a rundef indicates an interior gap, which would make
+       ! nlevgrnd inconsistent with a contiguous physical column.
        nlevgrnd = 0
        do j = 1, size(soil_layerstruct_userdefined)
-          if ( soil_layerstruct_userdefined(j) /= rundef ) nlevgrnd = nlevgrnd + 1
+          if ( soil_layerstruct_userdefined(j) /= rundef ) then
+             if ( j > 1 ) then
+                if ( soil_layerstruct_userdefined(j-1) == rundef ) then
+                   call shr_sys_abort(trim(subname)//' ERROR: soil_layerstruct_userdefined'// &
+                        ' must be a contiguous list of thicknesses with no gaps')
+                end if
+             end if
+             if ( soil_layerstruct_userdefined(j) <= 0._r8 ) then
+                call shr_sys_abort(trim(subname)//' ERROR: soil_layerstruct_userdefined'// &
+                     ' thicknesses must be positive')
+             end if
+             nlevgrnd = nlevgrnd + 1
+          end if
        end do
+       if ( nlevsoi < 1 ) then
+          call shr_sys_abort(trim(subname)//' ERROR: soil_layerstruct_userdefined_nlevsoi'// &
+               ' must be >= 1')
+       end if
        if ( nlevsoi >= nlevgrnd ) then
           call shr_sys_abort(trim(subname)//' ERROR: soil_layerstruct_userdefined_nlevsoi'// &
                ' must be less than the number of user-defined soil layers')
