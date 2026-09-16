@@ -65,7 +65,7 @@ contains
     use abortutils       , only : endrun
     use shr_log_mod      , only : errMsg => shr_log_errMsg
     use shr_kind_mod     , only : SHR_KIND_CL
-    use elm_time_manager , only : get_nstep, get_step_size, set_timemgr_init, set_nextsw_cday
+    use elm_time_manager , only : get_nstep, get_step_size, set_timemgr_init, set_nextsw_cday, get_curr_calday
     use elm_initializeMod, only : initialize1, initialize2, initialize3
     use elm_instMod      , only : lnd2atm_vars, lnd2glc_vars, lnd2iac_vars
     use elm_instance     , only : elm_instance_init
@@ -403,6 +403,14 @@ contains
       !DMR:  NOTE this assumes a no-leap calendar and equal input/model timesteps
       nstep = get_nstep()
       nextsw_cday = mod((nstep/(86400._r8/dtime_elm))*1.0_r8,365._r8)+1._r8
+      write(iulog,*)'-----------------------------------'
+      write(iulog,*)'LND COMP MCT'
+      write(iulog,*)'dtime_elm',dtime_elm
+      write(iulog,*)'nstep',nstep
+      write(iulog,*)'nextsw_cday',nextsw_cday
+      nextsw_cday = mod(((nstep+1)/(86400._r8/dtime_elm))*1.0_r8,365._r8)+1._r8
+      write(iulog,*)'nextsw_cday new',nextsw_cday
+      write(iulog,*)'nextsw_cday new2',get_curr_calday(offset=dtime_elm)
       call set_nextsw_cday( nextsw_cday )
     end if
 
@@ -545,6 +553,14 @@ contains
       !DMR:  NOTE this assumes a no-leap calendar and equal input/model timesteps
       nstep = get_nstep()
       nextsw_cday = mod((nstep/(86400._r8/dtime))*1.0_r8,365._r8)+1._r8
+      write(iulog,*)'-----------------------------------'
+      write(iulog,*)'LND COMP MCT'
+      write(iulog,*)'dtime',dtime
+      write(iulog,*)'nstep',nstep
+      write(iulog,*)'nextsw_cday',nextsw_cday
+      nextsw_cday = mod(((nstep+1)/(86400._r8/dtime))*1.0_r8,365._r8)+1._r8
+      write(iulog,*)'nextsw_cday new',nextsw_cday
+      write(iulog,*)'nextsw_cday new2',get_curr_calday(offset=dtime)
       call set_nextsw_cday( nextsw_cday )
     end if
 

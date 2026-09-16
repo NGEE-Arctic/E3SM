@@ -262,12 +262,15 @@ contains
           if (cosinc_gcell(g) <= 0._r8) cosinc_gcell(g) = 0.1_r8 ! although direct solar radiation is zero, we need to calculate diffuse albedo in this case
        end do
     endif
-
+    write(iulog,*)'-----------------------------------'
+    write(iulog,*)'SURFACE ALBEDO MOD'
     do c = bounds%begc,bounds%endc
        g = col_pp%gridcell(c)
        coszen_col(c) = coszen_gcell(g)
+       write(iulog,*)'coszen_col(c)',coszen_col(c)
        cosinc_col(c) = cosinc_gcell(g)
     end do
+    
     do fp = 1,num_nourbanp
        p = filter_nourbanp(fp)
        g = veg_pp%gridcell(p)
