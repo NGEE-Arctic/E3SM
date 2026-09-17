@@ -191,6 +191,35 @@ Interpolate the soil layers on the surface dataset to the soil layers specified 
 (EXPERIMENTAL)
 </entry>
 
+<entry id="soil_layerstruct_predefined" type="char*16" category="elm_physics"
+       group="elm_inparm"
+       valid_values="10SL_3.5m,23SL_3.5m,20SL_8.5m,49SL_10m,4SL_2m" >
+Predefined vertical soil layer structure (ported from CTSM). Mutually
+exclusive with soil_layerstruct_userdefined and with the legacy
+more_vertlayers flag. If unset, the more_vertlayers boolean selects
+between 10SL_3.5m (.false.) and 23SL_3.5m (.true.).
+10SL_3.5m = standard 10 soil / 15 ground layer column (default)
+23SL_3.5m = 23 soil / 30 ground layers for permafrost simulations
+20SL_8.5m = 20 soil layers, ~8.5 m soil, 5 bedrock layers
+49SL_10m  = 49 soil layers, 10 m soil, 5 bedrock layers
+4SL_2m    = 4 soil layers, 2 m soil
+</entry>
+
+<entry id="soil_layerstruct_userdefined" type="real(99)" category="elm_physics"
+       group="elm_inparm" valid_values="" >
+User-defined vector of soil layer thicknesses dzsoi (m), ported from CTSM.
+The number of supplied values sets nlevgrnd. Must be used together with
+soil_layerstruct_userdefined_nlevsoi and is mutually exclusive with
+soil_layerstruct_predefined.
+</entry>
+
+<entry id="soil_layerstruct_userdefined_nlevsoi" type="integer" category="elm_physics"
+       group="elm_inparm" valid_values="" >
+Number of hydrologically active soil layers (nlevsoi) when a user-defined
+soil layer structure is supplied via soil_layerstruct_userdefined. Must be
+less than the number of user-defined layers.
+</entry>
+
 <entry id="irrigate" type="logical" category="elm_physics"
        group="elm_inparm"  >
 If TRUE, irrigation will be active.

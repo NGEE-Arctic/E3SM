@@ -57,6 +57,8 @@ module controlMod
   use elm_varpar              , only: elmfates_cnp
   use elm_varctl, only: nu_com, use_dynroot, use_fan, fan_mode, fan_to_bgc_veg, &
                         use_var_soil_thick, use_lake_wat_storage, squareomfrac, &
+                        soil_layerstruct_predefined, soil_layerstruct_userdefined, &
+                        soil_layerstruct_userdefined_nlevsoi, &
                         forest_fert_exp, ECA_Pconst_RGspin, NFIX_PTASE_plant, &
                         use_pheno_flux_limiter, startdate_add_temperature, &
                         startdate_add_co2, add_temperature, add_co2, &
@@ -287,7 +289,9 @@ contains
          clump_pproc, wrtdia, &
          create_crop_landunit, nsegspc, co2_ppmv, override_nsrest, &
          albice, more_vertlayers, subgridflag, irrigate, tw_irr, extra_gw_irr, firrig_data, all_active, &
-         mpi_sync_nstep_freq
+         mpi_sync_nstep_freq, &
+         soil_layerstruct_predefined, soil_layerstruct_userdefined, &
+         soil_layerstruct_userdefined_nlevsoi
     ! Urban options
 
     namelist /elm_inparm/  &
@@ -645,9 +649,29 @@ contains
        if (use_lnd_rof_two_way) then
           if (lnd_rof_coupling_nstep < 1) then
           call endrun(msg=' ERROR: lnd_rof_coupling_nstep cannot be smaller than 1.'//&
-                   errMsg(__FILE__, __LINE__))     
+                   errMsg(__FILE__, __LINE__))
           endif
        endif
+
+       ! Soil layer structure selection (ported from CTSM):
+       ! predefined and user-defined structures are mutually exclusive,
+       ! and the user-defined vector requires its companion nlevsoi.
+       if ( trim(soil_layerstruct_predefined) /= 'UNSET' .and. &
+            soil_layerstruct_userdefined(1) /= rundef ) then
+          call endrun(msg=' ERROR: soil_layerstruct_predefined and'// &
+               ' soil_layerstruct_userdefined cannot both be set.'//&
+               errMsg(__FILE__, __LINE__))
+       end if
+       if ( (soil_layerstruct_userdefined(1) /= rundef) .neqv. &
+            (soil_layerstruct_userdefined_nlevsoi /= iundef) ) then
+          call endrun(msg=' ERROR: soil_layerstruct_userdefined and'// &
+               ' soil_layerstruct_userdefined_nlevsoi must be set together.'//&
+               errMsg(__FILE__, __LINE__))
+       end if
+       if ( trim(soil_layerstruct_predefined) /= 'UNSET' .and. more_vertlayers ) then
+          call endrun(msg=' ERROR: soil_layerstruct_predefined and the legacy'// &
+               ' more_vertlayers cannot both be set.'//errMsg(__FILE__, __LINE__))
+       end if
 
     endif   ! end of if-masterproc if-block
 
@@ -988,6 +1012,9 @@ contains
     call mpi_bcast (co2_ppmv, 1, MPI_REAL8,0, mpicom, ier)
     call mpi_bcast (albice, 2, MPI_REAL8,0, mpicom, ier)
     call mpi_bcast (more_vertlayers,1, MPI_LOGICAL, 0, mpicom, ier)
+    call mpi_bcast (soil_layerstruct_predefined, len(soil_layerstruct_predefined), MPI_CHARACTER, 0, mpicom, ier)
+    call mpi_bcast (soil_layerstruct_userdefined, size(soil_layerstruct_userdefined), MPI_REAL8, 0, mpicom, ier)
+    call mpi_bcast (soil_layerstruct_userdefined_nlevsoi, 1, MPI_INTEGER, 0, mpicom, ier)
     call mpi_bcast (const_climate_hist, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_top_solar_rad, 1, MPI_LOGICAL, 0, mpicom, ier)  ! TOP solar radiation parameterization
     call mpi_bcast (use_finetop_rad, 1, MPI_LOGICAL, 0, mpicom, ier)  ! fineTOP radiation parameterization
@@ -1322,6 +1349,10 @@ contains
     write(iulog,*) '   atm_gustiness   = ', atm_gustiness
     write(iulog,*) '   force_land_gustiness   = ', force_land_gustiness
     write(iulog,*) '   more vertical layers = ', more_vertlayers
+    write(iulog,*) '   soil_layerstruct_predefined = ', trim(soil_layerstruct_predefined)
+    if ( soil_layerstruct_userdefined_nlevsoi /= iundef ) then
+       write(iulog,*) '   soil_layerstruct_userdefined_nlevsoi = ', soil_layerstruct_userdefined_nlevsoi
+    end if
     
     write(iulog,*) '   Sub-grid topographic effects on solar radiation   = ', use_top_solar_rad  ! TOP solar radiation parameterization
     write(iulog,*) '   Grid-scale topographic effects on radiation (fineTOP)  = ', use_finetop_rad   ! fineTOP radiation parameterization
