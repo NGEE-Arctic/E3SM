@@ -945,7 +945,6 @@ contains
                   if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
                      if (excess_ice(c,j) .gt. 0._r8) then
                         f_exice = excess_ice(c,j)/(denice*dz(c,j))
-                        f_exice = f_exice / (1._r8 + f_exice)
                         f_exice = min(1._r8, max(0._r8, f_exice))
                         dz_soil = dz(c,j) * (1._r8 - f_exice)
                      else
