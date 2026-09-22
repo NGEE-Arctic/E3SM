@@ -330,6 +330,25 @@ contains
             atm2lnd_vars%startyear_met      = 1950
             atm2lnd_vars%endyear_met_spinup = 1970
             atm2lnd_vars%endyear_met_trans  = 2025
+
+            ! get year information from file, if available
+            ierr = nf90_open(trim(metdata_bypass) // '/ERA5_TBOT_1951-2025_z01.nc', nf90_nowrite, ncid)
+            if (ierr == 0) then
+                ierr = nf90_inq_varid(ncid, 'start_year', varid)
+                if (ierr == 0) ierr = nf90_get_var(ncid, varid, atm2lnd_vars%startyear_met)
+                ierr = nf90_inq_varid(ncid, 'end_year', varid)
+                if (ierr == 0) then
+                    ierr = nf90_get_var(ncid, varid, atm2lnd_vars%endyear_met_trans)
+                    atm2lnd_vars%endyear_met_spinup = min(atm2lnd_vars%endyear_met_trans,&
+                                                             atm2lnd_vars%startyear_met+20)
+                end if
+                ierr = nf90_close(ncid)
+            end if
+            write(iulog,*)'---------------------------------------------'
+            write(iulog,*)'atm2lnd_vars%startyear_met',atm2lnd_vars%startyear_met
+            write(iulog,*)'atm2lnd_vars%endyear_met_trans',atm2lnd_vars%endyear_met_trans
+            write(iulog,*)'atm2lnd_vars%endyear_met_spinup',atm2lnd_vars%endyear_met_spinup
+
           end if
 
           if (use_livneh) then 
@@ -450,7 +469,9 @@ contains
                     !metdata_fname = 'WCYCL1850S.ne30_' // trim(metvars(v)) // '_0076-0100_z' // zst(2:3) // '.nc'
                     metdata_fname = 'CBGC1850S.ne30_' // trim(metvars(v)) // '_0566-0590_z' // zst(2:3) // '.nc'
             else if (atm2lnd_vars%metsource == 6) then
-                metdata_fname = 'ERA5_' // trim(metvars(v)) // '_1950-2025_z' // zst(2:3) // '.nc'
+                !metdata_fname = 'ERA5_' // trim(metvars(v)) // '_1950-2025_z' // zst(2:3) // '.nc'
+                metdata_fname = 'ERA5_' // trim(metvars(v)) // '_1951-2025_z' // zst(2:3) // '.nc'
+                !metdata_fname = 'ERA5_' // trim(metvars(v)) // '.nc'
                 if (use_daymet .and. (index(metdata_type, 'daymet4') .gt. 0) ) then
                    !daymet v4 with ERA5 v2024 for NA with user-defined zone-mappings.txt
                     metdata_fname = 'Daymet_ERA5.1km_' // trim(metvars(v)) // '_z' // zst(2:3) // '.nc'
