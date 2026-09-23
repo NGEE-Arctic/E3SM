@@ -57,6 +57,11 @@ _TESTS = {
             "ERS.ELM_USRDAT.I1850CNPRDCTCBC.elm-usrpft_arctic_onsetgdd_I1850CNPRDCTCBC",
             "ERS.1x1_icycape.I1850GSWCNPRDCTCBC.elm-polygonal_tundra",
             "SMS_Ly1.ELM_USRDAT.I1850CNPRDCTCBC.elm-kilocraft",
+            "SMS_Ld1_P1x1.1x1_icycape.I1850CNPRDCTCBC.elm-soil_10SL_3p5m",
+            "SMS_Ld1_P1x1.1x1_icycape.I1850CNPRDCTCBC.elm-soil_23SL_3p5m",
+            "SMS_Ld1_P1x1.1x1_icycape.I1850CNPRDCTCBC.elm-soil_20SL_8p5m",
+            "SMS_Ld1_P1x1.1x1_icycape.I1850CNPRDCTCBC.elm-soil_49SL_10m",
+            "SMS_Ld1_P1x1.1x1_icycape.I1850CNPRDCTCBC.elm-soil_4SL_2m",
             )
         },
 
