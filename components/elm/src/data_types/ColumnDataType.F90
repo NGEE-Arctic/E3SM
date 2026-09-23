@@ -1779,17 +1779,17 @@ contains
    this%salinity(begc:endc) = spval
     call hist_addfld1d (fname='SALINITY',  units='ppt', &
          avgflag='A', long_name='Tide salinity concentration', &
-         ptr_col=this%salinity)
+         ptr_col=this%salinity, default='inactive')
 
    this%nitrate_tide(begc:endc) = spval
     call hist_addfld1d (fname='NITRATE_TIDE',  units='ppt', &
          avgflag='A', long_name='Tide nitrate concentration', &
-         ptr_col=this%nitrate_tide)
+         ptr_col=this%nitrate_tide, default='inactive')
 
    this%h2osfc_tide(begc:endc) = spval
    call hist_addfld1d (fname='H2OSFC_TIDE',  units='mm H2O',  &
       avgflag='A', long_name='Tide height above soil surface', &
-      ptr_col=this%h2osfc_tide)
+      ptr_col=this%h2osfc_tide, default='inactive')
 
     !-----------------------------------------------------------------------
     ! set cold-start initial values for select members of col_ws
@@ -6272,22 +6272,22 @@ contains
     this%qflx_drain_vr(begc:endc, :) = spval
     call hist_addfld2d (fname='QDRAI_VR',  units='mm/s', type2d='levgrnd', &
           avgflag='A', long_name='Sub-surface drainage by layer', &
-          ptr_col=this%qflx_drain_vr)
+          ptr_col=this%qflx_drain_vr, default='inactive')
 
     this%qflx_lat_aqu(begc:endc) = spval
     call hist_addfld1d (fname='QFLX_LAT_AQU',  units='mm/s',  &
          avgflag='A', long_name='Lateral flow between hummock and hollow', &
-         ptr_col=this%qflx_lat_aqu, c2l_scale_type='urbanf')
+         ptr_col=this%qflx_lat_aqu, c2l_scale_type='urbanf', default='inactive')
 
     this%qflx_lat_aqu_layer(begc:endc, :) = spval
     call hist_addfld2d (fname='QFLX_LAT_AQU_LAYER',  units='mm/s', type2d='levgrnd', &
          avgflag='A', long_name='Lateral flow between hummock and hollow by layer', &
-         ptr_col=this%qflx_lat_aqu_layer)
+         ptr_col=this%qflx_lat_aqu_layer, default='inactive')
 
     this%qflx_tide(begc:endc) = spval
     call hist_addfld1d (fname='QFLX_TIDE',  units='mm H2O/s',  &
          avgflag='A', long_name='Tidal flux between marsh columns', &
-         ptr_col=this%qflx_tide)
+         ptr_col=this%qflx_tide, default='inactive')
 
     this%qflx_surf_input(begc:endc) = spval
     call hist_addfld1d (fname='QSURF_INPUT', units='kg/m2/s', &
@@ -6297,7 +6297,7 @@ contains
     this%qflx_adv(begc:endc,:) = spval
     call hist_addfld2d (fname='QFLX_ADV',  units='mm/s', type2d='levgrnd', &
       avgflag='A', long_name='Vertical flow across soil layers', &
-      ptr_col=this%qflx_adv, c2l_scale_type='urbanf')
+      ptr_col=this%qflx_adv, c2l_scale_type='urbanf', default='inactive')
 
     this%qflx_irr_demand(begc:endc) = spval
     call hist_addfld1d (fname='QIRRIG_WM',  units='mm/s',  &
