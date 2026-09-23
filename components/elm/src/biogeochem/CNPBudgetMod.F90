@@ -862,8 +862,8 @@ contains
     ! !LOCAL VARIABLES:
     integer :: f, s, s_beg, s_end ! data array indicies
     real(r8) :: time_integrated_flux, state_net_change
-    real(r8) :: relative_error
-    real(r8), parameter :: error_tol = 0.01_r8
+    real(r8) :: relative_error, abs_error, scale_ref
+    real(r8), parameter :: error_tol = 0.01_r8            ! absolute floor [kgC/m2*1e6]
     real(r8), parameter :: relative_error_tol = 1.5e-10_r8 ! [%]
 
     write(iulog,*   )''
@@ -921,12 +921,35 @@ contains
     state_net_change = (budg_stateG(s_totc_end, ip) - budg_stateG(s_totc_beg, ip))*unit_conversion + &
          budg_stateG(s_c_error,ip) *unit_conversion
 
-    relative_error = abs(time_integrated_flux - state_net_change)/(budg_stateG(s_totc_end, ip)*unit_conversion) * 100._r8
+    abs_error = abs(time_integrated_flux - state_net_change)
 
-    if (relative_error > relative_error_tol) then
+    ! Normalize by the largest carbon magnitude cycled through or stored in
+    ! the column this period, so the denominator cannot collapse to zero.
+    ! During accelerated-decomposition (ad) spinup at cold, low-productivity
+    ! sites the end stock can drain toward zero while ~5 kgC/m2 still cycled
+    ! through the column; using only the end stock inflates unavoidable
+    ! round-off (~1e-13) past tolerance and aborts a run that is in fact
+    ! conserving to ~13 significant digits.
+    scale_ref = max(abs(time_integrated_flux), &
+                    abs(state_net_change),     &
+                    abs(budg_stateG(s_totc_end, ip)*unit_conversion))
+
+    if (scale_ref > 0._r8) then
+       relative_error = abs_error/scale_ref * 100._r8
+    else
+       relative_error = 0._r8   ! nothing cycled and nothing stored: trivially balanced
+    endif
+
+    ! Two-gate: abort only when the imbalance is BOTH absolutely large (above
+    ! the round-off floor error_tol) AND relatively large. A genuine leak
+    ! scales with the flux and fails both gates; round-off never exceeds
+    ! error_tol regardless of how small the end stock becomes.
+    if (abs_error > error_tol .and. relative_error > relative_error_tol) then
        write(iulog,*)'time integrated flux = ',time_integrated_flux
        write(iulog,*)'net change in state  = ',state_net_change
        write(iulog,*)'current state        = ',budg_stateG(s_totc_end, ip)
+       write(iulog,*)'absolute error       = ',abs_error
+       write(iulog,*)'normalization scale  = ',scale_ref
        write(iulog,*)'relative error [%]   = ',relative_error
        call endrun(msg=errMsg(__FILE__, __LINE__))
     endif

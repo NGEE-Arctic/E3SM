@@ -37,6 +37,7 @@ module ColumnDataType
   use elm_time_manager, only : is_restart, get_nstep
   use elm_time_manager, only : is_first_step, get_step_size, is_first_restart_step
   use landunit_varcon , only : istice, istwet, istsoil, istdlak, istcrop, istice_mec, istlowcenpoly, isthighcenpoly
+  use landunit_varcon , only : ilowcenpoly, iflatcenpoly, ihighcenpoly
   use column_varcon   , only : icol_road_perv, icol_road_imperv, icol_roof, icol_sunwall, icol_shadewall
   use histFileMod     , only : hist_addfld1d, hist_addfld2d, no_snow_normal
   use histFileMod     , only : hist_addfld_decomp
@@ -176,11 +177,12 @@ module ColumnDataType
     real(r8), pointer :: iwp_exclvol      (:) => null() ! ice wedge polygon excluded volume (m)
     real(r8), pointer :: iwp_ddep         (:) => null() ! ice wedge polygon depression depth (m)
     real(r8), pointer :: iwp_subsidence   (:) => null() ! ice wedge polygon ground subsidence (m)
-    real(r8), pointer :: excess_ice     (:,:) => null() ! excess ground ice in column (1:nlevgrnd) (0 to 1)
-    real(r8), pointer :: frac_melted    (:,:) => null() ! fraction of layer that has ever thawed (for tracking excess ice removal) (0 to 1)
-    real(r8), pointer :: h2osfc_p         (:) => null() ! h2osfc from previous timestep (inundation fraction is calculated based on this var)
     real(r8), pointer :: supercool      (:,:) => null() ! supercooled liquid water in soil (kg/m2)
     real(r8), pointer :: smp_i          (:,:) => null() ! frozen water potential
+    real(r8), pointer :: excess_ice          (:,:) => null() ! excess ground ice mass (kg/m2) (1:nlevgrnd)
+    real(r8), pointer :: excess_ice_volfrac  (:,:) => null() ! excess ice volumetric fraction (0 to 1) (1:nlevgrnd)
+    real(r8), pointer :: h2osfc_p          (:) => null() ! h2osfc from previous timestep (kg/m2)
+
   contains
     procedure, public :: Init    => col_ws_init
     procedure, public :: Restart => col_ws_restart
@@ -425,6 +427,7 @@ module ColumnDataType
     real(r8), pointer :: eflx_snomelt            (:)   => null() ! snow melt heat flux (W/m**2)
     real(r8), pointer :: eflx_snomelt_r          (:)   => null() ! rural snow melt heat flux (W/m2)
     real(r8), pointer :: eflx_snomelt_u          (:)   => null() ! urban snow melt heat flux (W/m2)
+    real(r8), pointer :: eflx_exice_melt         (:)   => null() ! excess ice melt latent heat flux (W/m2)
     real(r8), pointer :: eflx_bot                (:)   => null() ! heat flux from beneath the soil or ice column (W/m2)
     real(r8), pointer :: eflx_fgr12              (:)   => null() ! ground heat flux between soil layers 1 and 2 (W/m2)
     real(r8), pointer :: eflx_fgr                (:,:) => null() ! (rural) soil downward heat flux (W/m2) (1:nlevgrnd)  (pos upward; usually eflx_bot >= 0)
@@ -507,6 +510,8 @@ module ColumnDataType
     real(r8), pointer :: qflx_snomelt         (:)   => null() ! snow melt (mm H2O /s)
     real(r8), pointer :: qflx_snow_melt       (:)   => null() ! snow melt (net)
     real(r8), pointer :: qflx_snomelt_lyr     (:,:) => null() ! snow melt (net)
+    real(r8), pointer :: qflx_exice_melt      (:)   => null() ! excess ice melt (mm H2O/s)
+    real(r8), pointer :: qflx_exice_melt_lyr  (:,:) => null() ! excess ice melt (kg/m2/s) per layer
     real(r8), pointer :: qflx_qrgwl           (:)   => null() ! qflx_surf at glaciers, wetlands, lakes
     real(r8), pointer :: qflx_runoff          (:)   => null() ! total runoff (qflx_drain+qflx_surf+qflx_qrgwl) (mm H2O /s)
     real(r8), pointer :: qflx_runoff_r        (:)   => null() ! Rural total runoff (qflx_drain+qflx_surf+qflx_qrgwl) (mm H2O /s)
@@ -1478,8 +1483,8 @@ contains
       allocate(this%iwp_exclvol        (begc:endc))                   ; this%iwp_exclvol      (:) = spval
       allocate(this%iwp_ddep           (begc:endc))                   ; this%iwp_ddep         (:) = spval
       allocate(this%iwp_subsidence     (begc:endc))                   ; this%iwp_subsidence   (:) = spval
-      allocate(this%frac_melted        (begc:endc,1:nlevgrnd))        ; this%frac_melted    (:,:) = spval
       allocate(this%excess_ice         (begc:endc,1:nlevgrnd))        ; this%excess_ice     (:,:) = spval
+      allocate(this%excess_ice_volfrac (begc:endc,1:nlevgrnd))        ; this%excess_ice_volfrac(:,:) = spval
     end if
 
     !-----------------------------------------------------------------------
@@ -1521,14 +1526,17 @@ contains
       this%iwp_ddep(begc:endc)          = spval
       this%iwp_exclvol(begc:endc)       = spval
       this%iwp_microrel(begc:endc)      = spval
-      this%frac_melted(begc:endc,:)     = spval
-      this%excess_ice(begc:endc,:)      = spval
+      this%excess_ice(begc:endc,:)      = 0._r8 ! specify as zero to avoid any excess ice in non-polygonal tundra cells
+      this%excess_ice_volfrac(begc:endc,:) = 0._r8
 
-      call hist_addfld2d (fname='EXCESS_ICE', units = '1', type2d='levgrnd', &
-           avgflag='A', long_name='Excess ground ice (0 to 1)', &
+      ! History output for excess ice mass per layer (for debugging)
+      call hist_addfld2d (fname='EXCESS_ICE', units='kg/m2', type2d='levgrnd', &
+           avgflag='A', long_name='excess ground ice mass per layer', &
            ptr_col=this%excess_ice, l2g_scale_type='veg')
+      
+      ! Cumulative subsidence since 1989
       call hist_addfld1d (fname="SUBSIDENCE", units='m', avgflag='A', &
-            long_name='ground subsidence (m)', ptr_col=this%iwp_subsidence)
+            long_name='cumulative ground subsidence since 1989', ptr_col=this%iwp_subsidence)
       call hist_addfld1d (fname="DEPRESS_DEPTH", units='m', avgflag='A', &
             long_name='microtopographic depression depth (m)', ptr_col=this%iwp_ddep)
       call hist_addfld1d (fname="EXCLUDED_VOL", units='m', avgflag='A', &
@@ -1536,9 +1544,6 @@ contains
             ptr_col=this%iwp_exclvol)
       call hist_addfld1d (fname="MICROREL", units='m', avgflag='A', &
             long_name='microtopographic relief (m)', ptr_col=this%iwp_microrel)
-      call hist_addfld2d (fname="FRAC_MELTED", units='-', type2d='levgrnd', &
-            avgflag='A', long_name='fraction of layer that has melted (-)', &
-            ptr_col=this%frac_melted, l2g_scale_type='veg')
     endif
     !/polygonal tundra
 
@@ -1769,16 +1774,11 @@ contains
                 if (j > nlevbed) then
                    this%h2osoi_vol(c,j) = 0.0_r8
                 else
-		             if (use_fates .or. use_hydrstress) then
+		             if (use_fates .or. use_hydrstress .or. use_arctic_init) then
                       this%h2osoi_vol(c,j) = 0.70_r8*watsat_input(c,j) !0.15_r8 to avoid very dry conditions that cause errors in FATES
-                   else if (use_arctic_init) then
-                      this%h2osoi_vol(c,j) = watsat_input(c,j) ! start saturated for arctic
                    else
                       this%h2osoi_vol(c,j) = 0.15_r8
                    endif
-                   if (use_polygonal_tundra) then
-                     this%frac_melted(c,j) = 0._r8
-                   end if
                 endif
              end do
           else if (lun_pp%urbpoi(l)) then
@@ -1883,10 +1883,34 @@ contains
 
        this%h2osoi_liq_old(c,:) = this%h2osoi_liq(c,:)
        this%h2osoi_ice_old(c,:) = this%h2osoi_ice(c,:)
-       if (use_polygonal_tundra) then
-         this%excess_ice(c,:) = 0.36_r8
+       if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
+         ! Initialize volumetric fraction to 36%
+         ! This estimate comes from field observations on the AK north slope
+         ! Future development should replace this with best available ground
+         ! ice maps.
+         this%excess_ice_volfrac(c,:) = 0.36_r8
+         
+         ! Convert to mass (kg/m2)
+         do j = 1, nlevgrnd
+            this%excess_ice(c,j) = this%excess_ice_volfrac(c,j) * col_pp%dz(c,j) * denice
+         end do
+         
          this%iwp_subsidence(c) = 0._r8
-         this%frac_melted(c,:)  = 0._r8
+         
+         ! set initial microtopographic parameters derived from high-res ATS simulations
+         if (lun_pp%polygontype(l) .eq. ilowcenpoly) then
+            this%iwp_microrel(c) = 0.4_r8
+            this%iwp_exclvol(c) = 0.2_r8
+            this%iwp_ddep(c) = 0.15_r8
+         else if (lun_pp%polygontype(l) .eq. iflatcenpoly) then
+            this%iwp_microrel(c) = 0.1_r8
+            this%iwp_exclvol(c) = 0.05_r8
+            this%iwp_ddep(c) = 0.01_r8
+         else if (lun_pp%polygontype(l) .eq. ihighcenpoly) then
+            this%iwp_microrel(c) = 0.4_r8
+            this%iwp_exclvol(c) = 0.2_r8
+            this%iwp_ddep(c) = 0.05_r8
+         endif
        end if
     end do
 
@@ -1942,13 +1966,54 @@ contains
          interpinic_flag='interp', readvar=readvar, data=this%h2osoi_ice)
 
     if (use_polygonal_tundra) then
-      call restartvar(ncid=ncid, flag=flag, varname='EXCESS_ICE', xtype=ncd_double, &
+      ! Write/read volumetric fraction with new name
+      call restartvar(ncid=ncid, flag=flag, varname='EXCESS_ICE_FRAC', xtype=ncd_double, &
            dim1name='column', dim2name='levgrnd', switchdim=.true., &
-           long_name='excess ground ice (0 to 1)', units='1', &
-           interpinic_flag='interp', readvar=readvar, data=this%excess_ice)
+           long_name='excess ground ice volumetric fraction (0 to 1)', units='1', &
+           interpinic_flag='interp', readvar=readvar, data=this%excess_ice_volfrac)
+      
+      ! Convert between volumetric and mass
+      if (flag == 'read') then
+          ! Backward compatibility: try old name if new name fails
+          if (.not. readvar) then
+              call restartvar(ncid=ncid, flag=flag, varname='EXCESS_ICE', xtype=ncd_double, &
+                   dim1name='column', dim2name='levgrnd', switchdim=.true., &
+                   long_name='excess ground ice (old format)', units='1', &
+                   interpinic_flag='interp', readvar=readvar, data=this%excess_ice_volfrac)
+              if (readvar) then
+                  write(iulog,*) 'Read EXCESS_ICE from old format, converted to EXCESS_ICE_FRAC'
+              end if
+          end if
+          
+          ! Convert from volumetric to mass
+          do c = bounds%begc, bounds%endc
+              l = col_pp%landunit(c)
+              if (lun_pp%ispolygon(l)) then
+                  do j = 1, nlevgrnd
+                      this%excess_ice(c,j) = this%excess_ice_volfrac(c,j) * col_pp%dz(c,j) * denice
+                  end do
+              end if
+          end do
+      else if (flag == 'write') then
+          ! Convert from mass to volumetric before writing
+          do c = bounds%begc, bounds%endc
+              l = col_pp%landunit(c)
+              if (lun_pp%ispolygon(l)) then
+                  do j = 1, nlevgrnd
+                      if (col_pp%dz(c,j) > 0._r8) then
+                          this%excess_ice_volfrac(c,j) = this%excess_ice(c,j) / (col_pp%dz(c,j) * denice)
+                      else
+                          this%excess_ice_volfrac(c,j) = 0._r8
+                      end if
+                  end do
+              end if
+          end do
+      end if
+      
+      ! SUBSIDENCE - cumulative tracking since 1989
       call restartvar(ncid=ncid, flag=flag, varname='SUBSIDENCE', xtype=ncd_double, &
            dim1name='column', &
-           long_name='ground subsidence', units='m', &
+           long_name='cumulative ground subsidence since 1989', units='m', &
            interpinic_flag='interp', readvar=readvar, data=this%iwp_subsidence)
       call restartvar(ncid=ncid, flag=flag, varname='DEPRESS_DEPTH', xtype=ncd_double, &
            dim1name='column', &
@@ -1962,10 +2027,6 @@ contains
            dim1name='column', &
            long_name='microtopographic relief', units='m', &
            interpinic_flag='interp', readvar=readvar, data=this%iwp_microrel)
-      call restartvar(ncid=ncid, flag=flag, varname='FRAC_MELTED', xtype=ncd_double, &
-           dim1name='column', dim2name='levgrnd', switchdim=.true., &
-           long_name='fraction of layer that has ever melted', units='-', &
-           interpinic_flag='interp', readvar=readvar, data=this%frac_melted)
     end if
 
     call restartvar(ncid=ncid, flag=flag, varname='SOILP', xtype=ncd_double,  &
@@ -5688,6 +5749,7 @@ contains
     allocate(this%eflx_snomelt         (begc:endc))              ; this%eflx_snomelt         (:)   = spval
     allocate(this%eflx_snomelt_r       (begc:endc))              ; this%eflx_snomelt_r       (:)   = spval
     allocate(this%eflx_snomelt_u       (begc:endc))              ; this%eflx_snomelt_u       (:)   = spval
+    allocate(this%eflx_exice_melt      (begc:endc))              ; this%eflx_exice_melt      (:)   = spval
     allocate(this%eflx_bot             (begc:endc))              ; this%eflx_bot             (:)   = spval
     allocate(this%eflx_fgr12           (begc:endc))              ; this%eflx_fgr12           (:)   = spval
     allocate(this%eflx_fgr             (begc:endc, 1:nlevgrnd))  ; this%eflx_fgr             (:,:) = spval
@@ -5732,7 +5794,12 @@ contains
      call hist_addfld1d (fname='FSM_U',  units='W/m^2',  &
           avgflag='A', long_name='Urban snow melt heat flux', &
            ptr_col=this%eflx_snomelt_u, c2l_scale_type='urbanf', set_nourb=spval)
-
+    if (use_polygonal_tundra) then
+      this%eflx_exice_melt(begc:endc) = spval
+      call hist_addfld1d (fname='EXICE_MELT_COL',  units='W/m^2',  &
+            avgflag='A', long_name='Excess ice melt latent heat flux', &
+            ptr_col=this%eflx_exice_melt, c2l_scale_type='urbanf', set_nourb=spval)
+    endif
     this%eflx_building_heat(begc:endc) = spval
      call hist_addfld1d (fname='BUILDHEAT', units='W/m^2',  &
           avgflag='A', long_name='heat flux from urban building interior to walls and roof', &
@@ -5903,6 +5970,8 @@ contains
     allocate(this%qflx_snomelt           (begc:endc))             ; this%qflx_snomelt         (:)   = spval
     allocate(this%qflx_snomelt_lyr       (begc:endc,-nlevsno+1:0)) ; this%qflx_snomelt_lyr    (:,:) = spval
     allocate(this%qflx_snow_melt         (begc:endc))             ; this%qflx_snow_melt       (:)   = spval
+    allocate(this%qflx_exice_melt        (begc:endc))             ; this%qflx_exice_melt      (:)   = spval
+    allocate(this%qflx_exice_melt_lyr    (begc:endc,1:nlevgrnd))  ; this%qflx_exice_melt_lyr  (:,:) = spval
     allocate(this%qflx_qrgwl             (begc:endc))             ; this%qflx_qrgwl           (:)   = spval
     allocate(this%qflx_runoff            (begc:endc))             ; this%qflx_runoff          (:)   = spval
     allocate(this%qflx_runoff_r          (begc:endc))             ; this%qflx_runoff_r        (:)   = spval
@@ -6028,6 +6097,18 @@ contains
           avgflag='A', long_name='snow melt per snow layer', &
            ptr_col=this%qflx_snomelt_lyr,no_snow_behavior=no_snow_normal, c2l_scale_type='urbanf')
 
+    if (use_polygonal_tundra) then
+      this%qflx_exice_melt(begc:endc) = spval
+      call hist_addfld1d (fname='QEXCESSICE',  units='mm/s',  &
+          avgflag='A', long_name='excess ice melt', &
+          ptr_col=this%qflx_exice_melt, c2l_scale_type='urbanf')
+
+      this%qflx_exice_melt_lyr(begc:endc,1:nlevgrnd) = spval
+      call hist_addfld2d (fname='QEXCESSICE_LYR',  units='mm/s',type2d='levgrnd',&
+          avgflag='A', long_name='excess ice melt rate per soil layer', &
+          ptr_col=this%qflx_exice_melt_lyr, c2l_scale_type='urbanf')
+    endif
+    
     this%qflx_qrgwl(begc:endc) = spval
      call hist_addfld1d (fname='QRGWL',  units='mm/s',  &
           avgflag='A', long_name='surface runoff at glaciers (liquid only), wetlands, lakes', &
@@ -6125,7 +6206,8 @@ contains
     this%qflx_dew_snow (begc:endc) = 0.0_r8
 
     this%qflx_h2osfc_surf(begc:endc) = 0._r8
-    this%qflx_snow_melt  (begc:endc)   = 0._r8
+    this%qflx_snow_melt  (begc:endc) = 0._r8
+    this%qflx_exice_melt (begc:endc) = 0._r8
 
     this%dwb(begc:endc) = 0._r8
     this%qflx_surf_irrig(begc:endc) = 0._r8
