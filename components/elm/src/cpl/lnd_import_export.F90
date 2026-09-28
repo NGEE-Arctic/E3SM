@@ -707,7 +707,7 @@ contains
         thiscosz = max(cos(szenith(ldomain%lonc(g),ldomain%latc(g),0,int(thiscalday),thishr,thismin,0)* &
                         3.14159265358979/180.0d0), 0.001d0)
         avgcosz = 0d0
-        if (atm2lnd_vars%npf(4) - 1._r8 .gt. 1e-3) then 
+        if (atm2lnd_vars%npf(4) - 1._r8 .gt. 1e-3) then
           swrad_period_len   = get_step_size()*nint(atm2lnd_vars%npf(4))
           swrad_period_start = ((tod-get_step_size()/2)/swrad_period_len) * swrad_period_len
           !set to last period if first model timestep of the day
@@ -723,8 +723,19 @@ contains
           end do
         else
           avgcosz = thiscosz
-        end if
-        if (thiscosz > 0.001d0) then 
+        end if 
+        ! GAM If hourly ERA5 and hourly timestep, preserve the FSDS at every timestep when cosz > 0 
+        if (atm2lnd_vars%metsource == 6 .and. &
+                abs(atm2lnd_vars%npf(4)-1._r8) < 1.e-3_r8) then
+          ! GAM use lnd2atm_vars%coszen_str(g) (coszen at current timestep, not next),
+          ! to be consistent with SurfaceAlbedoMod, not local thiscosz
+            if (lnd2atm_vars%coszen_str(g) > 0._r8) then
+              wt2(4) = 1._r8
+            else
+              wt2(4) = 0._r8
+            end if
+        ! Use original for other metsources; this likely needs fixing
+        else if (thiscosz > 0.001d0) then
           wt2(4) = min(thiscosz/avgcosz, 10.0_r8)
         else
           wt2(4) = 0d0
