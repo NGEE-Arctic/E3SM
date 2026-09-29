@@ -1949,15 +1949,6 @@ contains
        this%h2osfc(bounds%begc:bounds%endc) = 0.0_r8
     end if
 
-    ! DEBUG
-    call restartvar(ncid=ncid, flag=flag, varname='H2OSFC_P', xtype=ncd_double,  &
-         dim1name='column', &
-         long_name='surface water', units='kg/m2', &
-         interpinic_flag='interp', readvar=readvar, data=this%h2osfc_p)
-    if (flag=='read' .and. .not. readvar) then
-       this%h2osfc_p(bounds%begc:bounds%endc) = 0.0_r8
-    end if
-
     if(do_budgets) then 
        call restartvar(ncid=ncid, flag=flag, varname='ENDWB', xtype=ncd_double,  &
          dim1name='column', &
