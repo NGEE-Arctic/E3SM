@@ -17,7 +17,7 @@ module CH4Mod
   use elm_varcon         , only : catomw, s_con, d_con_w, d_con_g, c_h_inv, kh_theta, kh_tbase
   use landunit_varcon    , only : istdlak
   use elm_time_manager   , only : get_step_size, get_nstep
-  use elm_varctl         , only : iulog, use_cn, use_lch4, use_fates
+  use elm_varctl         , only : iulog, use_cn, use_lch4, use_fates, use_polygonal_tundra
   use abortutils         , only : endrun
   use decompMod          , only : bounds_type
   use SharedParamsMod    , only : ParamsShareInst
@@ -3301,14 +3301,22 @@ contains
             else
                h2osoi_vol_min(c,j) = min(watsat(c,j), h2osoi_vol(c,j))
                if (ch4frzout) then
-                  if (j >= 1) then
-                     ! RPF - probably need to adjust liqfrac for excess ice
-                     liqfrac(c,j) = max(0.05_r8, (h2osoi_liq(c,j)/denh2o+smallnumber)/ &
-                       (h2osoi_liq(c,j)/denh2o+(h2osoi_ice(c,j)+excess_ice(c,j))/denice+smallnumber))
-                  else 
-                     ! RPF - probably need to adjust liqfrac for excess ice
-                     liqfrac(c,j) = max(0.05_r8, (h2osoi_liq(c,j)/denh2o+smallnumber)/ &
-                       (h2osoi_liq(c,j)/denh2o+h2osoi_ice(c,j)/denice+smallnumber))
+                  if (use_polygonal_tundra) then
+                     if (j >= 1) then
+                        liqfrac(c,j) = max(0.05_r8, (h2osoi_liq(c,j)/denh2o+smallnumber)/ &
+                        (h2osoi_liq(c,j)/denh2o+(h2osoi_ice(c,j)+excess_ice(c,j))/denice+smallnumber))
+                     else 
+                        liqfrac(c,j) = max(0.05_r8, (h2osoi_liq(c,j)/denh2o+smallnumber)/ &
+                        (h2osoi_liq(c,j)/denh2o+h2osoi_ice(c,j)/denice+smallnumber))
+                     endif
+                  else                      
+                     if (j >= 1) then
+                        liqfrac(c,j) = max(0.05_r8, (h2osoi_liq(c,j)/denh2o+smallnumber)/ &
+                        (h2osoi_liq(c,j)/denh2o+(h2osoi_ice(c,j))/denice+smallnumber))
+                     else
+                        liqfrac(c,j) = max(0.05_r8, (h2osoi_liq(c,j)/denh2o+smallnumber)/ &
+                        (h2osoi_liq(c,j)/denh2o+h2osoi_ice(c,j)/denice+smallnumber))
+                     endif
                   endif
                else
                   liqfrac(c,j) = 1._r8
