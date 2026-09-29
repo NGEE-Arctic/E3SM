@@ -82,7 +82,7 @@ contains
        col_pp%zi(c,j) = zi_bot + col_pp%dz(c,j)
        zi_bot = col_pp%zi(c,j)
        ! calculate volume ratio to scale molar concentrations of BGC species
-       ! (i.e., layer compression decreases volume but doesn't remove chemical speices,
+      ! (i.e., layer compression decreases volume but doesn't remove chemical species,
        ! so it should increase molar concentrations)
        col_pp%volrat(c,j) = dz_orig/col_pp%dz(c,j)
     end do

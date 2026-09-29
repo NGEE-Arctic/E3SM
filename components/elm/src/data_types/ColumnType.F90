@@ -125,7 +125,7 @@ contains
     allocate(this%snl         (begc:endc))                     ; this%snl         (:)   = ispval  !* cannot be averaged up
     allocate(this%dz          (begc:endc,-nlevsno+1:nlevgrnd)) ; this%dz          (:,:) = spval
     allocate(this%dz_ref      (begc:endc, 1:nlevgrnd))         ; this%dz_ref      (:,:) = spval
-    allocate(this%volrat      (begc:endc, 1:nlevgrnd))         ; this%volrat      (:,:) = spval
+    allocate(this%volrat      (begc:endc, 1:nlevgrnd))         ; this%volrat      (:,:) = 1._r8
     allocate(this%z           (begc:endc,-nlevsno+1:nlevgrnd)) ; this%z           (:,:) = spval
     allocate(this%zi          (begc:endc,-nlevsno+0:nlevgrnd)) ; this%zi          (:,:) = spval
     allocate(this%zii         (begc:endc))                     ; this%zii         (:)   = spval
