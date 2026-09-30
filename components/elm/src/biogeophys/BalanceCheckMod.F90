@@ -9,7 +9,7 @@ module BalanceCheckMod
   use shr_log_mod        , only : errMsg => shr_log_errMsg
   use decompMod          , only : bounds_type
   use abortutils         , only : endrun
-  use elm_varctl         , only : iulog, use_var_soil_thick, use_firn_percolation_and_compaction
+  use elm_varctl         , only : iulog, use_var_soil_thick, use_firn_percolation_and_compaction, use_polygonal_tundra
   use elm_varcon         , only : namep, namec
   use GetGlobalValuesMod , only : GetGlobalIndex
   use atm2lndType        , only : atm2lnd_type
@@ -69,7 +69,7 @@ contains
     type(soilhydrology_type)  , intent(inout) :: soilhydrology_vars
     !
     ! !LOCAL VARIABLES:
-    integer :: c, p, f, j, fc                  ! indices
+    integer :: c, p, f, j, fc, l                 ! indices
     real(r8):: h2osoi_vol
     !-----------------------------------------------------------------------
 
@@ -79,6 +79,7 @@ contains
          h2osfc                 =>    col_ws%h2osfc                 , & ! Input:  [real(r8) (:)   ]  surface water (mm)
          h2osno                 =>    col_ws%h2osno                 , & ! Input:  [real(r8) (:)   ]  snow water (mm H2O)
          h2osoi_ice             =>    col_ws%h2osoi_ice             , & ! Input:  [real(r8) (:,:) ]  ice lens (kg/m2)
+         excess_ice             =>    col_ws%excess_ice             , & ! Input:  [real(r8) (:,:) ] excess ice (kg/m2)
          h2osoi_liq             =>    col_ws%h2osoi_liq             , & ! Input:  [real(r8) (:,:) ]  liquid water (kg/m2)
          total_plant_stored_h2o =>    col_ws%total_plant_stored_h2o , & ! Input: [real(r8) (:) dynamic water stored in plants
          zwt                    =>    soilhydrology_vars%zwt_col                 , & ! Input:  [real(r8) (:)   ]  water table depth (m)
@@ -115,10 +116,15 @@ contains
       do j = 1, nlevgrnd
          do f = 1, num_nolakec
             c = filter_nolakec(f)
+            l = col_pp%landunit(c)
             if ((col_pp%itype(c) == icol_sunwall .or. col_pp%itype(c) == icol_shadewall &
                  .or. col_pp%itype(c) == icol_roof) .and. j > nlevurb) then
             else
-               begwb(c) = begwb(c) + h2osoi_ice(c,j) + h2osoi_liq(c,j)
+               if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
+                  begwb(c) = begwb(c) + h2osoi_ice(c,j) + h2osoi_liq(c,j) + excess_ice(c,j)
+               else
+                  begwb(c) = begwb(c) + h2osoi_ice(c,j) + h2osoi_liq(c,j)
+               endif 
             end if
          end do
       end do
@@ -237,6 +243,7 @@ contains
           qflx_to_downhill           =>    col_wf%qflx_to_downhill        , & ! Input:  [real(r8) (:)   ]  sent to downhill topounit
           qflx_h2osfc_surf           =>    col_wf%qflx_h2osfc_surf        , & ! Input:  [real(r8) (:)   ]  surface water runoff (mm/s)
           qflx_snow_melt             =>    col_wf%qflx_snow_melt          , & ! Input:  [real(r8) (:)   ]  snow melt (net)
+          qflx_exice_melt             =>   col_wf%qflx_exice_melt         , & ! Input:  [real(r8) (:)   ]  excess ice melt (mm/s)
           qflx_surf                  =>    col_wf%qflx_surf               , & ! Input:  [real(r8) (:)   ]  surface runoff (mm H2O /s)
           qflx_qrgwl                 =>    col_wf%qflx_qrgwl              , & ! Input:  [real(r8) (:)   ]  qflx_surf at glaciers, wetlands, lakes
           qflx_drain                 =>    col_wf%qflx_drain              , & ! Input:  [real(r8) (:)   ]  sub-surface runoff (mm H2O /s)
@@ -394,6 +401,7 @@ contains
                abs(errh2o(indexc)) > 1.e-4_r8 .and. (nstep > 2) ) then
 
              write(iulog,*)'clm urban model is stopping - error is greater than 1e-4 (mm)'
+             write(iulog,*)'column type                = ',col_pp%itype(indexc)
              write(iulog,*)'nstep                      = ',nstep
              write(iulog,*)'errh2o                     = ',errh2o(indexc)
              write(iulog,*)'forc_rain                  = ',forc_rain_col(indexc)
@@ -419,7 +427,7 @@ contains
           else if (abs(errh2o(indexc)) > 1.e-4_r8 .and. (nstep > 2) ) then
 
              write(iulog,*)'elm model is stopping - error is greater than 1e-4 (mm)'
-             write(iulog,*)'colum number               = ',col_pp%gridcell(indexc)
+             write(iulog,*)'column number              = ',col_pp%gridcell(indexc)
              write(iulog,*)'nstep                      = ',nstep
              write(iulog,*)'errh2o                     = ',errh2o(indexc)
              write(iulog,*)'forc_rain                  = ',forc_rain_col(indexc)
@@ -442,6 +450,7 @@ contains
              write(iulog,*)'qflx_glcice_frz            = ',qflx_glcice_frz(indexc)
              write(iulog,*)'qflx_lateral               = ',qflx_lateral(indexc)
              write(iulog,*)'qflx_lnd2ocn               = ',qflx_lnd2ocn(indexc)
+             write(iulog,*)'qflx_exice_melt            = ',qflx_exice_melt(indexc)
              write(iulog,*)'total_plant_stored_h2o_col = ',total_plant_stored_h2o_col(indexc)
              write(iulog,*)'qflx_h2orof_drain          = ',qflx_h2orof_drain(indexc)
              write(iulog,*)'qflx_ice_runoff_xs         = ',qflx_ice_runoff_xs(indexc)
@@ -818,6 +827,7 @@ contains
          h2osfc                    =>    col_ws%h2osfc                 , & ! Input:  [real(r8) (:)   ]  surface water (mm)
          h2osno                    =>    col_ws%h2osno                 , & ! Input:  [real(r8) (:)   ]  snow water (mm H2O)
          h2osoi_ice                =>    col_ws%h2osoi_ice             , & ! Input:  [real(r8) (:,:) ]  ice lens (kg/m2)
+         excess_ice                =>    col_ws%excess_ice             , & ! Input:  [real(r8) (:,:) ]  excess ice (if using polygonal tundra)
          h2osoi_liq                =>    col_ws%h2osoi_liq             , & ! Input:  [real(r8) (:,:) ]  liquid water (kg/m2)
          total_plant_stored_h2o    =>    col_ws%total_plant_stored_h2o , & ! Input:  [real(r8) (:)   ]  dynamic water stored in plants
          zwt                       =>    soilhydrology_vars%zwt_col                 , & ! Input:  [real(r8) (:)   ]  water table depth (m)

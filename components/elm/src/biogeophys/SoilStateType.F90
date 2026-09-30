@@ -9,7 +9,7 @@ module SoilStateType
   use spmdMod         , only : mpicom, MPI_INTEGER, masterproc
   use ncdio_pio       , only : file_desc_t, ncd_defvar, ncd_io, ncd_double, ncd_int, ncd_inqvdlen
   use ncdio_pio       , only : ncd_pio_openfile, ncd_inqfdims, ncd_pio_closefile, ncd_inqdid, ncd_inqdlen
-  use elm_varpar      , only : more_vertlayers, numpft, numrad
+  use elm_varpar      , only : interp_soil_texture, numpft, numrad
   use elm_varpar      , only : nlevsoi, nlevgrnd, nlevlak, nlevsoifl, nlayer, nlayert, nlevurb, nlevsno
   use elm_varpar      , only : scalez, zecoeff
   use landunit_varcon , only : istice, istdlak, istwet, istsoil, istcrop, istice_mec
@@ -468,7 +468,7 @@ contains
     ! differs from the default (10 layers).
     ! --------------------------------------------------------------------
     call ncd_inqdlen(ncid,dimid,nlevsoifl,name='nlevsoi')
-    if ( .not. more_vertlayers )then
+    if ( .not. interp_soil_texture )then
        if ( nlevsoifl /= nlevsoi )then
           call endrun(msg=' ERROR: Number of soil layers on file does NOT match the number being used'//&
                errMsg(__FILE__, __LINE__))
@@ -703,14 +703,14 @@ contains
           do lev = 1,nlevgrnd
              ! Number of soil layers in hydrologically active columns = NLEV2BED
 	     nlevbed = col_pp%nlevbed(c)
-             if ( more_vertlayers )then ! duplicate clay and sand values from last soil layer
+             if ( interp_soil_texture )then ! interpolate clay/sand/organic onto the model grid
 
                 if (lev .eq. 1) then
                    clay = clay3d(g,ti,1)
                    sand = sand3d(g,ti,1)
                    gravel = grvl3d(g,ti,1)
                    om_frac = max(0.0_r8, min(organic3d(g,ti,1)/organic_max, 1._r8))
-                else if (lev <= min(nlevbed,nlevsoi)) then
+                else if (lev <= min(nlevbed,nlevsoi) .and. zisoi(lev) < zisoifl(nlevsoifl)) then
                    do j = 1,nlevsoifl-1
                       if (zisoi(lev) >= zisoifl(j) .AND. zisoi(lev) < zisoifl(j+1)) then
                          clay = clay3d(g,ti,j+1)
@@ -719,7 +719,7 @@ contains
                          om_frac = max(0.0_r8, min(organic3d(g,ti,j+1)/organic_max, 1._r8))
                       endif
                    end do
-                else
+                else ! target interface at/below source data bottom: use deepest source layer
                    clay = clay3d(g,ti,nlevsoifl)
                    sand = sand3d(g,ti,nlevsoifl)
                    gravel = grvl3d(g,ti,nlevsoifl)

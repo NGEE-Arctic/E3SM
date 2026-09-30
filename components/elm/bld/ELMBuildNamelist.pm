@@ -2495,6 +2495,29 @@ sub setup_logic_soilstate {
 
   add_default($test_files, $nl_flags->{'inputdata_rootdir'}, $definition, $defaults, $nl, 'more_vertlayers', 'hgrid'=>$nl_flags->{'res'} );
   $nl_flags->{'more_vert'} = $nl->get_value('more_vertlayers');
+
+  # Soil layer structure selection (ported from CTSM). Predefined and
+  # user-defined structures are mutually exclusive; the user-defined vector
+  # requires its companion nlevsoi; and neither may be combined with the
+  # legacy more_vertlayers=.true. When none is set, no default is assigned
+  # here so the model falls back to more_vertlayers (default behavior).
+  my $ls_predef   = $nl->get_value('soil_layerstruct_predefined');
+  my $ls_userdef  = $nl->get_value('soil_layerstruct_userdefined');
+  my $ls_usernlev = $nl->get_value('soil_layerstruct_userdefined_nlevsoi');
+
+  if (defined($ls_userdef)) {
+    if (defined($ls_predef)) {
+      fatal_error("You have set both soil_layerstruct_userdefined and soil_layerstruct_predefined in your namelist; model cannot determine which to use\n");
+    }
+    if (not defined($ls_usernlev)) {
+      fatal_error("You have set soil_layerstruct_userdefined and NOT set soil_layerstruct_userdefined_nlevsoi in your namelist; both MUST be set\n");
+    }
+  } elsif (defined($ls_usernlev)) {
+    fatal_error("You have set soil_layerstruct_userdefined_nlevsoi and NOT set soil_layerstruct_userdefined in your namelist; EITHER set both OR neither\n");
+  }
+  if (defined($ls_predef) && ($nl_flags->{'more_vert'} eq ".true.")) {
+    fatal_error("You have set soil_layerstruct_predefined together with more_vertlayers=.true.; these are mutually exclusive\n");
+  }
 }
 
 #-------------------------------------------------------------------------------
