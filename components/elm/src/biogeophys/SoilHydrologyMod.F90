@@ -7,7 +7,7 @@ module SoilHydrologyMod
   use shr_kind_mod      , only : r8 => shr_kind_r8
   use shr_log_mod       , only : errMsg => shr_log_errMsg
   use decompMod         , only : bounds_type
-  use elm_varctl        , only : iulog, use_vichydro
+  use elm_varctl        , only : iulog, use_vichydro, use_polygonal_tundra
   use elm_varctl        , only : use_lnd_rof_two_way, lnd_rof_coupling_nstep
   use elm_varctl        , only : use_modified_infil, use_ocn_lnd_one_way
   use elm_varcon        , only : e_ice, denh2o, denice, rpi
@@ -136,7 +136,11 @@ contains
             ! Porosity of soil, partial volume of ice and liquid, fraction of ice in each layer,
             ! fractional impermeability
 
-            vol_ice(c,j) = min(watsat(c,j), h2osoi_ice(c,j)/(dz(c,j)*denice))
+            if (use_polygonal_tundra .and. lun_pp%ispolygon(col_pp%landunit(c))) then
+               vol_ice(c,j) = min(watsat(c,j), h2osoi_ice(c,j)/(col_pp%dz_ref(c,j)*denice))
+            else
+               vol_ice(c,j) = min(watsat(c,j), h2osoi_ice(c,j)/(dz(c,j)*denice))
+            end if
             if (origflag == 1) then
                icefrac(c,j) = min(1._r8,h2osoi_ice(c,j)/(h2osoi_ice(c,j)+h2osoi_liq(c,j)))
             else
@@ -436,7 +440,14 @@ contains
           nlevbed = nlev2bed(c)
           do j = 1,nlevbed
              ! Porosity of soil, partial volume of ice and liquid
-             vol_ice(c,j) = min(watsat(c,j), h2osoi_ice(c,j)/(dz(c,j)*denice))
+             if (use_polygonal_tundra .and. &
+                 lun_pp%ispolygon(col_pp%landunit(c))) then
+                vol_ice(c,j) = min(watsat(c,j), &
+                     h2osoi_ice(c,j)/(col_pp%dz_ref(c,j)*denice))
+             else
+                vol_ice(c,j) = min(watsat(c,j), &
+                     h2osoi_ice(c,j)/(dz(c,j)*denice))
+             end if
              eff_porosity(c,j) = max(0.01_r8,watsat(c,j)-vol_ice(c,j))
              icefrac(c,j) = min(1._r8,vol_ice(c,j)/watsat(c,j))
           end do
@@ -658,8 +669,13 @@ contains
              if (use_lnd_rof_two_way) then
 
                ! estimate the available volume [mm H2O] in the first soil layer for floodplain infiltration
-               h2osoi_left_vol1 = max(0._r8,(pondmx+watsat(c,1)*dz(c,1)*1.e3_r8-h2osoi_ice(c,1)-watmin)) - &
-                                  max(0._r8,h2osoi_liq(c,1)-watmin)
+               if (use_polygonal_tundra .and. lun_pp%ispolygon(col_pp%landunit(c))) then
+                  h2osoi_left_vol1 = max(0._r8,(pondmx+watsat(c,1)*col_pp%dz_ref(c,1)*1.e3_r8-h2osoi_ice(c,1)-watmin)) - &
+                                     max(0._r8,h2osoi_liq(c,1)-watmin)
+               else
+                  h2osoi_left_vol1 = max(0._r8,(pondmx+watsat(c,1)*dz(c,1)*1.e3_r8-h2osoi_ice(c,1)-watmin)) - &
+                                     max(0._r8,h2osoi_liq(c,1)-watmin)
+               end if
                if (h2osoi_left_vol1 < 0._r8) then
                    h2osoi_left_vol1 = 0._r8
                endif
@@ -687,8 +703,13 @@ contains
              if (use_ocn_lnd_one_way) then
 
                ! estimate the available volume [mm H2O] in the first soil layer for floodplain infiltration
-               h2osoi_left_vol1 = max(0._r8,(pondmx+watsat(c,1)*dz(c,1)*1.e3_r8-h2osoi_ice(c,1)-watmin)) - &
-                                  max(0._r8,h2osoi_liq(c,1)-watmin)
+               if (use_polygonal_tundra .and. lun_pp%ispolygon(col_pp%landunit(c))) then
+                  h2osoi_left_vol1 = max(0._r8,(pondmx+watsat(c,1)*col_pp%dz_ref(c,1)*1.e3_r8-h2osoi_ice(c,1)-watmin)) - &
+                                     max(0._r8,h2osoi_liq(c,1)-watmin)
+               else
+                  h2osoi_left_vol1 = max(0._r8,(pondmx+watsat(c,1)*dz(c,1)*1.e3_r8-h2osoi_ice(c,1)-watmin)) - &
+                                     max(0._r8,h2osoi_liq(c,1)-watmin)
+               end if
                if (h2osoi_left_vol1 < 0._r8) then
                    h2osoi_left_vol1 = 0._r8
                endif
@@ -1012,8 +1033,13 @@ contains
 
              k_perch=1
              do k=k_frz,1,-1
-                h2osoi_vol(c,k) = h2osoi_liq(c,k)/(dz(c,k)*denh2o) &
-                     + h2osoi_ice(c,k)/(dz(c,k)*denice)
+                if (use_polygonal_tundra .and. lun_pp%ispolygon(col_pp%landunit(c))) then
+                   h2osoi_vol(c,k) = h2osoi_liq(c,k)/(col_pp%dz_ref(c,k)*denh2o) &
+                        + h2osoi_ice(c,k)/(col_pp%dz_ref(c,k)*denice)
+                else
+                   h2osoi_vol(c,k) = h2osoi_liq(c,k)/(dz(c,k)*denh2o) &
+                        + h2osoi_ice(c,k)/(dz(c,k)*denice)
+                end if
 
                 if (h2osoi_vol(c,k)/watsat(c,k) <= sat_lev) then
                    k_perch=k
@@ -1027,10 +1053,17 @@ contains
              ! if perched water table exists
              if (k_frz > k_perch) then
                 ! interpolate between k_perch and k_perch+1 to find perched water table height
-                s1 = (h2osoi_liq(c,k_perch)/(dz(c,k_perch)*denh2o) &
-                     + h2osoi_ice(c,k_perch)/(dz(c,k_perch)*denice))/watsat(c,k_perch)
-                s2 = (h2osoi_liq(c,k_perch+1)/(dz(c,k_perch+1)*denh2o) &
-                     + h2osoi_ice(c,k_perch+1)/(dz(c,k_perch+1)*denice))/watsat(c,k_perch+1)
+                if (use_polygonal_tundra .and. lun_pp%ispolygon(col_pp%landunit(c))) then
+                   s1 = (h2osoi_liq(c,k_perch)/(col_pp%dz_ref(c,k_perch)*denh2o) &
+                        + h2osoi_ice(c,k_perch)/(col_pp%dz_ref(c,k_perch)*denice))/watsat(c,k_perch)
+                   s2 = (h2osoi_liq(c,k_perch+1)/(col_pp%dz_ref(c,k_perch+1)*denh2o) &
+                        + h2osoi_ice(c,k_perch+1)/(col_pp%dz_ref(c,k_perch+1)*denice))/watsat(c,k_perch+1)
+                else
+                   s1 = (h2osoi_liq(c,k_perch)/(dz(c,k_perch)*denh2o) &
+                        + h2osoi_ice(c,k_perch)/(dz(c,k_perch)*denice))/watsat(c,k_perch)
+                   s2 = (h2osoi_liq(c,k_perch+1)/(dz(c,k_perch+1)*denh2o) &
+                        + h2osoi_ice(c,k_perch+1)/(dz(c,k_perch+1)*denice))/watsat(c,k_perch+1)
+                end if
 
                 m=(z(c,k_perch+1)-z(c,k_perch))/(s2-s1)
                 b=z(c,k_perch+1)-m*s2
@@ -1236,7 +1269,11 @@ contains
           do j = 1,nlevbed
              dzmm(c,j) = dz(c,j)*1.e3_r8
 
-             vol_ice = min(watsat(c,j), h2osoi_ice(c,j)/(dz(c,j)*denice))
+             if (use_polygonal_tundra .and. lun_pp%ispolygon(col_pp%landunit(c))) then
+                vol_ice = min(watsat(c,j), h2osoi_ice(c,j)/(col_pp%dz_ref(c,j)*denice))
+             else
+                vol_ice = min(watsat(c,j), h2osoi_ice(c,j)/(dz(c,j)*denice))
+             end if
              icefrac(c,j) = min(1._r8,vol_ice/watsat(c,j))
           end do
        end do
@@ -1373,8 +1410,13 @@ contains
 
              k_perch=1
              do k=k_frz,1,-1
-                h2osoi_vol = h2osoi_liq(c,k)/(dz(c,k)*denh2o) &
-                     + h2osoi_ice(c,k)/(dz(c,k)*denice)
+                if (use_polygonal_tundra .and. lun_pp%ispolygon(col_pp%landunit(c))) then
+                   h2osoi_vol = h2osoi_liq(c,k)/(col_pp%dz_ref(c,k)*denh2o) &
+                        + h2osoi_ice(c,k)/(col_pp%dz_ref(c,k)*denice)
+                else
+                   h2osoi_vol = h2osoi_liq(c,k)/(dz(c,k)*denh2o) &
+                        + h2osoi_ice(c,k)/(dz(c,k)*denice)
+                end if
 
                 if (h2osoi_vol/watsat(c,k) <= sat_lev) then
                    k_perch=k
@@ -1388,10 +1430,17 @@ contains
              ! if perched water table exists
              if (k_frz > k_perch) then
                 ! interpolate between k_perch and k_perch+1 to find perched water table height
-                s1 = (h2osoi_liq(c,k_perch)/(dz(c,k_perch)*denh2o) &
-                     + h2osoi_ice(c,k_perch)/(dz(c,k_perch)*denice))/watsat(c,k_perch)
-                s2 = (h2osoi_liq(c,k_perch+1)/(dz(c,k_perch+1)*denh2o) &
-                     + h2osoi_ice(c,k_perch+1)/(dz(c,k_perch+1)*denice))/watsat(c,k_perch+1)
+                if (use_polygonal_tundra .and. lun_pp%ispolygon(col_pp%landunit(c))) then
+                   s1 = (h2osoi_liq(c,k_perch)/(col_pp%dz_ref(c,k_perch)*denh2o) &
+                        + h2osoi_ice(c,k_perch)/(col_pp%dz_ref(c,k_perch)*denice))/watsat(c,k_perch)
+                   s2 = (h2osoi_liq(c,k_perch+1)/(col_pp%dz_ref(c,k_perch+1)*denh2o) &
+                        + h2osoi_ice(c,k_perch+1)/(col_pp%dz_ref(c,k_perch+1)*denice))/watsat(c,k_perch+1)
+                else
+                   s1 = (h2osoi_liq(c,k_perch)/(dz(c,k_perch)*denh2o) &
+                        + h2osoi_ice(c,k_perch)/(dz(c,k_perch)*denice))/watsat(c,k_perch)
+                   s2 = (h2osoi_liq(c,k_perch+1)/(dz(c,k_perch+1)*denh2o) &
+                        + h2osoi_ice(c,k_perch+1)/(dz(c,k_perch+1)*denice))/watsat(c,k_perch+1)
+                end if
 
                 m=(z(c,k_perch+1)-z(c,k_perch))/(s2-s1)
                 b=z(c,k_perch+1)-m*s2
@@ -1648,11 +1697,19 @@ contains
           nlevbed = nlev2bed(c)
 
           do j = nlevbed,2,-1
-             xsi(c)            = max(h2osoi_liq(c,j)-eff_porosity(c,j)*dzmm(c,j),0._r8)
+             if (use_polygonal_tundra .and. lun_pp%ispolygon(col_pp%landunit(c))) then
+                xsi(c) = max(h2osoi_liq(c,j)-eff_porosity(c,j)*col_pp%dz_ref(c,j)*1.e3_r8,0._r8)
+             else
+                xsi(c) = max(h2osoi_liq(c,j)-eff_porosity(c,j)*dzmm(c,j),0._r8)
+             end if
              if (use_vsfm) then
                 xsi(c) = 0._r8
              else
-                h2osoi_liq(c,j)   = min(eff_porosity(c,j)*dzmm(c,j), h2osoi_liq(c,j))
+                if (use_polygonal_tundra .and. lun_pp%ispolygon(col_pp%landunit(c))) then
+                   h2osoi_liq(c,j) = min(eff_porosity(c,j)*col_pp%dz_ref(c,j)*1.e3_r8, h2osoi_liq(c,j))
+                else
+                   h2osoi_liq(c,j) = min(eff_porosity(c,j)*dzmm(c,j), h2osoi_liq(c,j))
+                end if
                 h2osoi_liq(c,j-1) = h2osoi_liq(c,j-1) + xsi(c)
              endif
           end do
@@ -1663,8 +1720,13 @@ contains
           l = col_pp%landunit(c)
 
           !scs: watmin addition to fix water balance errors
-          xs1(c)          = max(max(h2osoi_liq(c,1)-watmin,0._r8)- &
-               max(0._r8,(pondmx+watsat(c,1)*dzmm(c,1)-h2osoi_ice(c,1)-watmin)),0._r8)
+          if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
+             xs1(c) = max(max(h2osoi_liq(c,1)-watmin,0._r8)- &
+                  max(0._r8,(pondmx+watsat(c,1)*col_pp%dz_ref(c,1)*1.e3_r8-h2osoi_ice(c,1)-watmin)),0._r8)
+          else
+             xs1(c) = max(max(h2osoi_liq(c,1)-watmin,0._r8)- &
+                  max(0._r8,(pondmx+watsat(c,1)*dzmm(c,1)-h2osoi_ice(c,1)-watmin)),0._r8)
+          end if
           if (use_vsfm) xs1(c) = 0._r8
           h2osoi_liq(c,1) = h2osoi_liq(c,1) - xs1(c)
 
@@ -1684,8 +1746,15 @@ contains
           if (use_vsfm) qflx_rsub_sat(c) = 0._r8
 
           ! add in ice check
-          xs1(c)          = max(max(h2osoi_ice(c,1),0._r8)-max(0._r8,(pondmx+watsat(c,1)*dzmm(c,1)-h2osoi_liq(c,1))),0._r8)
-          h2osoi_ice(c,1) = min(max(0._r8,pondmx+watsat(c,1)*dzmm(c,1)-h2osoi_liq(c,1)), h2osoi_ice(c,1))
+          if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
+             xs1(c) = max(max(h2osoi_ice(c,1),0._r8)- &
+                  max(0._r8,(pondmx+watsat(c,1)*col_pp%dz_ref(c,1)*1.e3_r8-h2osoi_liq(c,1))),0._r8)
+             h2osoi_ice(c,1) = min(max(0._r8,pondmx+watsat(c,1)*col_pp%dz_ref(c,1)*1.e3_r8-h2osoi_liq(c,1)), &
+                  h2osoi_ice(c,1))
+          else
+             xs1(c) = max(max(h2osoi_ice(c,1),0._r8)-max(0._r8,(pondmx+watsat(c,1)*dzmm(c,1)-h2osoi_liq(c,1))),0._r8)
+             h2osoi_ice(c,1) = min(max(0._r8,pondmx+watsat(c,1)*dzmm(c,1)-h2osoi_liq(c,1)), h2osoi_ice(c,1))
+          end if
           if ( (lun_pp%itype(l) == istice .or. lun_pp%itype(l) == istice_mec) .or. (.not. use_firn_percolation_and_compaction)) then
                 qflx_snwcp_ice(c) = qflx_snwcp_ice(c) + xs1(c) / dtime
           else
@@ -1937,8 +2006,13 @@ contains
 
                    lateral_layer = min(lateral_tot,(s_y*(zwt(c) - zi(c,j-1))*1.e3))
                    lateral_layer = max(lateral_layer,0._r8)
-                   h2osoi_left_vol = max(0._r8,(watsat(c,j)*dz(c,j)*1.e3_r8-h2osoi_ice(c,j)-watmin)) - &
-                                     max(0._r8,h2osoi_liq(c,j)-watmin)
+                   if (use_polygonal_tundra .and. lun_pp%ispolygon(col_pp%landunit(c))) then
+                      h2osoi_left_vol = max(0._r8,(watsat(c,j)*col_pp%dz_ref(c,j)*1.e3_r8-h2osoi_ice(c,j)-watmin)) - &
+                                        max(0._r8,h2osoi_liq(c,j)-watmin)
+                   else
+                      h2osoi_left_vol = max(0._r8,(watsat(c,j)*dz(c,j)*1.e3_r8-h2osoi_ice(c,j)-watmin)) - &
+                                        max(0._r8,h2osoi_liq(c,j)-watmin)
+                   end if
                    lateral_layer = min(lateral_layer, h2osoi_left_vol)
 
                    h2osoi_liq(c,j) = h2osoi_liq(c,j) + lateral_layer
@@ -2124,7 +2198,11 @@ contains
              c = filter_hydrologyc(fc)
              dzmm(c,j) = dz(c,j)*1.e3_r8
 
-             vol_ice = min(watsat(c,j), h2osoi_ice(c,j)/(dz(c,j)*denice))
+             if (use_polygonal_tundra .and. lun_pp%ispolygon(col_pp%landunit(c))) then
+                vol_ice = min(watsat(c,j), h2osoi_ice(c,j)/(col_pp%dz_ref(c,j)*denice))
+             else
+                vol_ice = min(watsat(c,j), h2osoi_ice(c,j)/(dz(c,j)*denice))
+             end if
              icefrac(c,j) = min(1._r8,vol_ice/watsat(c,j))
           end do
        end do
@@ -2251,8 +2329,13 @@ contains
 
              k_perch=1
              do k=k_frz,1,-1
-                h2osoi_vol = h2osoi_liq(c,k)/(dz(c,k)*denh2o) &
-                     + h2osoi_ice(c,k)/(dz(c,k)*denice)
+                if (use_polygonal_tundra .and. lun_pp%ispolygon(col_pp%landunit(c))) then
+                   h2osoi_vol = h2osoi_liq(c,k)/(col_pp%dz_ref(c,k)*denh2o) &
+                        + h2osoi_ice(c,k)/(col_pp%dz_ref(c,k)*denice)
+                else
+                   h2osoi_vol = h2osoi_liq(c,k)/(dz(c,k)*denh2o) &
+                        + h2osoi_ice(c,k)/(dz(c,k)*denice)
+                end if
 
                 if (h2osoi_vol/watsat(c,k) <= sat_lev) then
                    k_perch=k
@@ -2267,10 +2350,17 @@ contains
              if (k_frz > k_perch) then
 
                 ! interpolate between k_perch and k_perch+1 to find perched water table height
-                s1 = (h2osoi_liq(c,k_perch)/(dz(c,k_perch)*denh2o) &
-                     + h2osoi_ice(c,k_perch)/(dz(c,k_perch)*denice))/watsat(c,k_perch)
-                s2 = (h2osoi_liq(c,k_perch+1)/(dz(c,k_perch+1)*denh2o) &
-                     + h2osoi_ice(c,k_perch+1)/(dz(c,k_perch+1)*denice))/watsat(c,k_perch+1)
+                if (use_polygonal_tundra .and. lun_pp%ispolygon(col_pp%landunit(c))) then
+                   s1 = (h2osoi_liq(c,k_perch)/(col_pp%dz_ref(c,k_perch)*denh2o) &
+                        + h2osoi_ice(c,k_perch)/(col_pp%dz_ref(c,k_perch)*denice))/watsat(c,k_perch)
+                   s2 = (h2osoi_liq(c,k_perch+1)/(col_pp%dz_ref(c,k_perch+1)*denh2o) &
+                        + h2osoi_ice(c,k_perch+1)/(col_pp%dz_ref(c,k_perch+1)*denice))/watsat(c,k_perch+1)
+                else
+                   s1 = (h2osoi_liq(c,k_perch)/(dz(c,k_perch)*denh2o) &
+                        + h2osoi_ice(c,k_perch)/(dz(c,k_perch)*denice))/watsat(c,k_perch)
+                   s2 = (h2osoi_liq(c,k_perch+1)/(dz(c,k_perch+1)*denh2o) &
+                        + h2osoi_ice(c,k_perch+1)/(dz(c,k_perch+1)*denice))/watsat(c,k_perch+1)
+                end if
 
                 m=(z(c,k_perch+1)-z(c,k_perch))/(s2-s1)
                 b=z(c,k_perch+1)-m*s2

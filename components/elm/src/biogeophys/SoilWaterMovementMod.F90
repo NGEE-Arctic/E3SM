@@ -16,6 +16,8 @@ module SoilWaterMovementMod
   use ExternalModelInterfaceMod  , only : EMI_Driver
   use elm_instMod , only : waterflux_vars, waterstate_vars, temperature_vars
   use abortutils           , only : endrun
+  use elm_varctl            , only : use_polygonal_tundra
+  use LandunitType          , only : lun_pp
 
   !
   implicit none
@@ -191,8 +193,13 @@ contains
        c = filter_hydrologyc(fc)
        nlevbed = nlev2bed(c)
        do j = 1, nlevbed
-          h2osoi_vol(c,j) = h2osoi_liq(c,j)/(dz(c,j)*denh2o) &
-                            + h2osoi_ice(c,j)/(dz(c,j)*denice)
+          if (use_polygonal_tundra .and. lun_pp%ispolygon(col_pp%landunit(c))) then
+             h2osoi_vol(c,j) = h2osoi_liq(c,j)/(col_pp%dz_ref(c,j)*denh2o) &
+                               + h2osoi_ice(c,j)/(col_pp%dz_ref(c,j)*denice)
+          else
+             h2osoi_vol(c,j) = h2osoi_liq(c,j)/(dz(c,j)*denh2o) &
+                               + h2osoi_ice(c,j)/(dz(c,j)*denice)
+          end if
        enddo
     enddo
     endif
@@ -309,6 +316,7 @@ contains
     real(r8) :: rmx(bounds%begc:bounds%endc,1:nlevgrnd+1)     ! "r" forcing term of tridiagonal matrix
     real(r8) :: zmm(bounds%begc:bounds%endc,1:nlevgrnd+1)     ! layer depth [mm]
     real(r8) :: dzmm(bounds%begc:bounds%endc,1:nlevgrnd+1)    ! layer thickness [mm]
+    real(r8) :: dzmm_mat(bounds%begc:bounds%endc,1:nlevgrnd)   ! pore-bearing matrix thickness [mm]
     real(r8) :: den                                          ! used in calculating qin, qout
     real(r8) :: dqidw0(bounds%begc:bounds%endc,1:nlevgrnd+1)  ! d(qin)/d(vol_liq(i-1))
     real(r8) :: dqidw1(bounds%begc:bounds%endc,1:nlevgrnd+1)  ! d(qin)/d(vol_liq(i))
@@ -393,9 +401,16 @@ contains
             zimm(c,j) = zi(c,j)*1.e3_r8
 
             ! calculate icefrac up here
-            vol_ice(c,j) = min(watsat(c,j), h2osoi_ice(c,j)/(dz(c,j)*denice))
+            if (use_polygonal_tundra .and. lun_pp%ispolygon(col_pp%landunit(c))) then
+               dzmm_mat(c,j) = col_pp%dz_ref(c,j)*1.e3_r8
+               vol_ice(c,j) = min(watsat(c,j), h2osoi_ice(c,j)/(col_pp%dz_ref(c,j)*denice))
+               vwc_liq(c,j) = max(h2osoi_liq(c,j),1.0e-6_r8)/(col_pp%dz_ref(c,j)*denh2o)
+            else
+               dzmm_mat(c,j) = dzmm(c,j)
+               vol_ice(c,j) = min(watsat(c,j), h2osoi_ice(c,j)/(dz(c,j)*denice))
+               vwc_liq(c,j) = max(h2osoi_liq(c,j),1.0e-6_r8)/(dz(c,j)*denh2o)
+            end if
             icefrac(c,j) = min(1._r8,vol_ice(c,j)/watsat(c,j))
-            vwc_liq(c,j) = max(h2osoi_liq(c,j),1.0e-6_r8)/(dz(c,j)*denh2o)
          end do
       end do
 
@@ -592,7 +607,7 @@ contains
          dqodw2(c,j) = -( hk(c,j)*dsmpdw(c,j+1) + num*dhkdw(c,j))/den
          rmx(c,j) =  qin(c,j) - qout(c,j) - qflx_rootsoi_col(c,j)
          amx(c,j) =  0._r8
-         bmx(c,j) =  dzmm(c,j)*(sdamp+1._r8/dtime) + dqodw1(c,j)
+         bmx(c,j) =  dzmm_mat(c,j)*(sdamp+1._r8/dtime) + dqodw1(c,j)
          cmx(c,j) =  dqodw2(c,j)
       end do
 
@@ -616,7 +631,7 @@ contains
             dqodw2(c,j) = -( hk(c,j)*dsmpdw(c,j+1) + num*dhkdw(c,j))/den
             rmx(c,j)    =  qin(c,j) - qout(c,j) -  qflx_rootsoi_col(c,j)
             amx(c,j)    = -dqidw0(c,j)
-            bmx(c,j)    =  dzmm(c,j)/dtime - dqidw1(c,j) + dqodw1(c,j)
+            bmx(c,j)    =  dzmm_mat(c,j)/dtime - dqidw1(c,j) + dqodw1(c,j)
             cmx(c,j)    =  dqodw2(c,j)
          end do
       end do
@@ -638,7 +653,7 @@ contains
             dqodw1(c,j) =  0._r8
             rmx(c,j)    =  qin(c,j) - qout(c,j) - qflx_rootsoi_col(c,j)
             amx(c,j)    = -dqidw0(c,j)
-            bmx(c,j)    =  dzmm(c,j)/dtime - dqidw1(c,j) + dqodw1(c,j)
+            bmx(c,j)    =  dzmm_mat(c,j)/dtime - dqidw1(c,j) + dqodw1(c,j)
             cmx(c,j)    =  0._r8
 
             ! next set up aquifer layer; hydrologically inactive
@@ -687,7 +702,7 @@ contains
 
             rmx(c,j) =  qin(c,j) - qout(c,j) - qflx_rootsoi_col(c,j)
             amx(c,j) = -dqidw0(c,j)
-            bmx(c,j) =  dzmm(c,j)/dtime - dqidw1(c,j) + dqodw1(c,j)
+            bmx(c,j) =  dzmm_mat(c,j)/dtime - dqidw1(c,j) + dqodw1(c,j)
             cmx(c,j) =  dqodw2(c,j)
 
             ! next set up aquifer layer; den/num unchanged, qin=qout
@@ -748,7 +763,7 @@ contains
          c = filter_hydrologyc(fc)
          nlevbed = nlev2bed(c)
          do j = 1, nlevbed
-            h2osoi_liq(c,j) = h2osoi_liq(c,j) + dwat2(c,j)*dzmm(c,j)
+            h2osoi_liq(c,j) = h2osoi_liq(c,j) + dwat2(c,j)*dzmm_mat(c,j)
          end do
 
          ! calculate qcharge for case jwt < nlevsoi
@@ -1004,12 +1019,20 @@ contains
 
              dzsum = 0.d0
              do j = jwt, nlevgrnd
-                dzsum = dzsum + dz(c,j)
+                if (use_polygonal_tundra .and. lun_pp%ispolygon(col_pp%landunit(c))) then
+                   dzsum = dzsum + col_pp%dz_ref(c,j)
+                else
+                   dzsum = dzsum + dz(c,j)
+                end if
              end do
 
              qflx_drain_tot = 0.d0
              do j = jwt, nlevgrnd
-                qflx_drain_layer = qflx_drain(c) * dz(c,j)/dzsum
+                if (use_polygonal_tundra .and. lun_pp%ispolygon(col_pp%landunit(c))) then
+                   qflx_drain_layer = qflx_drain(c) * col_pp%dz_ref(c,j)/dzsum
+                else
+                   qflx_drain_layer = qflx_drain(c) * dz(c,j)/dzsum
+                end if
 
                 ! if the amount of water being drained from a given layer
                 ! exceeds the allowable water, limit the drainage

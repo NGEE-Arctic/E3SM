@@ -14,6 +14,8 @@ module SoilMoistStressMod
   ! Created by Jinyun Tang, Feb., 2014
   !
   use ColumnDataType   , only : col_es, col_ws
+  use elm_varctl       , only : use_polygonal_tundra
+  use LandunitType     , only : lun_pp
   !
   implicit none
   save
@@ -110,7 +112,11 @@ contains
        do fc = 1, numf
           c = filter(fc)
           !compute the volumetric ice content
-          vol_ice=min(watsat(c,j), h2osoi_ice(c,j)/(denice*col_pp%dz(c,j)))
+          if (use_polygonal_tundra .and. lun_pp%ispolygon(col_pp%landunit(c))) then
+             vol_ice=min(watsat(c,j), h2osoi_ice(c,j)/(denice*col_pp%dz_ref(c,j)))
+          else
+             vol_ice=min(watsat(c,j), h2osoi_ice(c,j)/(denice*col_pp%dz(c,j)))
+          end if
           !compute the maximum soil space to fill liquid water and air
           eff_por(c,j) = watsat(c,j) - vol_ice
        enddo
@@ -205,7 +211,11 @@ contains
           c = filter(fc)
           if(j>=jtop(c))then
              !volume of liquid is no greater than effective void space
-             vol_liq(c,j) = min(eff_porosity(c,j), h2osoi_liq(c,j)/(col_pp%dz(c,j)*denh2o))
+             if (j >= 1 .and. use_polygonal_tundra .and. lun_pp%ispolygon(col_pp%landunit(c))) then
+                vol_liq(c,j) = min(eff_porosity(c,j), h2osoi_liq(c,j)/(col_pp%dz_ref(c,j)*denh2o))
+             else
+                vol_liq(c,j) = min(eff_porosity(c,j), h2osoi_liq(c,j)/(col_pp%dz(c,j)*denh2o))
+             end if
           endif
        enddo
     enddo

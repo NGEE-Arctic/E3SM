@@ -13,7 +13,7 @@ module CanopyTemperatureMod
   use shr_kind_mod         , only : r8 => shr_kind_r8
   use shr_const_mod        , only : SHR_CONST_PI
   use decompMod            , only : bounds_type
-  use elm_varctl           , only : iulog, use_fates, use_finetop_rad
+  use elm_varctl           , only : iulog, use_fates, use_finetop_rad, use_polygonal_tundra
   use PhotosynthesisMod    , only : Photosynthesis, PhotosynthesisTotal, Fractionation
   use elm_instMod          , only : alm_fates
   use SurfaceResistanceMod , only : calc_soilevap_stress
@@ -249,7 +249,13 @@ contains
               .AND. lun_pp%itype(l)/=istice_mec) then
 
             if (col_pp%is_soil(c) .or. col_pp%is_crop(c)) then
-               wx   = (h2osoi_liq(c,1)/denh2o+h2osoi_ice(c,1)/denice)/dz(c,1)
+
+               if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
+                  wx = (h2osoi_liq(c,1)/denh2o+h2osoi_ice(c,1)/denice)/col_pp%dz_ref(c,1)
+               else
+                  wx = (h2osoi_liq(c,1)/denh2o+h2osoi_ice(c,1)/denice)/dz(c,1)
+               end if
+
                fac  = min(1._r8, wx/watsat(c,1))
                fac  = max( fac, 0.01_r8 )
                psit = -sucsat(c,1) * fac ** (-bsw(c,1))

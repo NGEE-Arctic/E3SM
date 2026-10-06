@@ -1151,11 +1151,16 @@ contains
             else if (lun_pp%itype(l) /= istwet .AND. lun_pp%itype(l) /= istice .AND. lun_pp%itype(l) /= istice_mec &
                  .AND. col_pp%itype(c) /= icol_sunwall .AND. col_pp%itype(c) /= icol_shadewall .AND. &
                  col_pp%itype(c) /= icol_roof) then
-               cv(c,j) = csol(c,j)*(1._r8-watsat(c,j))*dz(c,j) + (h2osoi_ice(c,j)*cpice + h2osoi_liq(c,j)*cpliq)
-               
-               ! Add excess ice heat capacity for soil layers in polygonal tundra
+
                if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
-                  cv(c,j) = cv(c,j) + excess_ice(c,j)*cpice
+                  cv(c,j) = csol(c,j)*(1._r8-watsat(c,j))*col_pp%dz_ref(c,j) &
+                       + h2osoi_ice(c,j)*cpice &
+                       + h2osoi_liq(c,j)*cpliq &
+                       + excess_ice(c,j)*cpice
+               else
+                  cv(c,j) = csol(c,j)*(1._r8-watsat(c,j))*dz(c,j) &
+                       + h2osoi_ice(c,j)*cpice &
+                       + h2osoi_liq(c,j)*cpliq
                end if
             else if (lun_pp%itype(l) == istwet) then
                cv(c,j) = (h2osoi_ice(c,j)*cpice + h2osoi_liq(c,j)*cpliq)
@@ -1613,7 +1618,12 @@ contains
                   if(t_soisno(c,j) < tfrz) then
                      smp_i(c,j) = hfus*(tfrz-t_soisno(c,j))/(grav*t_soisno(c,j)) * 1000._r8  !(mm)
                      supercool(c,j) = watsat(c,j)*(smp_i(c,j)/sucsat(c,j))**(-1._r8/bsw(c,j))
-                     supercool(c,j) = supercool(c,j)*dz(c,j)*1000._r8       ! (mm)
+                     if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
+                        supercool(c,j) = supercool(c,j) * &
+                             col_pp%dz_ref(c,j)*1000._r8 ! (mm)
+                     else
+                        supercool(c,j) = supercool(c,j)*dz(c,j)*1000._r8  ! (mm)
+                     end if
                   endif
                endif
 
