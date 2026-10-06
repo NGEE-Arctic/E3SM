@@ -109,7 +109,7 @@ contains
      use column_varcon   , only : icol_road_imperv, icol_road_perv
      use ColumnType      , only : col_pp
      use LandunitType    , only : lun_pp
-     use elm_varctl      , only : use_vsfm
+     use elm_varctl, only : use_vsfm, use_polygonal_tundra
      !
      implicit none
      type(bounds_type)     , intent(in)    :: bounds    ! bounds
@@ -142,7 +142,13 @@ contains
           if (lun_pp%itype(l)/=istwet .AND. lun_pp%itype(l)/=istice  &
                .AND. lun_pp%itype(l)/=istice_mec) then
              if (col_pp%is_soil(c) .or. col_pp%is_crop(c)) then
-                wx   = (h2osoi_liq(c,1)/denh2o+h2osoi_ice(c,1)/denice)/col_pp%dz(c,1)
+                if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
+                   wx = (h2osoi_liq(c,1)/denh2o + h2osoi_ice(c,1)/denice) / &
+                     col_pp%dz_ref(c,1)
+                else
+                   wx = (h2osoi_liq(c,1)/denh2o + h2osoi_ice(c,1)/denice) / &
+                     col_pp%dz(c,1)
+                end if
                 fac  = min(1._r8, wx/watsat(c,1))
                 fac  = max( fac, 0.01_r8 )
                 !! Lee and Pielke 1992 beta, added by K.Sakaguchi

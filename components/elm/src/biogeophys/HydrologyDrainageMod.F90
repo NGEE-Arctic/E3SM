@@ -169,7 +169,12 @@ contains
             if ((ctype(c) == icol_sunwall .or. ctype(c) == icol_shadewall &
                  .or. ctype(c) == icol_roof) .and. j > nlevurb) then
             else
-               h2osoi_vol(c,j) = h2osoi_liq(c,j)/(dz(c,j)*denh2o) + h2osoi_ice(c,j)/(dz(c,j)*denice)
+               if (use_polygonal_tundra .and. lun_pp%ispolygon(col_pp%landunit(c))) then
+                  h2osoi_vol(c,j) = h2osoi_liq(c,j)/(col_pp%dz_ref(c,j)*denh2o) + &
+                                    h2osoi_ice(c,j)/(col_pp%dz_ref(c,j)*denice)
+               else
+                  h2osoi_vol(c,j) = h2osoi_liq(c,j)/(dz(c,j)*denh2o) + h2osoi_ice(c,j)/(dz(c,j)*denice)
+               end if
             end if
          end do
       end do

@@ -7,7 +7,8 @@ Module HydrologyNoDrainageMod
   use shr_kind_mod      , only : r8 => shr_kind_r8
   use shr_log_mod       , only : errMsg => shr_log_errMsg
   use decompMod         , only : bounds_type
-  use elm_varctl        , only : iulog, use_vichydro, use_extrasnowlayers, use_firn_percolation_and_compaction
+  use elm_varctl        , only : iulog, use_vichydro, use_extrasnowlayers, use_firn_percolation_and_compaction, &
+                                 use_polygonal_tundra
   use elm_varcon        , only : e_ice, denh2o, denice, rpi, spval
   use atm2lndType       , only : atm2lnd_type
   use ocn2lndType       , only : ocn2lnd_type
@@ -463,12 +464,21 @@ contains
             if ((ctype(c) == icol_sunwall .or. ctype(c) == icol_shadewall &
                  .or. ctype(c) == icol_roof) .and. j > nlevurb) then
             else
-               h2osoi_vol(c,j) = h2osoi_liq(c,j)/(dz(c,j)*denh2o) + h2osoi_ice(c,j)/(dz(c,j)*denice)
-               h2osoi_liqvol(c,j) = h2osoi_liq(c,j)/(dz(c,j)*denh2o)
-               h2osoi_icevol(c,j) = h2osoi_ice(c,j)/(dz(c,j)*denice)
-               air_vol(c,j)       = max(1.e-4_r8,watsat(c,j) - h2osoi_vol(c,j))
-               eff_porosity(c,j)  = max(0.01_r8,watsat(c,j) - h2osoi_ice(c,j)/(dz(c,j)*denice))
-
+               l = col_pp%landunit(c)
+               if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
+                  h2osoi_vol(c,j) = h2osoi_liq(c,j)/(col_pp%dz_ref(c,j)*denh2o) + &
+                                    h2osoi_ice(c,j)/(col_pp%dz_ref(c,j)*denice)
+                  h2osoi_liqvol(c,j) = h2osoi_liq(c,j)/(col_pp%dz_ref(c,j)*denh2o)
+                  h2osoi_icevol(c,j) = h2osoi_ice(c,j)/(col_pp%dz_ref(c,j)*denice)
+                  air_vol(c,j)       = max(1.e-4_r8,watsat(c,j) - h2osoi_vol(c,j))
+                  eff_porosity(c,j)  = max(0.01_r8,watsat(c,j) - h2osoi_ice(c,j)/(col_pp%dz_ref(c,j)*denice))
+               else
+                  h2osoi_vol(c,j) = h2osoi_liq(c,j)/(dz(c,j)*denh2o) + h2osoi_ice(c,j)/(dz(c,j)*denice)
+                  h2osoi_liqvol(c,j) = h2osoi_liq(c,j)/(dz(c,j)*denh2o)
+                  h2osoi_icevol(c,j) = h2osoi_ice(c,j)/(dz(c,j)*denice)
+                  air_vol(c,j)       = max(1.e-4_r8,watsat(c,j) - h2osoi_vol(c,j))
+                  eff_porosity(c,j)  = max(0.01_r8,watsat(c,j) - h2osoi_ice(c,j)/(dz(c,j)*denice))
+               end if
             end if
          end do
       end do
@@ -483,7 +493,12 @@ contains
 
                if (h2osoi_liq(c,j) > 0._r8) then
 
-                  vwc = h2osoi_liq(c,j)/(dz(c,j)*denh2o)
+                  l = col_pp%landunit(c)
+                  if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
+                     vwc = h2osoi_liq(c,j)/(col_pp%dz_ref(c,j)*denh2o)
+                  else
+                     vwc = h2osoi_liq(c,j)/(dz(c,j)*denh2o)
+                  end if
 
                   ! the following limit set to catch very small values of
                   ! fractional saturation that can crash the calculation of psi
@@ -518,8 +533,15 @@ contains
                !if (z(c,j)+0.5_r8*dz(c,j) <= 0.5_r8) then
                if (z(c,j)+0.5_r8*dz(c,j) <= 0.05_r8) then
                   watdry = watsat(c,j) * (316230._r8/sucsat(c,j)) ** (-1._r8/bsw(c,j))
-                  rwat(c) = rwat(c) + (h2osoi_vol(c,j)-watdry) * dz(c,j)
-                  swat(c) = swat(c) + (watsat(c,j)    -watdry) * dz(c,j)
+                  l = col_pp%landunit(c)
+                  if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
+                     rwat(c) = rwat(c) + (h2osoi_vol(c,j)-watdry) * col_pp%dz_ref(c,j)
+                     swat(c) = swat(c) + (watsat(c,j)    -watdry) * col_pp%dz_ref(c,j)
+                  else
+                     rwat(c) = rwat(c) + (h2osoi_vol(c,j)-watdry) * dz(c,j)
+                     swat(c) = swat(c) + (watsat(c,j)    -watdry) * dz(c,j)
+                  end if
+                  ! rz is the physical depth represented by the included layers.
                   rz(c) = rz(c) + dz(c,j)
                end if
             end do
@@ -543,8 +565,15 @@ contains
                c = filter_hydrologyc(fc)
                if (z(c,j)+0.5_r8*dz(c,j) <= 0.17_r8) then
                   watdry = watsat(c,j) * (316230._r8/sucsat(c,j)) ** (-1._r8/bsw(c,j))
-                  rwat(c) = rwat(c) + (h2osoi_vol(c,j)-watdry) * dz(c,j)
-                  swat(c) = swat(c) + (watsat(c,j)    -watdry) * dz(c,j)
+                  l = col_pp%landunit(c)
+                  if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
+                     rwat(c) = rwat(c) + (h2osoi_vol(c,j)-watdry) * col_pp%dz_ref(c,j)
+                     swat(c) = swat(c) + (watsat(c,j)    -watdry) * col_pp%dz_ref(c,j)
+                  else
+                     rwat(c) = rwat(c) + (h2osoi_vol(c,j)-watdry) * dz(c,j)
+                     swat(c) = swat(c) + (watsat(c,j)    -watdry) * dz(c,j)
+                  end if
+                  ! rz is the physical depth represented by the included layers.
                   rz(c) = rz(c) + dz(c,j)
                end if
             end do
