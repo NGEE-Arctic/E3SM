@@ -2201,7 +2201,9 @@ contains
        do ifld = 1,nflds
 
           ! WJS (10-25-11): Note about l2g_scale_type in the following: ZSOI & DZSOI are
-          ! currently constant in space, except for urban points, so their scale type
+          ! populated from col_pp%z_ref/dz_ref -- the fixed (reference) mineral-soil grid,
+          ! not the deforming col_pp%z/dz used for heat conduction under excess ground ice
+          ! -- so they are constant in space except for urban points, and their scale type
           ! doesn't matter at the moment as long as it excludes urban points. I am using
           ! 'nonurb' so that the values are output everywhere where the fields are
           ! constant (i.e., everywhere except urban points). For the other fields, I am
@@ -2229,8 +2231,8 @@ contains
              do c = bounds%begc,bounds%endc
                 l = col_pp%landunit(c)
                    ! Field indices MUST match varnames array order above!
-                   if (ifld ==1) histi(c,lev) = col_pp%z(c,lev)
-                   if (ifld ==2) histi(c,lev) = col_pp%dz(c,lev)
+                   if (ifld ==1) histi(c,lev) = col_pp%z_ref(c,lev)
+                   if (ifld ==2) histi(c,lev) = col_pp%dz_ref(c,lev)
                    if (ifld ==3) histi(c,lev) = watsat_col(c,lev)
                    if (ifld ==4) histi(c,lev) = sucsat_col(c,lev)
                    if (ifld ==5) histi(c,lev) = bsw_col(c,lev)

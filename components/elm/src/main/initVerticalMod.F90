@@ -437,30 +437,46 @@ contains
              col_pp%z(c,1:nlevurb)  = zurb_wall(l,1:nlevurb)
              col_pp%zi(c,0:nlevurb) = ziurb_wall(l,0:nlevurb)
              col_pp%dz(c,1:nlevurb) = dzurb_wall(l,1:nlevurb)
+             col_pp%z_ref(c,1:nlevurb)  = zurb_wall(l,1:nlevurb)
+             col_pp%zi_ref(c,0:nlevurb) = ziurb_wall(l,0:nlevurb)
+             col_pp%dz_ref(c,1:nlevurb) = dzurb_wall(l,1:nlevurb)
              if (nlevurb < nlevgrnd) then
                 col_pp%z(c,nlevurb+1:nlevgrnd)  = spval
                 col_pp%zi(c,nlevurb+1:nlevgrnd) = spval
                 col_pp%dz(c,nlevurb+1:nlevgrnd) = spval
+                col_pp%z_ref(c,nlevurb+1:nlevgrnd)  = spval
+                col_pp%zi_ref(c,nlevurb+1:nlevgrnd) = spval
+                col_pp%dz_ref(c,nlevurb+1:nlevgrnd) = spval
              end if
           else if (col_pp%itype(c) == icol_roof) then
              col_pp%z(c,1:nlevurb)  = zurb_roof(l,1:nlevurb)
              col_pp%zi(c,0:nlevurb) = ziurb_roof(l,0:nlevurb)
              col_pp%dz(c,1:nlevurb) = dzurb_roof(l,1:nlevurb)
+             col_pp%z_ref(c,1:nlevurb)  = zurb_roof(l,1:nlevurb)
+             col_pp%zi_ref(c,0:nlevurb) = ziurb_roof(l,0:nlevurb)
+             col_pp%dz_ref(c,1:nlevurb) = dzurb_roof(l,1:nlevurb)
              if (nlevurb < nlevgrnd) then
                 col_pp%z(c,nlevurb+1:nlevgrnd)  = spval
                 col_pp%zi(c,nlevurb+1:nlevgrnd) = spval
                 col_pp%dz(c,nlevurb+1:nlevgrnd) = spval
+                col_pp%z_ref(c,nlevurb+1:nlevgrnd)  = spval
+                col_pp%zi_ref(c,nlevurb+1:nlevgrnd) = spval
+                col_pp%dz_ref(c,nlevurb+1:nlevgrnd) = spval
              end if
           else
              col_pp%z(c,1:nlevgrnd)  = zsoi(1:nlevgrnd)
              col_pp%zi(c,0:nlevgrnd) = zisoi(0:nlevgrnd)
              col_pp%dz(c,1:nlevgrnd) = dzsoi(1:nlevgrnd)
+             col_pp%z_ref(c,1:nlevgrnd)  = zsoi(1:nlevgrnd)
+             col_pp%zi_ref(c,0:nlevgrnd) = zisoi(0:nlevgrnd)
              col_pp%dz_ref(c,1:nlevgrnd) = dzsoi(1:nlevgrnd)
           end if
        else if (lun_pp%itype(l) /= istdlak) then
           col_pp%z(c,1:nlevgrnd)  = zsoi(1:nlevgrnd)
           col_pp%zi(c,0:nlevgrnd) = zisoi(0:nlevgrnd)
           col_pp%dz(c,1:nlevgrnd) = dzsoi(1:nlevgrnd)
+          col_pp%z_ref(c,1:nlevgrnd)  = zsoi(1:nlevgrnd)
+          col_pp%zi_ref(c,0:nlevgrnd) = zisoi(0:nlevgrnd)
           col_pp%dz_ref(c,1:nlevgrnd) = dzsoi(1:nlevgrnd)
           col_pp%volrat(c,1:nlevgrnd) = 1._r8
        end if
@@ -588,6 +604,8 @@ contains
           col_pp%z(c,1:nlevgrnd)  = zsoi(1:nlevgrnd)
           col_pp%zi(c,0:nlevgrnd) = zisoi(0:nlevgrnd)
           col_pp%dz(c,1:nlevgrnd) = dzsoi(1:nlevgrnd)
+          col_pp%z_ref(c,1:nlevgrnd)  = zsoi(1:nlevgrnd)
+          col_pp%zi_ref(c,0:nlevgrnd) = zisoi(0:nlevgrnd)
           col_pp%dz_ref(c,1:nlevgrnd) = dzsoi(1:nlevgrnd)
        end if
     end do

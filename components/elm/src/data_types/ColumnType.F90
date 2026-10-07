@@ -63,6 +63,8 @@ module ColumnType
      integer , pointer :: snl          (:)   => null() ! number of snow layers
      real(r8), pointer :: dz           (:,:) => null() ! layer thickness (m)  (-nlevsno+1:nlevgrnd)
      real(r8), pointer :: dz_ref       (:,:) => null() ! reference (mineral soil) layer thickness (m) (1:nlevgrnd)
+     real(r8), pointer :: z_ref        (:,:) => null() ! reference (mineral soil) layer node depth (m) (1:nlevgrnd)
+     real(r8), pointer :: zi_ref       (:,:) => null() ! reference (mineral soil) layer interface depth (m) (0:nlevgrnd)
      real(r8), pointer :: volrat       (:,:) => null() ! Volume ratio between old and new dz if dz shrinks due to excess ice melt (1:nlevgrnd)
      real(r8), pointer :: z            (:,:) => null() ! layer depth (m) (-nlevsno+1:nlevgrnd)
      real(r8), pointer :: zi           (:,:) => null() ! interface level below a "z" level (m) (-nlevsno+0:nlevgrnd)
@@ -125,6 +127,13 @@ contains
     allocate(this%snl         (begc:endc))                     ; this%snl         (:)   = ispval  !* cannot be averaged up
     allocate(this%dz          (begc:endc,-nlevsno+1:nlevgrnd)) ; this%dz          (:,:) = spval
     allocate(this%dz_ref      (begc:endc, 1:nlevgrnd))         ; this%dz_ref      (:,:) = spval
+    ! NOTE: dz_ref/z_ref/zi_ref (and volrat) are written only over owned columns
+    ! (begc:endc) and are NOT packed by ColumnMod's ghost exchange, which carries
+    ! dz/z/zi only. Ghost columns therefore hold spval in the reference arrays.
+    ! Any consumer that reads reference geometry outside begc:endc -- a lateral-flow
+    ! or ghost-cell path -- must extend NumValuesPerColumn/Get/SetValuesForColumn first.
+    allocate(this%z_ref       (begc:endc, 1:nlevgrnd))         ; this%z_ref       (:,:) = spval
+    allocate(this%zi_ref      (begc:endc, 0:nlevgrnd))         ; this%zi_ref      (:,:) = spval
     allocate(this%volrat      (begc:endc, 1:nlevgrnd))         ; this%volrat      (:,:) = spval
     allocate(this%z           (begc:endc,-nlevsno+1:nlevgrnd)) ; this%z           (:,:) = spval
     allocate(this%zi          (begc:endc,-nlevsno+0:nlevgrnd)) ; this%zi          (:,:) = spval
@@ -175,6 +184,8 @@ contains
     deallocate(this%snl        )
     deallocate(this%dz         )
     deallocate(this%dz_ref     )
+    deallocate(this%z_ref      )
+    deallocate(this%zi_ref     )
     deallocate(this%volrat     )
     deallocate(this%z          )
     deallocate(this%zi         )
