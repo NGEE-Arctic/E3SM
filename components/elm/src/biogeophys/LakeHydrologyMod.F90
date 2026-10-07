@@ -130,6 +130,11 @@ contains
          z                    =>  col_pp%z                                 , & ! Input:  [real(r8) (:,:) ]  layer depth  (m)                      
          dz                   =>  col_pp%dz                                , & ! Input:  [real(r8) (:,:) ]  layer thickness depth (m)             
          zi                   =>  col_pp%zi                                , & ! Input:  [real(r8) (:,:) ]  interface depth (m)                   
+         ! Deforming (z/dz/zi, above) is used for snow-layer bookkeeping; reference
+         ! (dz_ref, below) is used wherever soil-under-lake hydrology quantities
+         ! (volumetric water content) are computed. No z_ref/zi_ref binding: this
+         ! routine reads no soil node or interface depth.
+         dz_ref               =>  col_pp%dz_ref                            , & ! Input:  [real(r8) (:,:) ]  reference layer thickness (m)
          snl                  =>  col_pp%snl                               , & ! Input:  [integer  (:)   ]  number of snow layers                    
 
          forc_rain            =>  top_af%rain                           , & ! Input:  [real(r8) (:)   ]  rain rate (kg H2O/m**2/s, or mm liquid H2O/s)                        
@@ -501,14 +506,14 @@ contains
          do fc = 1, num_lakec
             c = filter_lakec(fc)
 
-            h2osoi_vol(c,j) = h2osoi_liq(c,j)/(dz(c,j)*denh2o) + h2osoi_ice(c,j)/(dz(c,j)*denice)
+            h2osoi_vol(c,j) = h2osoi_liq(c,j)/(dz_ref(c,j)*denh2o) + h2osoi_ice(c,j)/(dz_ref(c,j)*denice)
             ! Could have changed during phase change! (Added 8/11/10)
 
             if (h2osoi_vol(c,j) < watsat(c,j)) then
-               h2osoi_liq(c,j) = (watsat(c,j)*dz(c,j) - h2osoi_ice(c,j)/denice)*denh2o
+               h2osoi_liq(c,j) = (watsat(c,j)*dz_ref(c,j) - h2osoi_ice(c,j)/denice)*denh2o
                ! h2osoi_vol will be updated below, and this water addition will come from qflx_qrgwl
-            else if (h2osoi_liq(c,j) > watsat(c,j)*denh2o*dz(c,j)) then
-               h2osoi_liq(c,j) = watsat(c,j)*denh2o*dz(c,j)
+            else if (h2osoi_liq(c,j) > watsat(c,j)*denh2o*dz_ref(c,j)) then
+               h2osoi_liq(c,j) = watsat(c,j)*denh2o*dz_ref(c,j)
                ! Another way to do this would be: if h2osoi_vol > watsat then remove min(h2osoi_liq,
                !(h2osoi_vol-watsat)*dz*denh2o) from h2osoi_liq.  The question is whether the excess ice
                ! melts first or last (or simultaneously) to the pore ice.  Because excess ice is often in chunks,
@@ -697,7 +702,7 @@ contains
          do fc = 1, num_lakec
             c = filter_lakec(fc)
             endwb(c) = endwb(c) + h2osoi_ice(c,j) + h2osoi_liq(c,j)
-            h2osoi_vol(c,j) = h2osoi_liq(c,j)/(dz(c,j)*denh2o) + h2osoi_ice(c,j)/(dz(c,j)*denice)
+            h2osoi_vol(c,j) = h2osoi_liq(c,j)/(dz_ref(c,j)*denh2o) + h2osoi_ice(c,j)/(dz_ref(c,j)*denice)
          end do
       end do
 

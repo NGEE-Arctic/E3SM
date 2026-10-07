@@ -297,7 +297,7 @@ contains
              if (lun_pp%urbpoi(l)) then
                 if (col_pp%itype(c) == icol_road_perv) then
                    this%wa_col(c)  = 0._r8
-                   this%zwt_col(c) = col_pp%zi(c,nlevbed)  ! At bedrock depth for variable soil thickness
+                   this%zwt_col(c) = col_pp%zi_ref(c,nlevbed)  ! At bedrock depth for variable soil thickness
                 else
                    this%wa_col(c)  = spval
                    this%zwt_col(c) = spval
@@ -307,10 +307,10 @@ contains
                 this%frost_table_col(c) = spval
              else
                 this%wa_col(c)  = 0._r8
-                this%zwt_col(c) = col_pp%zi(c,nlevbed)  ! At bedrock depth for variable soil thickness
+                this%zwt_col(c) = col_pp%zi_ref(c,nlevbed)  ! At bedrock depth for variable soil thickness
                 ! initialize frost_table, zwt_perched to bottom of soil column
-                this%zwt_perched_col(c) = col_pp%zi(c,nlevbed)
-                this%frost_table_col(c) = col_pp%zi(c,nlevbed)
+                this%zwt_perched_col(c) = col_pp%zi_ref(c,nlevbed)
+                this%frost_table_col(c) = col_pp%zi_ref(c,nlevbed)
              end if
           end if
        end do
@@ -322,7 +322,7 @@ contains
              if (lun_pp%urbpoi(l)) then
                 if (col_pp%itype(c) == icol_road_perv) then
                    this%wa_col(c)  = 4800._r8
-                   this%zwt_col(c) = (25._r8 + col_pp%zi(c,nlevsoi)) - this%wa_col(c)/0.2_r8 /1000._r8  ! One meter below soil column
+                   this%zwt_col(c) = (25._r8 + col_pp%zi_ref(c,nlevsoi)) - this%wa_col(c)/0.2_r8 /1000._r8  ! One meter below soil column
                 else
                    this%wa_col(c)  = spval
                    this%zwt_col(c) = spval
@@ -332,10 +332,10 @@ contains
                 this%frost_table_col(c) = spval
              else
                 this%wa_col(c)  = 4000._r8
-                this%zwt_col(c) = (25._r8 + col_pp%zi(c,nlevsoi)) - this%wa_col(c)/0.2_r8 /1000._r8  ! One meter below soil column
+                this%zwt_col(c) = (25._r8 + col_pp%zi_ref(c,nlevsoi)) - this%wa_col(c)/0.2_r8 /1000._r8  ! One meter below soil column
                 ! initialize frost_table, zwt_perched to bottom of soil column
-                this%zwt_perched_col(c) = col_pp%zi(c,nlevsoi)
-                this%frost_table_col(c) = col_pp%zi(c,nlevsoi)
+                this%zwt_perched_col(c) = col_pp%zi_ref(c,nlevsoi)
+                this%frost_table_col(c) = col_pp%zi_ref(c,nlevsoi)
              end if
           end if
        end do
@@ -524,7 +524,7 @@ contains
                    ! do nothing
                 else
                    this%depth_col(c, 1:nlayer)         = dzvic
-                   this%depth_col(c, nlayer+1:nlayert) = col_pp%dz(c, nlevsoi+1:nlevgrnd)
+                   this%depth_col(c, nlayer+1:nlayert) = col_pp%dz_ref(c, nlevsoi+1:nlevgrnd)
 
                    ! create weights to map soil moisture profiles (10 layer) to 3 layers for VIC hydrology, M.Huang
                    call initelmVICMap(c, this)
@@ -532,7 +532,7 @@ contains
                 end if
              else
                 this%depth_col(c, 1:nlayer) = dzvic
-                this%depth_col(c, nlayer+1:nlayert) = col_pp%dz(c, nlevsoi+1:nlevgrnd)
+                this%depth_col(c, nlayer+1:nlayert) = col_pp%dz_ref(c, nlevsoi+1:nlevgrnd)
 
                 ! create weights to map soil moisture profiles (10 layer) to 3 layers for VIC hydrology, M.Huang
                 call initelmVICMap(c, this)
@@ -635,7 +635,7 @@ contains
          long_name='frost table depth', units='m', &
          interpinic_flag='interp', readvar=readvar, data=this%frost_table_col)
     if (flag == 'read' .and. .not. readvar) then
-       this%frost_table_col(bounds%begc:bounds%endc) = col_pp%zi(bounds%begc:bounds%endc,nlevsoi)
+       this%frost_table_col(bounds%begc:bounds%endc) = col_pp%zi_ref(bounds%begc:bounds%endc,nlevsoi)
     end if
 
     call restartvar(ncid=ncid, flag=flag, varname='WA', xtype=ncd_double,  &
@@ -653,7 +653,7 @@ contains
          long_name='perched water table depth', units='m', &
          interpinic_flag='interp', readvar=readvar, data=this%zwt_perched_col)
     if (flag == 'read' .and. .not. readvar) then
-       this%zwt_perched_col(bounds%begc:bounds%endc) = col_pp%zi(bounds%begc:bounds%endc,nlevsoi)
+       this%zwt_perched_col(bounds%begc:bounds%endc) = col_pp%zi_ref(bounds%begc:bounds%endc,nlevsoi)
     end if
 
   end subroutine Restart
@@ -814,9 +814,11 @@ contains
      !-----------------------------------------------------------------------
 
      associate(                                                    &
-          dz            =>    col_pp%dz    ,                          & ! Input:  [real(r8) (:,:)   ]  layer depth (m)
-          zi            =>    col_pp%zi    ,                          & ! Input:  [real(r8) (:,:)   ]  interface level below a "z" level (m)
-          z             =>    col_pp%z     ,                          & ! Input:  [real(r8) (:,:)   ]  layer thickness (m)
+          ! dz is the only geometry read below. The zi and z bindings that used to
+          ! sit here were dead before this work and are deleted rather than
+          ! retargeted, matching the treatment of the same defect in
+          ! BalanceCheckMod's two BeginWaterBalance routines.
+          dz            =>    col_pp%dz_ref ,                         & ! Input:  [real(r8) (:,:)   ]  reference layer thickness (m)
 
           depth         =>    soilhydrology_vars%depth_col ,       & ! Input:  [real(r8) (:,:)   ]  layer depth of VIC (m)
           vic_elm_fract =>    soilhydrology_vars%vic_elm_fract_col & ! Output: [real(r8) (:,:,:) ]  fraction of VIC layers in elm layers

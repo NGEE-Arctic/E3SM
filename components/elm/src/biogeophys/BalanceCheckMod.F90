@@ -74,7 +74,6 @@ contains
     !-----------------------------------------------------------------------
 
     associate(                                                         &
-         zi                     =>    col_pp%zi                                  , & ! Input:  [real(r8) (:,:) ]  interface level below a "z" level (m)
          h2ocan_patch           =>    veg_ws%h2ocan               , & ! Input:  [real(r8) (:)   ]  canopy water (mm H2O) (pft-level)
          h2osfc                 =>    col_ws%h2osfc                 , & ! Input:  [real(r8) (:)   ]  surface water (mm)
          h2osno                 =>    col_ws%h2osno                 , & ! Input:  [real(r8) (:)   ]  snow water (mm H2O)
@@ -822,7 +821,6 @@ contains
     real(r8) :: wa_local_col(bounds%begc:bounds%endc)
 
     associate(                                                                        &
-         zi                        =>    col_pp%zi                                  , & ! Input:  [real(r8) (:,:) ]  interface level below a "z" level (m)
          h2ocan_patch              =>    veg_ws%h2ocan               , & ! Input:  [real(r8) (:)   ]  canopy water (mm H2O) (pft-level)
          h2osfc                    =>    col_ws%h2osfc                 , & ! Input:  [real(r8) (:)   ]  surface water (mm)
          h2osno                    =>    col_ws%h2osno                 , & ! Input:  [real(r8) (:)   ]  snow water (mm H2O)

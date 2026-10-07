@@ -1822,11 +1822,11 @@ contains
              this%h2osoi_vol(c,j) = min(this%h2osoi_vol(c,j), watsat_input(c,j))
 
              if (col_es%t_soisno(c,j) <= SHR_CONST_TKFRZ) then
-                this%h2osoi_ice(c,j) = col_pp%dz(c,j)*denice*this%h2osoi_vol(c,j)
+                this%h2osoi_ice(c,j) = col_pp%dz_ref(c,j)*denice*this%h2osoi_vol(c,j)
                 this%h2osoi_liq(c,j) = 0._r8
              else
                 this%h2osoi_ice(c,j) = 0._r8
-                this%h2osoi_liq(c,j) = col_pp%dz(c,j)*denh2o*this%h2osoi_vol(c,j)
+                this%h2osoi_liq(c,j) = col_pp%dz_ref(c,j)*denh2o*this%h2osoi_vol(c,j)
              endif
           end do
           do j = -nlevsno+1, 0
@@ -1874,11 +1874,11 @@ contains
        !--------------------------------------------
        do j = 1,nlevgrnd
           if (col_es%t_soisno(c,j) <= tfrz) then
-             this%h2osoi_ice(c,j) = col_pp%dz(c,j)*denice*this%h2osoi_vol(c,j)
+             this%h2osoi_ice(c,j) = col_pp%dz_ref(c,j)*denice*this%h2osoi_vol(c,j)
              this%h2osoi_liq(c,j) = 0._r8
           else
              this%h2osoi_ice(c,j) = 0._r8
-             this%h2osoi_liq(c,j) = col_pp%dz(c,j)*denh2o*this%h2osoi_vol(c,j)
+             this%h2osoi_liq(c,j) = col_pp%dz_ref(c,j)*denh2o*this%h2osoi_vol(c,j)
           endif
        end do
 
@@ -2176,8 +2176,8 @@ contains
           end if
           if ( lun_pp%itype(l) /= istdlak ) then ! This calculation is now done for lakes in initLake.
              do j = 1,nlevs
-                this%h2osoi_vol(c,j) = this%h2osoi_liq(c,j)/(col_pp%dz(c,j)*denh2o) &
-                                         + this%h2osoi_ice(c,j)/(col_pp%dz(c,j)*denice)
+                this%h2osoi_vol(c,j) = this%h2osoi_liq(c,j)/(col_pp%dz_ref(c,j)*denh2o) &
+                                         + this%h2osoi_ice(c,j)/(col_pp%dz_ref(c,j)*denice)
              end do
           end if
        end do
@@ -2199,15 +2199,15 @@ contains
                 if (col_pp%is_soil(c) .or. col_pp%is_crop(c)) then
                    this%h2osoi_liq(c,j) = max(0._r8,this%h2osoi_liq(c,j))
                    this%h2osoi_ice(c,j) = max(0._r8,this%h2osoi_ice(c,j))
-                   this%h2osoi_vol(c,j) = this%h2osoi_liq(c,j)/(col_pp%dz(c,j)*denh2o) &
-                                       + this%h2osoi_ice(c,j)/(col_pp%dz(c,j)*denice)
+                   this%h2osoi_vol(c,j) = this%h2osoi_liq(c,j)/(col_pp%dz_ref(c,j)*denh2o) &
+                                       + this%h2osoi_ice(c,j)/(col_pp%dz_ref(c,j)*denice)
                    if (j == 1) then
-                      maxwatsat = (watsat_input(c,j)*col_pp%dz(c,j)*1000.0_r8 + pondmx) / (col_pp%dz(c,j)*1000.0_r8)
+                      maxwatsat = (watsat_input(c,j)*col_pp%dz_ref(c,j)*1000.0_r8 + pondmx) / (col_pp%dz_ref(c,j)*1000.0_r8)
                    else
                       maxwatsat =  watsat_input(c,j)
                    end if
                    if (this%h2osoi_vol(c,j) > maxwatsat) then
-                      excess = (this%h2osoi_vol(c,j) - maxwatsat)*col_pp%dz(c,j)*1000.0_r8
+                      excess = (this%h2osoi_vol(c,j) - maxwatsat)*col_pp%dz_ref(c,j)*1000.0_r8
                       totwat = this%h2osoi_liq(c,j) + this%h2osoi_ice(c,j)
                       this%h2osoi_liq(c,j) = this%h2osoi_liq(c,j) - &
                                            (this%h2osoi_liq(c,j)/totwat) * excess
@@ -2216,8 +2216,8 @@ contains
                    end if
                    this%h2osoi_liq(c,j) = max(watmin,this%h2osoi_liq(c,j))
                    this%h2osoi_ice(c,j) = max(watmin,this%h2osoi_ice(c,j))
-                   this%h2osoi_vol(c,j) = this%h2osoi_liq(c,j)/(col_pp%dz(c,j)*denh2o) &
-                                             + this%h2osoi_ice(c,j)/(col_pp%dz(c,j)*denice)
+                   this%h2osoi_vol(c,j) = this%h2osoi_liq(c,j)/(col_pp%dz_ref(c,j)*denh2o) &
+                                             + this%h2osoi_ice(c,j)/(col_pp%dz_ref(c,j)*denice)
                 end if
              end do
           end do

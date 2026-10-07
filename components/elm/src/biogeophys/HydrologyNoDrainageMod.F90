@@ -124,6 +124,15 @@ contains
          z                  => col_pp%z                                  , & ! Input:  [real(r8) (:,:) ]  layer depth  (m)                      
          dz                 => col_pp%dz                                 , & ! Input:  [real(r8) (:,:) ]  layer thickness depth (m)             
          zi                 => col_pp%zi                                 , & ! Input:  [real(r8) (:,:) ]  interface depth (m)                   
+         ! Deforming (z/dz/zi, above) is used for snow-layer bookkeeping and for the
+         ! tsoi17/t_soi_10cm depth integrals, which integrate t_soisno -- a field
+         ! solved on the deforming grid -- over a physical depth of actual ground.
+         ! Reference (z_ref/dz_ref, below) is used wherever soil hydrology
+         ! quantities (porosity, volumetric water, root-zone water) are computed.
+         ! No zi_ref binding: every interface-depth read here is on the deforming
+         ! frame, per the above.
+         z_ref              => col_pp%z_ref                              , & ! Input:  [real(r8) (:,:) ]  reference layer node depth (m)
+         dz_ref             => col_pp%dz_ref                             , & ! Input:  [real(r8) (:,:) ]  reference layer thickness (m)
          snl                => col_pp%snl                                , & ! Input:  [integer  (:)   ]  number of snow layers                    
          nlev2bed           => col_pp%nlevbed                           , & ! Input:  [integer  (:)   ]  number of layers to bedrock                     
          ctype              => col_pp%itype                              , & ! Input:  [integer  (:)   ]  column type                              
@@ -399,6 +408,12 @@ contains
             l = col_pp%landunit(c)
             if (.not. lun_pp%urbpoi(l)) then
                ! soil T at top 17 cm added by F. Li and S. Levis
+               ! Deforming frame (zi/dz), deliberately: t_soisno is solved on the
+               ! deforming grid, so zi/dz IS this temperature field's own vertical
+               ! coordinate. "Top 0.17 m" also means 0.17 m of actual ground, which
+               ! with excess ice present spans fewer mineral layers. Integrating a
+               ! deforming-frame field against reference-frame limits would mix
+               ! frames -- the defect this convention exists to prevent.
                if (zi(c,j) <= 0.17_r8) then
                   fracl = 1._r8
                   tsoi17(c) = tsoi17(c) + t_soisno(c,j)*dz(c,j)*fracl
@@ -463,11 +478,11 @@ contains
             if ((ctype(c) == icol_sunwall .or. ctype(c) == icol_shadewall &
                  .or. ctype(c) == icol_roof) .and. j > nlevurb) then
             else
-               h2osoi_vol(c,j) = h2osoi_liq(c,j)/(dz(c,j)*denh2o) + h2osoi_ice(c,j)/(dz(c,j)*denice)
-               h2osoi_liqvol(c,j) = h2osoi_liq(c,j)/(dz(c,j)*denh2o)
-               h2osoi_icevol(c,j) = h2osoi_ice(c,j)/(dz(c,j)*denice)
+               h2osoi_vol(c,j) = h2osoi_liq(c,j)/(dz_ref(c,j)*denh2o) + h2osoi_ice(c,j)/(dz_ref(c,j)*denice)
+               h2osoi_liqvol(c,j) = h2osoi_liq(c,j)/(dz_ref(c,j)*denh2o)
+               h2osoi_icevol(c,j) = h2osoi_ice(c,j)/(dz_ref(c,j)*denice)
                air_vol(c,j)       = max(1.e-4_r8,watsat(c,j) - h2osoi_vol(c,j))
-               eff_porosity(c,j)  = max(0.01_r8,watsat(c,j) - h2osoi_ice(c,j)/(dz(c,j)*denice))
+               eff_porosity(c,j)  = max(0.01_r8,watsat(c,j) - h2osoi_ice(c,j)/(dz_ref(c,j)*denice))
 
             end if
          end do
@@ -483,7 +498,7 @@ contains
 
                if (h2osoi_liq(c,j) > 0._r8) then
 
-                  vwc = h2osoi_liq(c,j)/(dz(c,j)*denh2o)
+                  vwc = h2osoi_liq(c,j)/(dz_ref(c,j)*denh2o)
 
                   ! the following limit set to catch very small values of
                   ! fractional saturation that can crash the calculation of psi
@@ -515,12 +530,12 @@ contains
          do j = 1, nlevgrnd
             do fc = 1, num_hydrologyc
                c = filter_hydrologyc(fc)
-               !if (z(c,j)+0.5_r8*dz(c,j) <= 0.5_r8) then
-               if (z(c,j)+0.5_r8*dz(c,j) <= 0.05_r8) then
+               !if (z_ref(c,j)+0.5_r8*dz_ref(c,j) <= 0.5_r8) then
+               if (z_ref(c,j)+0.5_r8*dz_ref(c,j) <= 0.05_r8) then
                   watdry = watsat(c,j) * (316230._r8/sucsat(c,j)) ** (-1._r8/bsw(c,j))
-                  rwat(c) = rwat(c) + (h2osoi_vol(c,j)-watdry) * dz(c,j)
-                  swat(c) = swat(c) + (watsat(c,j)    -watdry) * dz(c,j)
-                  rz(c) = rz(c) + dz(c,j)
+                  rwat(c) = rwat(c) + (h2osoi_vol(c,j)-watdry) * dz_ref(c,j)
+                  swat(c) = swat(c) + (watsat(c,j)    -watdry) * dz_ref(c,j)
+                  rz(c) = rz(c) + dz_ref(c,j)
                end if
             end do
          end do
@@ -541,11 +556,11 @@ contains
          do j = 1, nlevgrnd
             do fc = 1, num_hydrologyc
                c = filter_hydrologyc(fc)
-               if (z(c,j)+0.5_r8*dz(c,j) <= 0.17_r8) then
+               if (z_ref(c,j)+0.5_r8*dz_ref(c,j) <= 0.17_r8) then
                   watdry = watsat(c,j) * (316230._r8/sucsat(c,j)) ** (-1._r8/bsw(c,j))
-                  rwat(c) = rwat(c) + (h2osoi_vol(c,j)-watdry) * dz(c,j)
-                  swat(c) = swat(c) + (watsat(c,j)    -watdry) * dz(c,j)
-                  rz(c) = rz(c) + dz(c,j)
+                  rwat(c) = rwat(c) + (h2osoi_vol(c,j)-watdry) * dz_ref(c,j)
+                  swat(c) = swat(c) + (watsat(c,j)    -watdry) * dz_ref(c,j)
+                  rz(c) = rz(c) + dz_ref(c,j)
                end if
             end do
          end do

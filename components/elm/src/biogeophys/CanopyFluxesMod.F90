@@ -663,8 +663,8 @@ contains
                   vol_liq_so   = eff_porosity(c,j) * (-smpso(veg_pp%itype(p))/sucsat(c,j))**(-1/bsw(c,j))
 
                   ! Translate vol_liq_so and eff_porosity into h2osoi_liq_so and h2osoi_liq_sat and calculate deficit
-                  h2osoi_liq_so  = vol_liq_so * denh2o * col_pp%dz(c,j)
-                  h2osoi_liq_sat = eff_porosity(c,j) * denh2o * col_pp%dz(c,j)
+                  h2osoi_liq_so  = vol_liq_so * denh2o * col_pp%dz_ref(c,j)
+                  h2osoi_liq_sat = eff_porosity(c,j) * denh2o * col_pp%dz_ref(c,j)
                   deficit        = max((h2osoi_liq_so + firrig(g,tpu_ind)*(h2osoi_liq_sat - h2osoi_liq_so)) - h2osoi_liq(c,j), 0._r8)
 
                   ! Add deficit to irrig_rate, converting units from mm to mm/sec
