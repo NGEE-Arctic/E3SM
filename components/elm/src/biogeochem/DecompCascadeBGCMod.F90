@@ -810,14 +810,14 @@ contains
          do j=1,nlev_soildecomp_standard
             do fc = 1,num_soilc
                c = filter_soilc(fc)
-               frw(c) = frw(c) + col_pp%dz(c,j)
+               frw(c) = frw(c) + col_pp%dz_ref(c,j)
             end do
          end do
          do j = 1,nlev_soildecomp_standard
             do fc = 1,num_soilc
                c = filter_soilc(fc)
                if (frw(c) /= 0._r8) then
-                  fr(c,j) = col_pp%dz(c,j) / frw(c)
+                  fr(c,j) = col_pp%dz_ref(c,j) / frw(c)
                else
                   fr(c,j) = 0._r8
                end if

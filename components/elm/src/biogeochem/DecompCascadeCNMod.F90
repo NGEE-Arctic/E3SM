@@ -691,7 +691,7 @@ contains
      !-----------------------------------------------------------------------
 
      associate(                                             &
-          dz             => col_pp%dz                        , & ! Input:  [real(r8) (:,:)   ]  soil layer thickness (m)
+          dz             => col_pp%dz_ref                    , & ! Input:  [real(r8) (:,:)   ]  reference soil layer thickness (m)
 
           sucsat         => soilstate_vars%sucsat_col     , & ! Input:  [real(r8) (:,:)   ]  minimum soil suction (mm)
           soilpsi        => soilstate_vars%soilpsi_col    , & ! Input:  [real(r8) (:,:)   ]  soil water potential in each soil layer (MPa)

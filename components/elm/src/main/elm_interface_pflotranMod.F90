@@ -1396,9 +1396,14 @@ contains
          cwtgcell   =>  col_pp%wtgcell    , & !  [real(r8) (:)]  weight (relative to gridcell)
          cactive    =>  col_pp%active     , & !  [logic (:)]  column active or not
          !
-         z          =>  col_pp%z          , & !  [real(r8) (:,:)]  layer depth (m) (sort of centroid from surface 0 )
-         zi         =>  col_pp%zi         , & !  [real(r8) (:,:)]  layer interface depth (m)
-         dz         =>  col_pp%dz           & !  [real(r8) (:,:)]  layer thickness (m)
+         ! Reference frame throughout this file: PFLOTRAN solves Richards and
+         ! reactive transport, which are defined per mineral-soil volume, so the
+         ! grid handed over must not deform with excess ice. Every loop here runs
+         ! j = 1..nlevgrnd (nzelm_mapped == nlevgrnd), so no snow index is read.
+         ! UNTESTED -- no available test exercises the PFLOTRAN coupling.
+         z          =>  col_pp%z_ref          , & !  [real(r8) (:,:)]  reference layer node depth (m) (sort of centroid from surface 0 )
+         zi         =>  col_pp%zi_ref         , & !  [real(r8) (:,:)]  reference layer interface depth (m)
+         dz         =>  col_pp%dz_ref           & !  [real(r8) (:,:)]  reference layer thickness (m)
          )
 
 
@@ -1726,9 +1731,9 @@ contains
          cgridcell                => col_pp%gridcell                             , & !  [integer (:)]  gridcell index of column
          cwtgcell                 => col_pp%wtgcell                              , & !  [real(r8) (:)]  weight (relative to gridcell
          cactive                  => col_pp%active                               , & !
-         z                        => col_pp%z                                    , & !  [real(r8) (:,:)]  layer depth (m)
-         dz                       => col_pp%dz                                   , & !  [real(r8) (:,:)]  layer thickness depth (m)
-         zi                       => col_pp%zi                                   , & !  [real(r8) (:,:)]  interface level below a "z" level (m)
+         z                        => col_pp%z_ref                                    , & !  [real(r8) (:,:)]  layer depth (m)
+         dz                       => col_pp%dz_ref                                   , & !  [real(r8) (:,:)]  layer thickness depth (m)
+         zi                       => col_pp%zi_ref                                   , & !  [real(r8) (:,:)]  interface level below a "z" level (m)
          !
          bd                       => elm_interface_data%bd_col                      , & !
          bsw                      => elm_interface_data%bsw_col                     , & !  [real(r8) (:,:)]  Clapp and Hornberger "b" (nlevgrnd)
@@ -2017,7 +2022,7 @@ contains
   !-----------------------------------------------------------------------
     associate ( &
       cgridcell       => col_pp%gridcell               , & ! column's gridcell
-      dz              => col_pp%dz                     , & ! layer thickness depth (m)
+      dz              => col_pp%dz_ref                     , & ! layer thickness depth (m)
       !
       sucsat          => elm_interface_data%sucsat_col    , & ! minimum soil suction (mm) (nlevgrnd)
       bsw             => elm_interface_data%bsw_col       , & ! Clapp and Hornberger "b"
@@ -2211,7 +2216,7 @@ contains
   !-----------------------------------------------------------------------
     associate ( &
     cgridcell       => col_pp%gridcell                           , & ! column's gridcell
-    dz              => col_pp%dz                                 , & ! layer thickness depth (m)
+    dz              => col_pp%dz_ref                                 , & ! layer thickness depth (m)
     !
     watsat          => elm_interface_data%watsat_col          , & ! volumetric soil water at saturation (porosity) (nlevgrnd)
     h2osoi_ice      => elm_interface_data%th%h2osoi_ice_col     & ! ice lens (kg/m2)
@@ -2351,7 +2356,7 @@ contains
     associate ( &
     cgridcell         => col_pp%gridcell                            , & ! column's gridcell
     cwtgcell          => col_pp%wtgcell                             , & ! weight (relative to gridcell)
-    dz                => col_pp%dz                                  , & ! layer thickness depth (m)
+    dz                => col_pp%dz_ref                                  , & ! layer thickness depth (m)
     !
     bsw               => elm_interface_data%bsw_col                           , &! Clapp and Hornberger "b" (nlevgrnd)
     hksat             => elm_interface_data%hksat_col                         , &! hydraulic conductivity at saturation (mm H2O /s) (nlevgrnd)
@@ -2717,7 +2722,7 @@ contains
   !-----------------------------------------------------------------------
     associate ( &
     cgridcell         => col_pp%gridcell              , &! column's gridcell
-    dz                => col_pp%dz                    , &! layer thickness depth (m)
+    dz                => col_pp%dz_ref                    , &! layer thickness depth (m)
     snl               => col_pp%snl                   , &! number of snow layers (negative)
     !
     frac_sno_eff      => elm_interface_data%th%frac_sno_eff_col      , &! fraction of ground covered by snow (0 to 1)
@@ -3295,7 +3300,7 @@ contains
   !-----------------------------------------------------------------------
     associate ( &
       cgridcell       => col_pp%gridcell               , & ! column's gridcell
-      dz              => col_pp%dz                     , & ! layer thickness depth (m)
+      dz              => col_pp%dz_ref                     , & ! layer thickness depth (m)
       !
       watsat          => elm_interface_data%watsat_col       , & ! volumetric soil water at saturation (porosity) (nlevgrnd)
       !
@@ -3430,7 +3435,7 @@ contains
   !-----------------------------------------------------------------------
     associate ( &
        cgridcell       => col_pp%gridcell                    , & ! column's gridcell
-       z               => col_pp%z                           , & ! [real(r8) (:,:) ] layer depth (m)
+       z               => col_pp%z_ref                           , & ! [real(r8) (:,:) ] layer depth (m)
        !
        t_soisno        => elm_interface_data%th%t_soisno_col      , &  ! [real(r8)(:,:)] snow-soil temperature (Kelvin) [:, 1:nlevgrnd]
        frost_table     => elm_interface_data%th%frost_table_col     &  ! [real(r8)(:)] frost table depth (m)
@@ -4016,7 +4021,7 @@ contains
 !------------------------------------------------------------------------------------
      associate ( &
      cgridcell                    => col_pp%gridcell                      , & ! gridcell index of column
-     dz                           => col_pp%dz                            , & ! soil layer thickness depth (m)
+     dz                           => col_pp%dz_ref                            , & ! soil layer thickness depth (m)
      !
      frac_sno_eff                 => elm_interface_data%th%frac_sno_eff_col            , & ! fraction of ground covered by snow (0 to 1)
      frac_h2osfc                  => elm_interface_data%th%frac_h2osfc_col             , & ! fraction of ground covered by surface water (0 to 1)
@@ -4347,7 +4352,7 @@ contains
 !------------------------------------------------------------------------------------
     associate ( &
      cgridcell                    => col_pp%gridcell                                     , & ! gridcell index of column
-     dz                           => col_pp%dz                                           , & ! soil layer thickness depth (m)
+     dz                           => col_pp%dz_ref                                           , & ! soil layer thickness depth (m)
      !
      no3_net_transport_vr         => elm_interface_data%bgc%no3_net_transport_vr_col  , & ! output: [c,j] (gN/m3/s)
      nh4_net_transport_vr         => elm_interface_data%bgc%nh4_net_transport_vr_col    & ! output: [c,j] (gN/m3/s)
