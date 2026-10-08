@@ -864,7 +864,6 @@ contains
     real(r8) :: om_adj                    ! organic matter fraction for current layer relative to total solid volume
     real(r8) :: organic_max               ! organic matter (kg/m3) threshold
     real(r8) :: f_exice                   ! fraction of layer that is excess ice
-    real(r8) :: dz_soil                   ! depth of layer subject to soil tk scheme
     character(len=64) :: event
     
     real(r8), parameter :: rho_ice     = 917._r8
@@ -885,9 +884,17 @@ contains
 
     associate(                                                 &
          snl          =>    col_pp%snl                       , & ! Input:  [integer  (:)   ]  number of snow layers
-         dz           =>    col_pp%dz                        , & ! Input:  [real(r8) (:,:) ]  layer depth (m)
+         ! This routine needs BOTH frames. Deforming (dz/zi/z) owns the
+         ! conduction geometry -- tk interface weighting, the snow slices, and
+         ! the conductivity blend -- because heat really must cross the extra
+         ! ice. Reference (dz_ref) owns the mineral-matrix terms: the dry-solid
+         ! heat capacity at the cv line below and the soil-tk layer thickness.
+         ! Counting excess-ice volume as rock would charge that volume twice,
+         ! once as solids and again as ice.
+         dz           =>    col_pp%dz                        , & ! Input:  [real(r8) (:,:) ]  layer thickness, deforming (m)
          zi           =>    col_pp%zi                        , & ! Input:  [real(r8) (:,:) ]  interface level below a "z" level (m)
-         z            =>    col_pp%z                         , & ! Input:  [real(r8) (:,:) ]  layer thickness (m)
+         z            =>    col_pp%z                         , & ! Input:  [real(r8) (:,:) ]  layer node depth (m)
+         dz_ref       =>    col_pp%dz_ref                    , & ! Input:  [real(r8) (:,:) ]  reference (mineral soil) layer thickness (m)
          nlev2bed     =>    col_pp%nlevbed                      , & ! Input:  [integer  (:)   ]  number of layers to bedrock
 
          nlev_improad =>    urbanparams_vars%nlev_improad    , & ! Input:  [integer  (:)   ]  number of impervious road layers
@@ -942,20 +949,30 @@ contains
                else if (lun_pp%itype(l) /= istwet .AND. lun_pp%itype(l) /= istice .AND. lun_pp%itype(l) /= istice_mec &
                     .AND. col_pp%itype(c) /= icol_sunwall .AND. col_pp%itype(c) /= icol_shadewall .AND. &
                     col_pp%itype(c) /= icol_roof) then
+                  ! f_exice is still needed for the conductivity blend at the
+                  ! geometric-mean step below, but the layer thickness the soil
+                  ! tk scheme acts on is just dz_ref: by the core geometry
+                  ! formula dz == dz_ref + excess_ice/denice (ExcessIceMod),
+                  ! so dz*(1 - f_exice) == dz - excess_ice/denice == dz_ref
+                  ! identically. Reading dz_ref directly removes the algebraic
+                  ! round trip, and is also the right answer on any path where
+                  ! dz and excess_ice have not yet been resynced by
+                  ! recompute_layer_geometry -- there the clamp below would make
+                  ! dz*(1 - f_exice) disagree with the true reference thickness.
                   if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
                      if (excess_ice(c,j) .gt. 0._r8) then
                         f_exice = excess_ice(c,j)/(denice*dz(c,j))
                         f_exice = min(1._r8, max(0._r8, f_exice))
-                        dz_soil = dz(c,j) * (1._r8 - f_exice)
                      else
-                        dz_soil = dz(c,j)
                         f_exice = 0._r8
                      endif
                   else
-                     dz_soil = dz(c,j)
                      f_exice = 0._r8
                   endif
-                  satw = (h2osoi_liq(c,j)/denh2o + h2osoi_ice(c,j)/denice)/(dz_soil*watsat(c,j))
+                  ! Pore saturation is a reference-volume quantity: watsat is
+                  ! built on the fixed grid, so the pore volume it multiplies
+                  ! must be the undeformed one.
+                  satw = (h2osoi_liq(c,j)/denh2o + h2osoi_ice(c,j)/denice)/(dz_ref(c,j)*watsat(c,j))
                   satw = min(1._r8, satw)
 
                   if (trim(soil_thermal_conductivity_model) == 'farouki') then
@@ -965,6 +982,14 @@ contains
                         else                               ! Frozen soil
                            dke = satw
                         end if
+                        ! fl is FRAME-INVARIANT and deliberately left on dz.
+                        ! Every term in both numerator and denominator carries
+                        ! the same /dz(c,j) -- including the excess-ice term in
+                        ! the polygon branch below -- so dz cancels identically
+                        ! and the ratio does not depend on which frame is used.
+                        ! Do NOT "fix" this to dz_ref: retargeting only some of
+                        ! the four terms would introduce a real bug where there
+                        ! is currently none.
                         fl = (h2osoi_liq(c,j)/(denh2o*dz(c,j))) / (h2osoi_liq(c,j)/(denh2o*dz(c,j)) + &
                            h2osoi_ice(c,j)/(denice*dz(c,j)))
 
@@ -1012,6 +1037,14 @@ contains
                      else ! if frozen or partially frozen
                         ! Equation 18, Balland and Arp 2005
                         dke = satw**(1.0_r8+om_adj)
+                        ! fl is FRAME-INVARIANT and deliberately left on dz.
+                        ! Every term in both numerator and denominator carries
+                        ! the same /dz(c,j) -- including the excess-ice term in
+                        ! the polygon branch below -- so dz cancels identically
+                        ! and the ratio does not depend on which frame is used.
+                        ! Do NOT "fix" this to dz_ref: retargeting only some of
+                        ! the four terms would introduce a real bug where there
+                        ! is currently none.
                         fl = (h2osoi_liq(c,j)/(denh2o*dz(c,j))) / (h2osoi_liq(c,j)/(denh2o*dz(c,j)) + &
                            h2osoi_ice(c,j)/(denice*dz(c,j)))
 
@@ -1151,8 +1184,14 @@ contains
             else if (lun_pp%itype(l) /= istwet .AND. lun_pp%itype(l) /= istice .AND. lun_pp%itype(l) /= istice_mec &
                  .AND. col_pp%itype(c) /= icol_sunwall .AND. col_pp%itype(c) /= icol_shadewall .AND. &
                  col_pp%itype(c) /= icol_roof) then
-               cv(c,j) = csol(c,j)*(1._r8-watsat(c,j))*dz(c,j) + (h2osoi_ice(c,j)*cpice + h2osoi_liq(c,j)*cpliq)
-               
+               ! Dry-solid heat capacity is a property of the mineral matrix, so
+               ! it takes reference thickness: csol and watsat are both built on
+               ! the fixed grid (SoilStateType), and deformed dz would inflate
+               ! the solid volume by the excess-ice fraction -- counting that
+               ! volume once as rock and again as ice below. The water and ice
+               ! terms are masses and need no thickness at all.
+               cv(c,j) = csol(c,j)*(1._r8-watsat(c,j))*dz_ref(c,j) + (h2osoi_ice(c,j)*cpice + h2osoi_liq(c,j)*cpliq)
+
                ! Add excess ice heat capacity for soil layers in polygonal tundra
                if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
                   cv(c,j) = cv(c,j) + excess_ice(c,j)*cpice
@@ -1613,7 +1652,13 @@ contains
                   if(t_soisno(c,j) < tfrz) then
                      smp_i(c,j) = hfus*(tfrz-t_soisno(c,j))/(grav*t_soisno(c,j)) * 1000._r8  !(mm)
                      supercool(c,j) = watsat(c,j)*(smp_i(c,j)/sucsat(c,j))**(-1._r8/bsw(c,j))
-                     supercool(c,j) = supercool(c,j)*dz(c,j)*1000._r8       ! (mm)
+                     ! Reference thickness (dz_ref): supercool is a pore-water
+                     ! capacity built from watsat/sucsat/bsw, all of which live
+                     ! on the fixed grid, so the volume it converts to a mass
+                     ! must be the undeformed pore volume. Written inline rather
+                     ! than aliased because this is the only dz reference in
+                     ! Phasechange_beta, so the routine needs no frame rebind.
+                     supercool(c,j) = supercool(c,j)*col_pp%dz_ref(c,j)*1000._r8  ! (mm)
                   endif
                endif
 

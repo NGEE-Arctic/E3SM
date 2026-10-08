@@ -10,6 +10,7 @@ module TotalWaterAndHeatMod
   use shr_log_mod        , only : errMsg => shr_log_errMsg
   use decompMod          , only : bounds_type
   use elm_varcon         , only : cpice, cpliq, denh2o, tfrz, hfus, aquifer_water_baseline
+  use elm_varctl         , only : use_polygonal_tundra
   use elm_varpar         , only : nlevgrnd, nlevsoi, nlevurb, nlevlak
   use subgridAveMod      , only : p2c
   use SoilHydrologyType  , only : soilhydrology_type
@@ -424,7 +425,14 @@ contains
 
     associate( &
          snl          => col_pp%snl, & ! number of snow layers
-         dz           => col_pp%dz, &  ! layer depth (m)
+         dz           => col_pp%dz, &  ! layer thickness, deforming (m)
+         ! dz_ref is bound so the soil dry-mass term below tracks
+         ! SoilThermProp's cv (SoilTemperatureMod) term for term. If the two
+         ! heat accountings disagree the energy balance check cannot close, so
+         ! the two must change together. Deforming dz stays bound for the urban
+         ! wall/roof/improad terms, which carry no excess ice and whose cv_* are
+         ! per actual layer volume.
+         dz_ref       => col_pp%dz_ref, & ! reference (mineral soil) layer thickness (m)
          nlev_improad => urbanparams_inst%nlev_improad, & ! number of impervious road layers
          cv_wall      => urbanparams_inst%cv_wall, & ! heat capacity of urban wall (J/m^3/K)
          cv_roof      => urbanparams_inst%cv_roof, & ! heat capacity of urban roof (J/m^3/K)
@@ -589,8 +597,13 @@ contains
              else if (lun_pp%itype(l) /= istwet .and. lun_pp%itype(l) /= istice .and. lun_pp%itype(l) /= istice_mec) then
                 ! Note that this also includes impervious roads below nlev_improad (where
                 ! we have soil)
+                ! Reference thickness, matching SoilThermProp's cv: csol and
+                ! watsat are built on the fixed grid, so deformed dz would
+                ! inflate the mineral solid volume by the excess-ice fraction
+                ! and charge that volume twice -- once here as dry mass and
+                ! again below as ice.
                 heat_dry_mass(c) = heat_dry_mass(c) + &
-                     TempToHeat( t_soisno(c,j), (csol(c,j)*(1-watsat(c,j))*dz(c,j)))
+                     TempToHeat( t_soisno(c,j), (csol(c,j)*(1-watsat(c,j))*dz_ref(c,j)))
              end if
           end if
 
@@ -603,6 +616,24 @@ contains
                   latent_heat_liquid = latent_heat_liquid(c))
              heat_ice(c) = heat_ice(c) + &
                   TempToHeat(t_soisno(c,j), (h2osoi_ice(c,j)*cpice))
+
+             ! Excess ground ice carries sensible heat exactly as pore ice does,
+             ! and SoilThermProp adds excess_ice*cpice to cv for these columns.
+             ! Without the matching term here the two heat accountings differ by
+             ! the whole excess-ice inventory -- at 0.36 volumetric fraction the
+             ! largest single term in a polygon column's ice budget -- and the
+             ! energy balance check cannot close.
+             !
+             ! Nested guard, not `.and.`: Fortran does not guarantee
+             ! short-circuit evaluation, so a combined test could still
+             ! reference col_ws%excess_ice where it is unallocated. Matches the
+             ! form used at SoilTemperatureMod.F90:1576-1581.
+             if (use_polygonal_tundra) then
+                if (lun_pp%ispolygon(l)) then
+                   heat_ice(c) = heat_ice(c) + &
+                        TempToHeat(t_soisno(c,j), (col_ws%excess_ice(c,j)*cpice))
+                end if
+             end if
           end if
        end do
     end do
@@ -660,7 +691,16 @@ contains
 
     associate( &
          snl          => col_pp%snl, & ! number of snow layers
-         dz           => col_pp%dz, &  ! layer depth (m)
+         dz           => col_pp%dz, &  ! layer thickness, deforming (m)
+         ! Reference thickness for the soil dry-mass term below, matching
+         ! ComputeHeatNonLake and LakeTemperature's cv. No excess-ice heat term
+         ! is needed in this routine: ispolygon is set only on istsoil
+         ! landunits (initSubgridMod.F90:524-526), which have lakpoi = .false.,
+         ! so a lake column is never a polygon column and carries no excess
+         ! ice. The retarget is therefore bit-for-bit here -- initVerticalMod
+         ! sets deep-lake dz and dz_ref from the same dzsoi (:604-609) -- and is
+         ! made only so both routines state the same frame.
+         dz_ref       => col_pp%dz_ref, & ! reference (mineral soil) layer thickness (m)
          watsat       => soilstate_inst%watsat_col, & ! volumetric soil water at saturation (porosity)
          csol         => soilstate_inst%csol_col, & ! heat capacity, soil solids (J/m**3/Kelvin)
          t_soisno     => col_es%t_soisno, & ! soil temperature (Kelvin)
@@ -708,7 +748,7 @@ contains
           c = filter_lakec(fc)
 
           heat_dry_mass(c) = heat_dry_mass(c) + &
-               TempToHeat( t_soisno(c,j), (csol(c,j)*(1-watsat(c,j))*dz(c,j)))
+               TempToHeat( t_soisno(c,j), (csol(c,j)*(1-watsat(c,j))*dz_ref(c,j)))
           call AccumulateLiquidWaterHeat( &
                temp = t_soisno(c,j), &
                h2o = h2osoi_liq(c,j), &
