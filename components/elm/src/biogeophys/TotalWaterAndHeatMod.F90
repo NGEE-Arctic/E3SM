@@ -627,7 +627,7 @@ contains
              ! Nested guard, not `.and.`: Fortran does not guarantee
              ! short-circuit evaluation, so a combined test could still
              ! reference col_ws%excess_ice where it is unallocated. Matches the
-             ! form used at SoilTemperatureMod.F90:1576-1581.
+             ! form used at SoilTemperatureMod.F90:1573-1578.
              if (use_polygonal_tundra) then
                 if (lun_pp%ispolygon(l)) then
                    heat_ice(c) = heat_ice(c) + &

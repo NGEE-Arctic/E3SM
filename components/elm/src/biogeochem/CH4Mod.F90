@@ -3327,9 +3327,20 @@ contains
                   if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
                      ! Fold the excess-ice mass into the ice term, so freeze-out partitions
                      ! liquid vs. ice correctly on columns that carry excess ground ice.
-                     ! excess_ice is allocated only under use_polygonal_tundra, so this read
-                     ! stays nested inside that guard rather than reached via an unguarded
-                     ! `.and.` -- Fortran does not guarantee short-circuit evaluation.
+                     !
+                     ! excess_ice is allocated only under use_polygonal_tundra
+                     ! (ColumnDataType.F90:1480-1488), and before this guard existed the
+                     ! branch tested only `j >= 1`, so ch4frzout with polygons off
+                     ! dereferenced an unallocated pointer.
+                     !
+                     ! A flat `.and.` is safe HERE only because both operands are
+                     ! themselves safe to evaluate: lun_pp%ispolygon is allocated
+                     ! unconditionally and defaults .false. (LandunitType.F90:98), and the
+                     ! excess_ice read sits in the BODY, which is reached only when both
+                     ! are true. Do not copy this shape to a test that dereferences a
+                     ! conditionally-allocated field in the CONDITION itself -- Fortran
+                     ! does not guarantee short-circuit `.and.`, so that needs the nested
+                     ! form used at SoilTemperatureMod.F90:1573-1578.
                      liqfrac(c,j) = max(0.05_r8, (h2osoi_liq(c,j)/denh2o+smallnumber)/ &
                        (h2osoi_liq(c,j)/denh2o+(h2osoi_ice(c,j)+excess_ice(c,j))/denice+smallnumber))
                   else
