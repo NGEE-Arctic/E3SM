@@ -865,12 +865,29 @@ contains
       end do
 
     !-----------------------------------------------
-    ! Register history field for deformed soil layer thickness
+    ! Register history field for deformed soil layer thickness. ZSOI/DZSOI
+    ! (histFileMod.F90:2234-2235) report the REFERENCE grid, so this is the
+    ! only output that shows the deformed thermal geometry.
+    !
+    ! Gated on use_polygonal_tundra and active by default within that gate,
+    ! matching the other excess-ice diagnostics (ColumnDataType.F90:1524-1547).
+    ! Both halves of that matter. Active, because success criterion
+    ! geometry-relaxes-to-reference reads DZ_SOIL from the h0 file and cannot
+    ! run if the field is never written. Gated, because DZ_SOIL is
+    ! time-varying, and adding a time-varying field unconditionally makes
+    ! cprnc report "DIFFER only in their field lists", which cime turns into
+    ! files_match = False (hist_utils.py:538-542) -- that would fail the five
+    ! non-polygon layer-structure comparisons for a reason with nothing to do
+    ! with the physics they exist to check. Time-CONSTANT field-list
+    ! differences are tolerated (cprnc.F90:152-166), which is why repointing
+    ! ZSOI/DZSOI is safe but this is not.
     !-----------------------------------------------
-    data2dptr => col_pp%dz(:,1:nlevgrnd)
-    call hist_addfld2d (fname='DZ_SOIL', units='m', type2d='levgrnd', avgflag='A', &
-         long_name='Soil layer thickness (deformed by excess ice where present)', &
-         ptr_col=data2dptr, l2g_scale_type='veg', default='inactive')
+    if (use_polygonal_tundra) then
+       data2dptr => col_pp%dz(:,1:nlevgrnd)
+       call hist_addfld2d (fname='DZ_SOIL', units='m', type2d='levgrnd', avgflag='A', &
+            long_name='Soil layer thickness (deformed by excess ice where present)', &
+            ptr_col=data2dptr, l2g_scale_type='veg')
+    end if
 
     call ncd_pio_closefile(ncid)
 
