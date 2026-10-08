@@ -330,7 +330,11 @@ contains
             soil_hr_vr(c,j) = phr_vr(c,j)
 
             ! CENTURY papers give denitrification in units of per gram soil; need to convert from volumetric to mass-based units here
-            soil_bulkdensity(c,j) = bd(c,j) + h2osoi_liq(c,j)/col_pp%dz(c,j)
+            ! Reference frame (dz_ref): bd is built on the fixed grid in
+            ! SoilStateType, so dividing the water mass by a deformed thickness
+            ! would add two different volumes together -- a unit error, not just
+            ! a bias. Both terms must be per reference volume.
+            soil_bulkdensity(c,j) = bd(c,j) + h2osoi_liq(c,j)/col_pp%dz_ref(c,j)
 
             g_per_m3__to__ug_per_gsoil = 1.e3_r8 / soil_bulkdensity(c,j)
 

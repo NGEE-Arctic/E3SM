@@ -87,7 +87,7 @@ contains
 
     associate(                                                        &
          snl              =>    col_pp%snl                             , & ! Input:  [integer  (:)   ]  minus number of snow layers
-         dz               =>    col_pp%dz                              , & ! Input:  [real(r8) (:,:) ]  layer depth (m)
+         dz               =>    col_pp%dz_ref                          , & ! Input:  [real(r8) (:,:) ]  reference layer thickness (m)
          nlev2bed         =>    col_pp%nlevbed                         , & ! Input:  [integer  (:)   ]  number of layers to bedrock
 
          sucsat           =>    soilstate_vars%sucsat_col           , & ! Input:  [real(r8) (:,:) ]  minimum soil suction (mm)
@@ -155,7 +155,7 @@ contains
          fff(c) = fover(g)
          if (zengdecker_2009_with_var_soil_thick) then
             nlevbed = nlev2bed(c)
-            fff(c) = 0.5_r8 * col_pp%zi(c,nlevsoi) / min(col_pp%zi(c,nlevbed), col_pp%zi(c,nlevsoi))
+            fff(c) = 0.5_r8 * col_pp%zi_ref(c,nlevsoi) / min(col_pp%zi_ref(c,nlevbed), col_pp%zi_ref(c,nlevsoi))
          end if
          if (use_vichydro) then
             top_moist(c) = 0._r8
@@ -367,7 +367,7 @@ contains
 
      associate(                                                    &
           snl                  =>    col_pp%snl                  , & ! Input:  [integer  (:)   ]  minus number of snow layers
-          dz                   =>    col_pp%dz                   , & ! Input:  [real(r8) (:,:) ]  layer depth (m)
+          dz                   =>    col_pp%dz_ref                , & ! Input:  [real(r8) (:,:) ]  reference layer thickness (m)
           nlev2bed             =>    col_pp%nlevbed              , & ! Input:  [integer  (:)   ]  number of layers to bedrock
           cgridcell            =>    col_pp%gridcell             , & ! Input:  [integer  (:)   ]  column's gridcell    
           wtgcell              =>    col_pp%wtgcell              , & ! Input:  [real(r8) (:)   ]  weight (relative to gridcell)
@@ -814,9 +814,9 @@ contains
 
      associate(                                                            &
           snl                =>    col_pp%snl                               , & ! Input:  [integer  (:)   ]  number of snow layers
-          dz                 =>    col_pp%dz                                , & ! Input:  [real(r8) (:,:) ]  layer depth (m)
-          z                  =>    col_pp%z                                 , & ! Input:  [real(r8) (:,:) ]  layer depth (m)
-          zi                 =>    col_pp%zi                                , & ! Input:  [real(r8) (:,:) ]  interface level below a "z" level (m)
+          dz                 =>    col_pp%dz_ref                            , & ! Input:  [real(r8) (:,:) ]  reference layer thickness (m)
+          z                  =>    col_pp%z_ref                             , & ! Input:  [real(r8) (:,:) ]  reference layer node depth (m)
+          zi                 =>    col_pp%zi_ref                            , & ! Input:  [real(r8) (:,:) ]  reference interface depth (m)
          nlev2bed            =>    col_pp%nlevbed                           , & ! Input:  [integer  (:)   ]  number of layers to bedrock
 
           t_soisno           =>    col_es%t_soisno         , & ! Input:  [real(r8) (:,:) ]  soil temperature (Kelvin)
@@ -1175,9 +1175,9 @@ contains
      !-----------------------------------------------------------------------
 
      associate(                                                            &
-          z                  =>    col_pp%z                                 , & ! Input:  [real(r8) (:,:) ] layer depth (m)
-          zi                 =>    col_pp%zi                                , & ! Input:  [real(r8) (:,:) ] interface level below a "z" level (m)
-          dz                 =>    col_pp%dz                                , & ! Input:  [real(r8) (:,:) ] layer depth (m)
+          z                  =>    col_pp%z_ref                             , & ! Input:  [real(r8) (:,:) ] reference layer node depth (m)
+          zi                 =>    col_pp%zi_ref                            , & ! Input:  [real(r8) (:,:) ] reference interface depth (m)
+          dz                 =>    col_pp%dz_ref                            , & ! Input:  [real(r8) (:,:) ] reference layer thickness (m)
           snl                =>    col_pp%snl                               , & ! Input:  [integer  (:)   ] number of snow layers
           nlev2bed           =>    col_pp%nlevbed                           , & ! Input:  [integer  (:)   ] number of layers to bedrock
 
@@ -1817,9 +1817,9 @@ contains
      !-----------------------------------------------------------------------
 
      associate(                                                  &
-          z                  =>    col_pp%z                      , & ! Input:  [real(r8) (:,:) ] layer depth (m)
-          zi                 =>    col_pp%zi                     , & ! Input:  [real(r8) (:,:) ] interface level below a "z" level (m)
-          dz                 =>    col_pp%dz                     , & ! Input:  [real(r8) (:,:) ] layer depth (m)
+          z                  =>    col_pp%z_ref                  , & ! Input:  [real(r8) (:,:) ] reference layer node depth (m)
+          zi                 =>    col_pp%zi_ref                 , & ! Input:  [real(r8) (:,:) ] reference interface depth (m)
+          dz                 =>    col_pp%dz_ref                 , & ! Input:  [real(r8) (:,:) ] reference layer thickness (m)
           nlev2bed           =>    col_pp%nlevbed                , & ! Input:  [integer  (:)   ] number of layers to bedrock
           bsw                =>    soilstate_vars%bsw_col        , & ! Input:  [real(r8) (:,:) ] Clapp and Hornberger "b"
           hksat              =>    soilstate_vars%hksat_col      , & ! Input:  [real(r8) (:,:) ] hydraulic conductivity at saturation (mm H2O /s)
@@ -2067,9 +2067,9 @@ contains
      !-----------------------------------------------------------------------
 
      associate(                                                            &
-          z                  =>    col_pp%z                                 , & ! Input:  [real(r8) (:,:) ] layer depth (m)
-          zi                 =>    col_pp%zi                                , & ! Input:  [real(r8) (:,:) ] interface level below a "z" level (m)
-          dz                 =>    col_pp%dz                                , & ! Input:  [real(r8) (:,:) ] layer depth (m)
+          z                  =>    col_pp%z_ref                             , & ! Input:  [real(r8) (:,:) ] reference layer node depth (m)
+          zi                 =>    col_pp%zi_ref                            , & ! Input:  [real(r8) (:,:) ] reference interface depth (m)
+          dz                 =>    col_pp%dz_ref                            , & ! Input:  [real(r8) (:,:) ] reference layer thickness (m)
           snl                =>    col_pp%snl                               , & ! Input:  [integer  (:)   ] number of snow layers
 
           t_soisno           =>    col_es%t_soisno         , & ! Input:  [real(r8) (:,:) ] soil temperature (Kelvin)
@@ -2437,9 +2437,9 @@ contains
      !-----------------------------------------------------------------------
 
      associate(                                                   &
-          dz            => col_pp%dz                               , & ! Input:  [real(r8) (:,:)   ] layer depth (m)
-          zi            => col_pp%zi                               , & ! Input:  [real(r8) (:,:)   ] interface level below a "z" level (m)
-          z             => col_pp%z                                , & ! Input:  [real(r8) (:,:)   ] layer thickness (m)
+          dz            => col_pp%dz_ref                           , & ! Input:  [real(r8) (:,:)   ] reference layer thickness (m)
+          zi            => col_pp%zi_ref                           , & ! Input:  [real(r8) (:,:)   ] reference interface depth (m)
+          z             => col_pp%z_ref                            , & ! Input:  [real(r8) (:,:)   ] reference layer node depth (m)
 
           h2osoi_liq    => col_ws%h2osoi_liq       , & ! Input:  [real(r8) (:,:)   ] liquid water (kg/m2)
           h2osoi_ice    => col_ws%h2osoi_ice       , & ! Input:  [real(r8) (:,:)   ] ice lens (kg/m2)

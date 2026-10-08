@@ -116,17 +116,21 @@ contains
           c = veg_pp%column(p)
 	  nlevbed = njbed(c)
 	  totrootfr = 0._r8
+          ! Reference frame (zi_ref): a root distribution is a property of the
+          ! soil profile, not of how much excess ice is wedged into it. Zeng
+          ! et al. (1998) fits a and b against observed rooting depths in
+          ! mineral soil, so the exponent must see undeformed depth.
           do lev = 1, ubj-1
-             rootfr(p,lev) = .5_r8*( exp(-roota_par(veg_pp%itype(p)) * col_pp%zi(c,lev-1))  &
-                  + exp(-rootb_par(veg_pp%itype(p)) * col_pp%zi(c,lev-1))  &
-                  - exp(-roota_par(veg_pp%itype(p)) * col_pp%zi(c,lev  ))  &
-                  - exp(-rootb_par(veg_pp%itype(p)) * col_pp%zi(c,lev  )) )
+             rootfr(p,lev) = .5_r8*( exp(-roota_par(veg_pp%itype(p)) * col_pp%zi_ref(c,lev-1))  &
+                  + exp(-rootb_par(veg_pp%itype(p)) * col_pp%zi_ref(c,lev-1))  &
+                  - exp(-roota_par(veg_pp%itype(p)) * col_pp%zi_ref(c,lev  ))  &
+                  - exp(-rootb_par(veg_pp%itype(p)) * col_pp%zi_ref(c,lev  )) )
 	     if(lev <= nlevbed) then
                 totrootfr = totrootfr + rootfr(p,lev)
 	     end if
           end do
-          rootfr(p,ubj) = .5_r8*( exp(-roota_par(veg_pp%itype(p)) * col_pp%zi(c,ubj-1))  &
-               + exp(-rootb_par(veg_pp%itype(p)) * col_pp%zi(c,ubj-1)) )
+          rootfr(p,ubj) = .5_r8*( exp(-roota_par(veg_pp%itype(p)) * col_pp%zi_ref(c,ubj-1))  &
+               + exp(-rootb_par(veg_pp%itype(p)) * col_pp%zi_ref(c,ubj-1)) )
           totrootfr = totrootfr + rootfr(p, ubj)
 
           ! Adjust layer root fractions if nlev2bed < nlevsoi

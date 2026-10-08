@@ -95,8 +95,11 @@ contains
          onset_flag             => cnstate_vars%onset_flag_patch               , & ! Input  :  [real(r8) (:)] onset flag
          dormant_flag           => cnstate_vars%dormant_flag_patch             , & ! Input  :  [real(r8) (:)]  dormancy flag
          root_depth             => soilstate_vars%root_depth_patch             , & ! InOut  :  [real(r8) (:)] current root depth
-         dz                     => col_pp%dz                                   , & ! Input  :  layer thickness (m)  (-nlevsno+1:nlevgrnd)
-         zi                     => col_pp%zi                                   , & ! Input  :  interface level below a "z" level (m) (-nlevsno+0:nlevgrnd)
+         ! Reference frame: the rooting profile and the sminn/rresis weightings
+         ! below are properties of the mineral soil column, not of excess-ice
+         ! deformation. All uses are at j >= 1 (do j = 1,nlevsoi), within bounds.
+         dz                     => col_pp%dz_ref                               , & ! Input  :  reference layer thickness (m) (1:nlevgrnd)
+         zi                     => col_pp%zi_ref                               , & ! Input  :  reference interface depth (m) (0:nlevgrnd)
          nlevbed                => col_pp%nlevbed                              , & ! Input  :  # levels to bedrock
          rootfr                 => soilstate_vars%rootfr_patch                 , & ! Output :  [real(r8) (:,:)]  fraction of roots in each soil layer
          sucsat                 => soilstate_vars%sucsat_col                   , & ! Input  :  minimum soil suction (mm)

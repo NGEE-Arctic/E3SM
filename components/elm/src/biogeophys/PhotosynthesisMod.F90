@@ -1837,8 +1837,11 @@ contains
          root_conductance_patch => soilstate_inst%root_conductance_patch , & ! Output:   [real(r8) (:,:)] root conductance
          soil_conductance_patch => soilstate_inst%soil_conductance_patch , & ! Output:   [real(r8) (:,:)] soil conductance
          rootfr       => soilstate_inst%rootfr_patch         , & ! Input: [real(r8) (:,:)]
-         dz           => col_pp%dz                              , & ! Input: [real(r8) (:,:) ]  layer thickness (m)
-         z            => col_pp%z                               , & ! Input: [real(r8) (:,:) ]  layer depth (m)
+         ! Reference frame: root_biomass_density is a per-mineral-volume density,
+         ! and grav2 is gravitational head paired with smp, which SoilWaterMovement
+         ! computes on the reference grid. Both must see undeformed depth.
+         dz           => col_pp%dz_ref                          , & ! Input: [real(r8) (:,:) ]  reference layer thickness (m)
+         z            => col_pp%z_ref                           , & ! Input: [real(r8) (:,:) ]  reference layer node depth (m)
 
          c3psn      => veg_vp%c3psn                          , & ! Input:  photosynthetic pathway: 0. = c4, 1. = c3
          leafcn     => veg_vp%leafcn                         , & ! Input:  leaf C:N (gC/gN)
@@ -3649,7 +3652,7 @@ contains
          tsai          => canopystate_inst%tsai_patch           , & ! Input:  [real(r8) (:)   ]  patch canopy one-sided stem area index, no burying by snow
          smp           => soilstate_inst%smp_l_col              , & ! Input: [real(r8) (:,:) ]  soil matrix potential [mm]
          qflx_tran_veg => veg_wf%qflx_tran_veg    , & ! Input:  [real(r8) (:)   ]  vegetation transpiration (mm H2O/s) (+ = to atm)
-         z             => col_pp%z                                   & ! Input:  [real(r8) (:,:) ]  layer node depth (m)
+         z             => col_pp%z_ref                               & ! Input:  [real(r8) (:,:) ]  reference layer node depth (m)
          )
 
     grav1 = htop(p) * 1000._r8
@@ -3736,7 +3739,7 @@ contains
          hk_l          => soilstate_inst%hk_l_col               , & ! Input: [real(r8) (:,:) ]  hydraulic conductivity (mm/s)
          hksat         => soilstate_inst%hksat_col              , & ! Input: [real(r8) (:,:) ]  hydraulic conductivity at saturation (mm H2O /s)
          sucsat        => soilstate_inst%sucsat_col             , & ! Input: [real(r8) (:,:) ]  minimum soil suction (mm)
-         z             => col_pp%z                                   & ! Input: [real(r8) (:,:) ]  layer node depth (m)
+         z             => col_pp%z_ref                               & ! Input: [real(r8) (:,:) ]  reference layer node depth (m)
          )
 
     grav1 = 1000._r8 *htop(p)
