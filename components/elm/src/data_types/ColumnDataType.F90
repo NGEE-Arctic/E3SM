@@ -1716,7 +1716,7 @@ contains
        this%wf2(c)                    = spval
        this%total_plant_stored_h2o(c) = 0._r8
        this%h2osfc(c)                 = 0._r8
-       this%h2osfc_p(c)               = 0._r8 ! DEBUG
+       this%h2osfc_p(c)               = 0._r8
        this%h2ocan(c)                 = 0._r8
        this%frac_h2osfc(c)            = 0._r8
        this%frac_h2osfc_act(c)        = 0._r8
@@ -1949,7 +1949,10 @@ contains
        this%h2osfc(bounds%begc:bounds%endc) = 0.0_r8
     end if
 
-    ! DEBUG
+    ! Previous-timestep surface water. Written at SoilHydrologyMod.F90:452 and
+    ! emitted as the H2OSFC_P history field (:1556); no physics reads it back,
+    ! so it is diagnostic only. Restarted anyway so the field is continuous
+    ! across a restart rather than spval on the first step after one.
     call restartvar(ncid=ncid, flag=flag, varname='H2OSFC_P', xtype=ncd_double,  &
          dim1name='column', &
          long_name='surface water', units='kg/m2', &
