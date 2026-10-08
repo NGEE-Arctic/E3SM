@@ -226,6 +226,7 @@ module elm_varctl
 
   logical, public            :: use_fates = .false.                     ! true => use  ED
   integer, public            :: fates_spitfire_mode = 0                 ! 0 for no fire; 1 for constant ignitions
+  integer, public            :: fates_lu_transition_logic = -9          ! controls logic around transition between land use classes
   logical, public            :: use_fates_managed_fire = .false.        ! true => turn on managed fire
   character(len=256), public :: fates_harvest_mode = ''                 ! five different harvest modes; see namelist_definitions
   character(len=256), public :: fates_photosynth_acclimation = ''       ! nonacclimating, kumarathunge2019
@@ -244,6 +245,7 @@ module elm_varctl
   logical, public            :: use_fates_ed_st3   = .false.            ! true => static stand structure
   logical, public            :: use_fates_ed_prescribed_phys = .false.  ! true => prescribed physiology
   logical, public            :: use_fates_inventory_init = .false.      ! true => initialize fates from inventory
+  logical, public            :: use_fates_dbh_init = .false.            ! true => initialize cohorts from dbh (nocomp only)
   logical, public            :: use_fates_nocomp = .false.              ! true => no competition mode
   logical, public            :: use_fates_sp = .false.                  ! true => FATES satellite phenology mode
   logical, public            :: use_fates_luh = .false.                 ! true => FATES land use transitions mode
@@ -253,9 +255,8 @@ module elm_varctl
   character(len=256), public :: fluh_timeseries = ''                    ! filename for land use harmonization data
   character(len=256), public :: flandusepftdat = ''                     ! filename for fates landuse x pft data
   character(len=256), public :: fates_inventory_ctrl_filename = ''      ! filename for inventory control
-  integer, public            :: fates_parteh_mode = -9                  ! 1 => carbon only
-                                                                        ! 2 => C+N+P (not enabled yet)
-                                                                        ! no others enabled
+  character(len=256), public :: fates_parteh_mode = ''                  ! carbon_onoly => carbon only
+                                                                        ! cnp => Carbon+Nitrogen+Phosphorus
   integer, public            :: fates_seeddisp_cadence = iundef         ! 0 => no seed dispersal across gridcells
                                                                         ! 1, 2, 3  => daily, monthly, or yearly seed dispersal
 
@@ -396,6 +397,23 @@ module elm_varctl
   logical, public :: use_mexicocity      = .false.
   logical, public :: use_noio            = .false.
   logical, public :: use_var_soil_thick  = .false.
+  logical, public :: squareomfrac        = .true.   ! use squared organic matter fraction in soil calculations
+
+  !----------------------------------------------------------
+  ! Soil vertical layer structure selection (ported from CTSM)
+  !   soil_layerstruct_predefined : named predefined structure, one of
+  !     '10SL_3.5m','23SL_3.5m','20SL_8.5m','49SL_10m','4SL_2m'. 'UNSET'
+  !     defers to the legacy more_vertlayers boolean for backwards
+  !     compatibility.
+  !   soil_layerstruct_userdefined : user-supplied vector of layer
+  !     thicknesses dzsoi (m); its non-default length sets nlevgrnd.
+  !   soil_layerstruct_userdefined_nlevsoi : number of hydrologically
+  !     active soil layers when using the user-defined vector.
+  ! Predefined and user-defined are mutually exclusive (see controlMod).
+  !----------------------------------------------------------
+  character(len=16), public :: soil_layerstruct_predefined          = 'UNSET'
+  real(r8),          public :: soil_layerstruct_userdefined(99)      = rundef
+  integer,           public :: soil_layerstruct_userdefined_nlevsoi  = iundef
   logical, public :: use_T_rho_dependent_snowthk     = .false.
   logical, public :: use_atm_downscaling_to_topunit  = .false.
   character(len = SHR_KIND_CS), public :: precip_downscaling_method  = 'ERMM' ! Precip downscaling method values can be ERMM or FNM
@@ -418,6 +436,7 @@ module elm_varctl
   logical, public :: use_polygonal_tundra = .false.
   logical, public :: prohibit_subsidence  = .false.
   logical, public :: use_arctic_init      = .false.
+  character(len=32), public :: soil_thermal_conductivity_model = 'farouki'  ! Soil thermal conductivity model: 'farouki' (default) or 'balland_and_arp'
 
   !GAM snow shrub redistribution
   real(r8), public :: shrub_snow_redist_alpha = -1._r8 !GAM
@@ -565,6 +584,10 @@ module elm_varctl
   !$acc declare copyin(use_mexicocity     )
   !$acc declare copyin(use_noio           )
   !$acc declare copyin(use_var_soil_thick )
+  !$acc declare copyin(squareomfrac       )
+  !$acc declare copyin(soil_layerstruct_predefined)
+  !$acc declare copyin(soil_layerstruct_userdefined)
+  !$acc declare copyin(soil_layerstruct_userdefined_nlevsoi)
   !$acc declare copyin(tw_irr)
   !$acc declare copyin(use_vsfm                   )
   !$acc declare copyin(vsfm_use_dynamic_linesearch)

@@ -47,6 +47,7 @@ module EnergyFluxType
      real(r8), pointer :: eflx_snomelt_col        (:)   ! col snow melt heat flux (W/m**2)
      real(r8), pointer :: eflx_snomelt_r_col      (:)   ! col rural snow melt heat flux (W/m**2)
      real(r8), pointer :: eflx_snomelt_u_col      (:)   ! col urban snow melt heat flux (W/m**2)
+     real(r8), pointer :: eflx_exice_melt_col     (:)   ! col excess ice melt latent heat flux (W/m**2)
      real(r8), pointer :: eflx_gnet_patch         (:)   ! patch net heat flux into ground  (W/m**2)
      real(r8), pointer :: eflx_grnd_lake_patch    (:)   ! patch net heat flux into lake / snow surface, excluding light transmission (W/m**2)
      real(r8), pointer :: eflx_dynbal_grc         (:)   ! grc dynamic land cover change conversion energy flux (W/m**2)
@@ -210,6 +211,7 @@ contains
     allocate( this%eflx_snomelt_col        (begc:endc))             ; this%eflx_snomelt_col        (:)   = spval 
     allocate( this%eflx_snomelt_r_col      (begc:endc))             ; this%eflx_snomelt_r_col      (:)   = spval 
     allocate( this%eflx_snomelt_u_col      (begc:endc))             ; this%eflx_snomelt_u_col      (:)   = spval 
+    allocate( this%eflx_exice_melt_col     (begc:endc))             ; this%eflx_exice_melt_col     (:)   = spval 
     allocate( this%eflx_fgr12_col          (begc:endc))             ; this%eflx_fgr12_col          (:)   = spval 
     allocate( this%eflx_fgr_col            (begc:endc, 1:nlevgrnd)) ; this%eflx_fgr_col            (:,:) = spval 
     allocate( this%eflx_building_heat_col  (begc:endc))             ; this%eflx_building_heat_col  (:)   = spval 
@@ -389,17 +391,17 @@ contains
 
     call restartvar(ncid=ncid, flag=flag, varname='btran2', xtype=ncd_double,  &
          dim1name='pft', &
-         long_name='', units='', &
+         long_name='root zone soil wetness factor', units='1', &
          interpinic_flag='interp', readvar=readvar, data=this%btran2_patch) 
 
     call restartvar(ncid=ncid, flag=flag, varname='BTRAN_MIN', xtype=ncd_double,  &
          dim1name='pft', &
-         long_name='daily minimum of transpiration wetness factor', units='', &
+         long_name='daily minimum of transpiration wetness factor', units='1', &
          interpinic_flag='interp', readvar=readvar, data=this%btran_min_patch) 
 
     call restartvar(ncid=ncid, flag=flag, varname='BTRAN_MIN_INST', xtype=ncd_double,  &
          dim1name='pft', &
-         long_name='instantaneous daily minimum of transpiration wetness factor', units='', &
+         long_name='instantaneous daily minimum of transpiration wetness factor', units='1', &
          interpinic_flag='interp', readvar=readvar, data=this%btran_min_inst_patch) 
 
     call this%eflx_dynbal_dribbler%Restart(bounds, ncid, flag)

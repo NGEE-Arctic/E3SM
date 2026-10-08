@@ -1314,7 +1314,7 @@ contains
           call alm_fates%WrapUpdateFatesRmean(nc)
           
            ! Update high-frequency history diagnostics for FATES
-           call alm_fates%wrap_update_hifrq_hist(bounds_clump)
+           call alm_fates%wrap_update_hifrq_hist(bounds_clump, solarabs_vars)
            if ( is_beg_curr_day() ) then ! run ED at the start of each day
                call alm_fates%dynamics_driv( bounds_clump, top_as,          &
                     top_af, atm2lnd_vars, soilstate_vars, &
@@ -1580,6 +1580,7 @@ contains
                photosyns_vars, soilhydrology_vars,     &
                soilstate_vars, solarabs_vars, surfalb_vars,  &
                sedflux_vars, ep_betr, alm_fates, crop_vars, rdate=rdate )
+         
          !----------------------------------------------
          ! pflotran (off now)
          ! if (use_pflotran) then

@@ -276,7 +276,7 @@ macro(build_model COMP_CLASS COMP_NAME)
 
     # Make sure we link blas/lapack
     if (NOT DEFINED ENV{SKIP_BLAS})
-      target_link_libraries(${TARGET_NAME} BLAS::BLAS LAPACK::LAPACK)
+      target_link_libraries(${TARGET_NAME} LAPACK::LAPACK)
     endif()
 
     if (E3SM_LINK_WITH_FORTRAN)
@@ -291,7 +291,7 @@ macro(build_model COMP_CLASS COMP_NAME)
       set_target_properties(${TARGET_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 
       if (COMPILER STREQUAL "oneapi-ifxgpu")
-        string(APPEND CMAKE_EXE_LINKER_FLAGS " -Wl,-\-defsym,main=MAIN_\_ -lifcore -\-intel -fsycl -lsycl -Xsycl-target-backend \"-device 12.60.7\" ")
+        string(APPEND CMAKE_EXE_LINKER_FLAGS " -Wl,-\-defsym,main=MAIN_\_ -lifcore -fsycl -Xsycl-target-backend \"-device pvc\" ")
       endif()
 
     endif()
@@ -327,6 +327,10 @@ macro(build_model COMP_CLASS COMP_NAME)
         if (USE_PETSC)
           target_link_libraries(${TARGET_NAME} PRIVATE "${PETSC_LIBRARIES}")
           target_include_directories(${TARGET_NAME} PRIVATE "${PETSC_INCLUDES}")
+        endif()
+        if (USE_MOAB)
+          target_link_libraries(${TARGET_NAME} PRIVATE ${MOAB_LIBRARIES})
+          target_include_directories(${TARGET_NAME} PRIVATE ${MOAB_INCLUDE_DIRS})
         endif()
       endif()
       if (COMP_NAME STREQUAL "ww3")

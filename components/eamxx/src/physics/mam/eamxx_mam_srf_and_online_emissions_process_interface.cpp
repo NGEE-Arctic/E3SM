@@ -39,16 +39,16 @@ void MAMSrfOnlineEmiss::create_requests() {
   nlev_ = grid_->get_num_vertical_levels();  // Number of levels per column
 
   using namespace ekat::units;
+  using namespace ShortFieldTagsNames;
   constexpr auto m2     = pow(m, 2);
   constexpr auto s2     = pow(s, 2);
-  constexpr auto nondim = ekat::units::Units::nondimensional();
 
   const FieldLayout scalar2d   = grid_->get_2d_scalar_layout();
-  const FieldLayout scalar3d_m = grid_->get_3d_scalar_layout(true);   // mid
-  const FieldLayout scalar3d_i = grid_->get_3d_scalar_layout(false);  // int
+  const FieldLayout scalar3d_m = grid_->get_3d_scalar_layout(LEV);   // mid
+  const FieldLayout scalar3d_i = grid_->get_3d_scalar_layout(ILEV);  // int
 
   // For U and V components of wind
-  const FieldLayout vector3d = grid_->get_3d_vector_layout(true, 2);
+  const FieldLayout vector3d = grid_->get_3d_vector_layout(LEV, 2);
 
   // For components of dust flux
   const FieldLayout vector4d = grid_->get_2d_vector_layout(4);
@@ -80,7 +80,7 @@ void MAMSrfOnlineEmiss::create_requests() {
 
   //----------- Variables from coupler (ocean component)---------
   // Ocean fraction [unitless]
-  add_field<Required>("ocnfrac", scalar2d, nondim, grid_name);
+  add_field<Required>("ocnfrac", scalar2d, none, grid_name);
 
   // Sea surface temperature [K]
   add_field<Required>("sst", scalar2d, K, grid_name);
@@ -114,6 +114,7 @@ void MAMSrfOnlineEmiss::create_requests() {
   dms.data_file    = m_params.get<std::string>("srf_emis_specifier_for_dms");
   dms.species_name = "dms";
   dms.sectors      = {"DMS"};
+  dms.scale_factor = m_params.get<Real>("srf_emis_scale_factor_for_dms", 1.0);
   srf_emiss_species_.push_back(dms);  // add to the vector
 
   //--------------------------------------------------------------------
@@ -295,6 +296,9 @@ void MAMSrfOnlineEmiss::initialize_impl(const RunType run_type) {
   set_ranges_process(ranges_emissions);
   add_interval_checks();
 
+  // Get dust emission scheme from namelist
+  auto dust_emis_scheme = m_params.get<int>("dust_emis_scheme", 1);
+
   // ---------------------------------------------------------------
   // Input fields read in from IC file, namelist or other processes
   // ---------------------------------------------------------------
@@ -327,18 +331,26 @@ void MAMSrfOnlineEmiss::initialize_impl(const RunType run_type) {
   //--------------------------------------------------------------------
   for(srf_emiss_ &ispec_srf : srf_emiss_species_) {
     srfEmissFunc::update_srfEmiss_data_from_file(
-        ispec_srf.dataReader_, start_of_step_ts(), curr_month, *ispec_srf.horizInterp_,
+        ispec_srf.dataReader_, start_of_step_ts(), curr_month,
+        ispec_srf.scale_factor, *ispec_srf.horizInterp_,
         ispec_srf.data_end_);  // output
   }
 
   //-----------------------------------------------------------------
   // Read Soil erodibility data
   //-----------------------------------------------------------------
-  // This data is time-independent, we read all data here for the
-  // entire simulation
-  soilErodibilityFunc::update_soil_erodibility_data_from_file(
-      serod_dataReader_, *serod_horizInterp_,
-      soil_erodibility_);  // output
+  if (dust_emis_scheme == 1) {
+    // This data is time-independent, we read all data here for the
+    // entire simulation   
+    soilErodibilityFunc::update_soil_erodibility_data_from_file(
+        serod_dataReader_, *serod_horizInterp_,
+        soil_erodibility_);  // output
+  } else if (dust_emis_scheme == 2) {
+    // For dust emission scheme 2, override soil erodibility to 1
+    auto soil_erod_ones = view_1d("soil_erod_ones", ncol_);
+    Kokkos::deep_copy(soil_erod_ones, 1.0);
+    soil_erodibility_ = soil_erod_ones;
+  }
 
   //--------------------------------------------------------------------
   // Update marine orgaincs from file
@@ -440,7 +452,7 @@ void MAMSrfOnlineEmiss::run_impl(const double dt) {
 
     // Update time state and if the month has changed, update the data.
     srfEmissFunc::update_srfEmiss_timestate(
-        ispec_srf.dataReader_, ts, *ispec_srf.horizInterp_,
+        ispec_srf.dataReader_, ts, *ispec_srf.horizInterp_, ispec_srf.scale_factor,
         // output
         ispec_srf.timeState_, ispec_srf.data_start_, ispec_srf.data_end_);
 

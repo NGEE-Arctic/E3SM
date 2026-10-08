@@ -191,6 +191,35 @@ Interpolate the soil layers on the surface dataset to the soil layers specified 
 (EXPERIMENTAL)
 </entry>
 
+<entry id="soil_layerstruct_predefined" type="char*16" category="elm_physics"
+       group="elm_inparm"
+       valid_values="10SL_3.5m,23SL_3.5m,20SL_8.5m,49SL_10m,4SL_2m" >
+Predefined vertical soil layer structure (ported from CTSM). Mutually
+exclusive with soil_layerstruct_userdefined and with the legacy
+more_vertlayers flag. If unset, the more_vertlayers boolean selects
+between 10SL_3.5m (.false.) and 23SL_3.5m (.true.).
+10SL_3.5m = standard 10 soil / 15 ground layer column (default)
+23SL_3.5m = 23 soil / 30 ground layers for permafrost simulations
+20SL_8.5m = 20 soil layers, ~8.5 m soil, 5 bedrock layers
+49SL_10m  = 49 soil layers, 10 m soil, 5 bedrock layers
+4SL_2m    = 4 soil layers, 2 m soil
+</entry>
+
+<entry id="soil_layerstruct_userdefined" type="real(99)" category="elm_physics"
+       group="elm_inparm" valid_values="" >
+User-defined vector of soil layer thicknesses dzsoi (m), ported from CTSM.
+The number of supplied values sets nlevgrnd. Must be used together with
+soil_layerstruct_userdefined_nlevsoi and is mutually exclusive with
+soil_layerstruct_predefined.
+</entry>
+
+<entry id="soil_layerstruct_userdefined_nlevsoi" type="integer" category="elm_physics"
+       group="elm_inparm" valid_values="" >
+Number of hydrologically active soil layers (nlevsoi) when a user-defined
+soil layer structure is supplied via soil_layerstruct_userdefined. Must be
+less than the number of user-defined layers.
+</entry>
+
 <entry id="irrigate" type="logical" category="elm_physics"
        group="elm_inparm"  >
 If TRUE, irrigation will be active.
@@ -339,8 +368,8 @@ Note that the landuse_timeseries option is not the same as the FATES fluh_timese
 This option is older than the luhdata options and may be depricated at some point in the future.
 </entry>
 
-<entry id="fates_parteh_mode" type="integer" category="physics"
-       group="elm_inparm" valid_values="1,2">
+<entry id="fates_parteh_mode" type="char*80" category="physics"
+       group="elm_inparm" valid_values="carbon_only,cnp">
 Switch deciding which nutrient model to use in FATES.
 </entry>
 
@@ -457,6 +486,13 @@ Toggle to turn on prescribed physiology (only relevant if FATES is being used).
 Toggle to turn on inventory initialization(only relevant if FATES is being used).
 </entry>
 
+<entry id="use_fates_dbh_init" type="logical" category="physics"
+        group="elm_inparm" valid_values="" value=".false.">
+Initialize cohorts at coldstart with diameter at breast height instead of density
+(Applies only if use_fates_nocomp=.true.)
+(Only relevant if FATES is on).
+</entry>
+
 <entry id="fates_inventory_ctrl_filename" type="char*256" category="datasets"
        input_pathname="abs" group="elm_inparm" valid_values="" >
 Full pathname to the inventory initialization control file.
@@ -517,6 +553,14 @@ is provided as a namelist option to engage all necessary options).  The file is 
 by the FATES land use data tool (https://github.com/NGEET/tools-fates-landusedata)
 which processes the raw land use data from the THEMIS tool data sets
 (https://doi.org/10.5065/29s7-7b41)
+</entry>
+
+<entry id="fates_lu_transition_logic" type="integer" category="physics"
+        group="elm_inparm" valid_values="1,2,3,4,5,6,7,8,9">
+Select the logic for land use class transitions.
+Allowed values are 1-9. See the Land Use subsection of the Namelist Options section
+of the FATES user guide for an explanation of the options.
+(Only relevant if FATES with land use is on)
 </entry>
 
 <entry id="use_hydrstress" type="logical" category="physics"
@@ -844,20 +888,27 @@ with config_use_snicar_ad in mpas-seaice namelist
 
 <entry id="use_extrasnowlayers" type="logical" category="physics"
        group="elm_inparm" valid_values="" value=".false.">
-Toggle to use 16 snow layers instead of 5.  This option enables more realistic
-snowpack conditions on glaciers and ice sheets, including a semi-empirical
-firn densification model.
+Toggle to use 16 snow layers instead of 5.  This option was implemented to
+enable more realistic snowpack conditions on glaciers and ice sheets.  In
+that context, it should generally be used with use_firn_percolation_and_compaction,
+but it can also be used on its own to enable more snow layers for other applications.
+It also increases the snow water cap (h2osno_max) and affects snow initialization
+and snow-layer history/output handling. Additionally, it controls which snow-layer
+combining and dividing algorithms are used (16-layer schemes vs. 5-layer schemes).
 </entry>
 
 <entry id="use_firn_percolation_and_compaction" type="logical" category="physics"
        group="elm_inparm" valid_values="" value=".false.">
 This option enables more realistic
 snowpack conditions on glaciers and ice sheets, including a semi-empirical
-firn densification model. uses the same physics as use_extrasnowlayers but
-uses the original 5 snow layer scheme
+firn densification model.  This option is typically used in conjunction with
+use_extrasnowlayers, but it can also be used on its own to enable the firn model
+with the standard 5 snow layers.
+This option also controls snow-capping and related snow-water flux handling paths.
+</entry>
 
 <entry id="use_T_rho_dependent_snowthk" type="logical" category="physics"
-	group="elm_inparm" valid_values="" value=".false.">
+       group="elm_inparm" valid_values="" value=".false.">
 Toggle to use new snow thermal conductivity that relies on snow temperature and density. 
 </entry>
 
@@ -1566,7 +1617,7 @@ CLM run type.
 <entry id="res" type="char*30" category="default_settings"
        group="default_settings"
        valid_values=
-"512x1024,360x720cru,128x256,64x128,48x96,32x64,8x16,94x192,0.23x0.31,0.9x1.25,1.9x2.5,2.5x3.33,4x5,10x15,5x5_amazon,1x1_tropicAtl,1x1_camdenNJ,1x1_vancouverCAN,1x1_mexicocityMEX,1x1_asphaltjungleNJ,1x1_brazil,1x1_icycape,1x1_urbanc_alpha,1x1_numaIA,1x1_smallvilleIA,0.1x0.1,0.5x0.5,3x3min,5x5min,10x10min,0.33x0.33,ne4np4,ne4np4.pg2,ne11np4,ne16np4,ne30np4,ne30np4.pg2,ne60np4,ne120np4,ne120np4.pg2,ne240np4,ne256np4,ne256np4.pg2,ne512np4.pg2,ne1024np4,ne1024np4.pg2,1km-merge-10min,ne0np4_CAx32v1.pg2,ne0np4_arm_x8v3_lowcon,ne0np4_conus_x4v1_lowcon,ne0np4_enax4v1,ne0np4_twpx4v1,r2,r05,r0125,NLDAS,ne0np4_northamericax4v1.pg2,ne0np4_arcticx4v1.pg2,r025,0.01x0.01">
+"512x1024,360x720cru,128x256,64x128,48x96,32x64,8x16,94x192,0.23x0.31,0.9x1.25,1.9x2.5,2.5x3.33,4x5,10x15,5x5_amazon,1x1_tropicAtl,1x1_camdenNJ,1x1_vancouverCAN,1x1_mexicocityMEX,1x1_asphaltjungleNJ,1x1_brazil,1x1_icycape,1x1_urbanc_alpha,1x1_numaIA,1x1_smallvilleIA,0.1x0.1,0.5x0.5,3x3min,5x5min,10x10min,0.33x0.33,ne4np4,ne4np4.pg2,ne11np4,ne16np4,ne30np4,ne30np4.pg2,ne32np4.pg2,ne60np4,ne64np4.pg2,ne120np4,ne120np4.pg2,ne128np4.pg2,ne240np4,ne256np4,ne256np4.pg2,ne512np4.pg2,ne1024np4,ne1024np4.pg2,1km-merge-10min,ne0np4_CAx32v1.pg2,ne0np4_arm_x8v3_lowcon,ne0np4_conus_x4v1_lowcon,ne0np4_enax4v1,ne0np4_twpx4v1,r2,r05,r0125,NLDAS,ne0np4_northamericax4v1.pg2,ne0np4_arcticx4v1.pg2,r025,0.01x0.01">
 Horizontal resolutions
 Note: 0.1x0.1, 0.5x0.5, 5x5min, 10x10min, 3x3min and 0.33x0.33 are only used for CLM tools
 </entry>
@@ -2145,6 +2196,15 @@ Runtime flag to turn on/off PETSc based thermal model.
 Runtime flag to turn on/off variable soil thickness.
 </entry>
 
+<!-- ========================================================================================  -->
+
+<entry id="squareomfrac" type="logical" category="default_settings"
+        group="elm_inparm" valid_values="">
+Flag to use squared organic matter fraction in soil calculations. If true (default), uses the squared
+formulation (organic3d/organic_max)**2. If false, uses the unsquared formulation min(organic3d/organic_max, 1.0)
+following CLM5.0 and Lawrence and Slater (2008).
+</entry>
+
 <!-- ======================================================================================== -->
 <!-- Namelist options for lake water storage                                                  -->
 <!-- ======================================================================================== -->
@@ -2334,7 +2394,7 @@ not be called.
 <!-- ========================================================================================  -->
 
 <entry id="use_polygonal_tundra" type="logical" category="default_settings"
-	group="elm_inparm" value=".false.">
+       group="elm_inparm" value=".false.">
 Use polygonal tundra parameterizations for ice wedge polygon microtopography and inindation fraction
 <default>Default: .false.</default>
 </entry>
@@ -2349,6 +2409,15 @@ Prohibit microtopographic changes associated with subsidence in ice wedge polygo
 	group="elm_inparm" value=".false.">
 Cold-start initialization conditions in tundra start saturated and frozen.
 <default>Default: .false.</default>
+</entry>
+
+<entry id="soil_thermal_conductivity_model" type="char*32" category="default_settings"
+       group="elm_inparm" valid_values="farouki,balland_and_arp" value="farouki">
+Select the soil thermal conductivity model. Options are 'farouki' for the Farouki (1981)
+implementation of the Johansen scheme (default), or 'balland_and_arp' for the Balland and Arp (2005)
+model. The Balland and Arp model provides an alternative formulation for calculating soil thermal
+conductivity based on soil texture and moisture content.
+<default>Default: farouki</default>
 </entry>
 
 </namelist_definition>

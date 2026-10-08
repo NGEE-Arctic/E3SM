@@ -1,0 +1,2 @@
+ soil_thermal_conductivity_model = 'balland_and_arp'
+ fsurdat = '$DIN_LOC_ROOT/lnd/clm2/surfdata_map/surfdata_0.5x0.5_simyr2000_c200624.nc'

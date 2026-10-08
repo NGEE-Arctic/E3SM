@@ -88,10 +88,10 @@ jobs:
         test:
           # These were copied from E3SM-Project/E3SM's e3sm-gh-ci-cime-tests.yml
           # restricted to tests focused on ELM
-          - SMS_D_Ln5_P4.ne4pg2_oQU480.F2010.ghci-oci_gnu
-          - ERS_Ld5_P4.ne4pg2_oQU480.F2010.ghci-oci_gnu.eam-wcprod_F2010
-          - ERS_P4.ne4pg2_oQU480.A.ghci-oci_gnu
-          - ERS_P4.ne4pg2_oQU480.I1850ELMCN.ghci-oci_gnu.elm-qian_1948
+          - SMS_Vmct_D_Ln5_P4.ne4pg2_oQU480.F2010.ghci-oci_gnu
+          - ERS_Vmct_Ld5_P4.ne4pg2_oQU480.F2010.ghci-oci_gnu.eam-wcprod_F2010
+          - ERS_Vmct_P4.ne4pg2_oQU480.A.ghci-oci_gnu
+          - ERS_Vmct_P4.ne4pg2_oQU480.I1850ELMCN.ghci-oci_gnu.elm-qian_1948
     # This container image provides the E3SM test environment used by
     # create_test, including the expected /projects/e3sm/scratch layout used by
     # the artifact collection paths below.
