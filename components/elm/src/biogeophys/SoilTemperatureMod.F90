@@ -1967,7 +1967,7 @@ contains
                ! Sum across all layers for energy flux
                do j = 1, nlevgrnd
                   eflx_exice_melt(c) = eflx_exice_melt(c) + qflx_exice_melt_lyr(c,j) * hfus
-                  
+
                   ! Update cumulative subsidence since 1989
                   ! (volume change = mass / density)
                   if (year >= 1989 .and. wexice0(c,j) > excess_ice(c,j)) then
@@ -1975,6 +1975,28 @@ contains
                                          (wexice0(c,j) - excess_ice(c,j)) / denice
                   end if
                end do
+
+               ! Cap cumulative subsidence at the upper end of the range the
+               ! polygonal-tundra parameterizations were fit over. This clamp
+               ! existed in the old geometric melt scheme in ActiveLayerMod and
+               ! was dropped with it; without it the SUBSIDENCE diagnostic and
+               ! restart field can exceed what the consumers actually use,
+               ! because SoilHydrologyMod.F90:583 still clamps on its own.
+               !
+               ! 0.4 m is a calibration endpoint, not a physical subsidence
+               ! limit. Two independent confirmations: (1) the low-centered
+               ! k_wet quartic (SoilHydrologyMod.F90:588) evaluated at
+               ! phi_eff = 0.4 gives 24.9248, which is the constant 24.925
+               ! hardwired for the high-centered branch at :591 -- the
+               ! high-centered case is the same fit pinned at its endpoint, and
+               ! past 0.4 the quartic diverges (1868 at 1.0, 37456 at 2.0);
+               ! (2) at 0.4 m every min/max in the ActiveLayerMod
+               ! microtopography update (:190-194) reaches its bound at once,
+               ! and the flat-centered relief/excluded-volume/depression-depth
+               ! land exactly on the high-centered constants. Relaxing this
+               ! bound means refitting those relations over a wider subsidence
+               ! range, not widening the clamp.
+               iwp_subsidence(c) = min(iwp_subsidence(c), 0.4_r8)
             end if
          end if
       end do

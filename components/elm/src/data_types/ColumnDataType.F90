@@ -1889,13 +1889,36 @@ contains
          ! This estimate comes from field observations on the AK north slope
          ! Future development should replace this with best available ground
          ! ice maps.
-         this%excess_ice_volfrac(c,:) = 0.36_r8
-         
-         ! Convert to mass (kg/m2), using reference (mineral soil) layer thickness
+         !
+         ! Cap at nlevbed: excess ground ice is a soil-column phenomenon and
+         ! cannot occupy bedrock. nlevbed is used rather than nlevsoi because it
+         ! respects variable soil thickness (initVerticalMod.F90:826) and is the
+         ! bound the hydrology deficit logic already uses
+         ! (SoilHydrologyMod.F90:1725). Without the cap, 0.36 volfrac in the
+         ! 10-m bedrock layers of 49SL_10m (initVerticalMod.F90:238-240) would
+         ! put 3.6 m of excess ice in each one, inflating dz from 10 m to
+         ! 13.6 m and, on thaw, releasing several metres of spurious
+         ! subsidence and meltwater.
+         !
+         ! col_pp%nlevbed is filled in initVertical (elm_instMod.F90:389),
+         ! which runs before col_ws%Init (:440), so it is valid here. Reread it
+         ! rather than reusing the local set at :1769 -- that assignment sits
+         ! inside "if (.not. lakpoi)" and so would be a stale carryover from a
+         ! previous column on a lake iteration. Polygon landunits are always
+         ! istsoil (enforced at initSubgridMod.F90:361) so the value would in
+         ! fact be current, but the dependency is too remote to rely on.
+         nlevbed = col_pp%nlevbed(c)
+         this%excess_ice_volfrac(c,:) = 0._r8
+         this%excess_ice_volfrac(c,1:nlevbed) = 0.36_r8
+
+         ! Convert to mass (kg/m2), using reference (mineral soil) layer
+         ! thickness. Loop still runs to nlevgrnd; below nlevbed the volumetric
+         ! fraction is zero, so excess_ice is zero there and
+         ! recompute_layer_geometry leaves those layers undeformed.
          do j = 1, nlevgrnd
             this%excess_ice(c,j) = this%excess_ice_volfrac(c,j) * col_pp%dz_ref(c,j) * denice
          end do
-         
+
          this%iwp_subsidence(c) = 0._r8
          
          ! set initial microtopographic parameters derived from high-res ATS simulations

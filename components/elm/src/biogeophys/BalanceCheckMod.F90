@@ -812,7 +812,7 @@ contains
     type(soilhydrology_type)  , intent(inout) :: soilhydrology_vars
     !
     ! !LOCAL VARIABLES:
-    integer  :: c, p, f, j, fc,g                  ! indices
+    integer  :: c, p, f, j, fc,g,l                ! indices
     real(r8) :: h2osoi_vol
     real(r8) :: h2ocan_col(bounds%begc:bounds%endc)
     real(r8) :: begwb_col (bounds%begc:bounds%endc)
@@ -871,15 +871,31 @@ contains
          begwb_col(c) = begwb_col(c) + total_plant_stored_h2o(c)
       end do
 
+      ! Excess ground ice is part of the column water inventory and must be
+      ! counted here exactly as the end-of-step counterpart counts it at
+      ! HydrologyDrainageMod.F90:198-201 -- in begwb_col AND in the ice
+      ! depth-integral. Both this begwb_col and that endwb_col are c2g'd to the
+      ! grid budget (:1113 here, :900 below), so omitting the term made the
+      ! grid-level balance asymmetric by the entire excess-ice inventory, which
+      ! at 0.36 volumetric fraction is the largest single ice term in a polygon
+      ! column. The column-level begwb at :122 already had this branch; the
+      ! grid-level one associated excess_ice (:828) but never used it.
       do j = 1, nlevgrnd
          do f = 1, num_nolakec
             c = filter_nolakec(f)
+            l = col_pp%landunit(c)
             if ((col_pp%itype(c) == icol_sunwall .or. col_pp%itype(c) == icol_shadewall &
                  .or. col_pp%itype(c) == icol_roof) .and. j > nlevurb) then
             else
-               begwb_col(c) = begwb_col(c) + h2osoi_ice(c,j) + h2osoi_liq(c,j)
-               h2osoi_liq_depth_intg(c) = h2osoi_liq_depth_intg(c) + h2osoi_liq(c,j)
-               h2osoi_ice_depth_intg(c) = h2osoi_ice_depth_intg(c) + h2osoi_ice(c,j)
+               if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
+                  begwb_col(c) = begwb_col(c) + h2osoi_ice(c,j) + h2osoi_liq(c,j) + excess_ice(c,j)
+                  h2osoi_liq_depth_intg(c) = h2osoi_liq_depth_intg(c) + h2osoi_liq(c,j)
+                  h2osoi_ice_depth_intg(c) = h2osoi_ice_depth_intg(c) + h2osoi_ice(c,j) + excess_ice(c,j)
+               else
+                  begwb_col(c) = begwb_col(c) + h2osoi_ice(c,j) + h2osoi_liq(c,j)
+                  h2osoi_liq_depth_intg(c) = h2osoi_liq_depth_intg(c) + h2osoi_liq(c,j)
+                  h2osoi_ice_depth_intg(c) = h2osoi_ice_depth_intg(c) + h2osoi_ice(c,j)
+               end if
             end if
          end do
       end do
