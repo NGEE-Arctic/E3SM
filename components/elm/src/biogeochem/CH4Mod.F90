@@ -1369,10 +1369,13 @@ contains
     !-----------------------------------------------------------------------
 
     associate(                                                                 &
-         dz                   =>   col_pp%dz                                    , & ! Input:  [real(r8) (:,:) ]  layer thickness (m)  (-nlevsno+1:nlevsoi)
-         volrat               =>   col_pp%volrat                                ,  & ! RPF - temp debugging input
-         zi                   =>   col_pp%zi                                    , & ! Input:  [real(r8) (:,:) ]  interface level below a "z" level (m)
-         z                    =>   col_pp%z                                     , & ! Input:  [real(r8) (:,:) ]  layer depth (m) (-nlevsno+1:nlevsoi)
+         ! Reference frame: every dz/z/zi use below is a BGC/rooting quantity
+         ! over 1:nlevsoi soil layers (no snow index ever appears in this
+         ! routine), so this binds to the fixed mineral-soil grid rather than
+         ! the deforming one.
+         dz                   =>   col_pp%dz_ref                                , & ! Input:  [real(r8) (:,:) ]  reference layer thickness (m)  (1:nlevgrnd)
+         zi                   =>   col_pp%zi_ref                                , & ! Input:  [real(r8) (:,:) ]  reference interface level below a "z" level (m) (0:nlevgrnd)
+         z                    =>   col_pp%z_ref                                 , & ! Input:  [real(r8) (:,:) ]  reference layer depth (m) (1:nlevgrnd)
 
          forc_t               =>   top_as%tbot                               , & ! Input:  [real(r8) (:)   ]  atmospheric temperature (Kelvin)
          forc_pbot            =>   top_as%pbot                               , & ! Input:  [real(r8) (:)   ]  atmospheric pressure (Pa)
@@ -1551,7 +1554,7 @@ contains
                conc_ch4_sat(c,j) = (fsat_bef(c)*conc_ch4_sat(c,j) + dfsat*conc_ch4_unsat(c,j)) / finundated(c)
             else if (fsat_bef(c) /= spval .and. finundated(c) < fsat_bef(c)) then
                ch4_dfsat_flux(c) = ch4_dfsat_flux(c) + (fsat_bef(c) - finundated(c))*(conc_ch4_sat(c,j) - conc_ch4_unsat(c,j)) * &
-                    dz(c,j)*volrat(c,j) / dtime * catomw / 1000._r8 ! mol --> kg
+                    dz(c,j) / dtime * catomw / 1000._r8 ! mol --> kg
             end if
          end do
       end do
@@ -1586,7 +1589,7 @@ contains
                   else if (veg_pp%wtcol(p) < 0.99_r8) then
                      rootfraction(p,j) = spval
                   else
-                     ! RPF non vegetated, don't think this needs volrat
+                     ! Uniform distribution over the reference (mineral-soil) column.
                      rootfraction(p,j) = dz(c,j) / zi(c,nlevsoi)   ! Set equal to uniform distribution
                   end if
                end do
@@ -1608,7 +1611,7 @@ contains
          do j=1, nlevsoi
             do fc = 1, num_soilc
                c = filter_soilc(fc)
-               ! RPF - same logic as above, no volrat needed?
+               ! Same uniform-distribution fallback as above, reference frame.
                if (.not. col_pp%active(c)) rootfr_col(c,j) = dz(c,j) / zi(c,nlevsoi)
             end do
          end do
@@ -1776,12 +1779,13 @@ contains
                ! ch4_oxid_tot and ch4_prod_tot are initialized to zero above
             end if
 
-            ! RPF - need to scale concentrations in oxid/prod variables, so volrat needed
+            ! Molar concentrations integrated to a column total over the reference
+            ! (mineral-soil) layer thicknesses.
             ch4_oxid_tot(c) = ch4_oxid_tot(c) + (finundated(c)*ch4_oxid_depth_sat(c,j) + &
-                 (1._r8 - finundated(c))*ch4_oxid_depth_unsat(c,j))*dz(c,j) *volrat(c,j)* catomw
+                 (1._r8 - finundated(c))*ch4_oxid_depth_unsat(c,j))*dz(c,j) * catomw
             !Convert from mol to g C
             ch4_prod_tot(c) = ch4_prod_tot(c) + (finundated(c)*ch4_prod_depth_sat(c,j) + &
-                 (1._r8 - finundated(c))*ch4_prod_depth_unsat(c,j))*dz(c,j) *volrat(c,j) * catomw
+                 (1._r8 - finundated(c))*ch4_prod_depth_unsat(c,j))*dz(c,j) * catomw
             !Convert from mol to g C
             if (j == nlevsoi) then
                ! Adjustment to NEE flux to atm. for methane production
@@ -1814,7 +1818,9 @@ contains
                   ch4_surf_flux_tot(c) = totalsat*catomw / 1000._r8
                end if
 
-               ! RPF - lake column, so no volrat.
+               ! Lake columns carry no excess ice, so dz (reference frame) equals
+               ! the deforming dz identically here; stated for consistency with
+               ! the soil-column accumulation above.
                ch4_oxid_tot(c) = ch4_oxid_tot(c) + ch4_oxid_depth_sat(c,j)*dz(c,j)*catomw
                ch4_prod_tot(c) = ch4_prod_tot(c) + ch4_prod_depth_sat(c,j)*dz(c,j)*catomw
 
@@ -1863,7 +1869,7 @@ contains
             c = filter_soilc(fc)
 
             totcolch4(c) = totcolch4(c) + &
-                 (finundated(c)*conc_ch4_sat(c,j) + (1._r8-finundated(c))*conc_ch4_unsat(c,j))*dz(c,j)*volrat(c,j)*catomw
+                 (finundated(c)*conc_ch4_sat(c,j) + (1._r8-finundated(c))*conc_ch4_unsat(c,j))*dz(c,j)*catomw
             ! mol CH4 --> g C
 
             if (j == nlevsoi .and. totcolch4_bef(c) /= spval) then ! not first timestep
@@ -1875,7 +1881,6 @@ contains
                        nstep,c,errch4
                   g = col_pp%gridcell(c)
                   write(iulog,*) 'Latdeg,Londeg=',grc_pp%latdeg(g),grc_pp%londeg(g)
-                  write(iulog,*) 'RPF - testing volrat:', volrat(c,:), c
                   write(iulog,*) 'terms of CH4 balance:', totcolch4(c), totcolch4_bef(c), ch4_prod_tot(c), ch4_oxid_tot(c), ch4_surf_flux_tot(c)
                   call endrun(msg=' ERROR: Methane conservation error'//errMsg(__FILE__, __LINE__))
                end if
@@ -1886,7 +1891,8 @@ contains
             do fc = 1, num_lakec
                c = filter_lakec(fc)
 
-               ! RPF - lakes so no scaling
+               ! Lake columns carry no excess ice; dz (reference frame) equals
+               ! the deforming dz identically here.
                totcolch4(c) = totcolch4(c) + conc_ch4_sat(c,j)*dz(c,j)*catomw ! mol CH4 --> g C
 
                if (j == nlevsoi .and. totcolch4_bef(c) /= spval) then ! not first timestep
@@ -2000,10 +2006,13 @@ contains
 
     associate(                                                     &
          wtcol          =>    veg_pp%wtcol                          , & ! Input:  [real(r8) (:)    ]  weight (relative to column)
-         dz             =>    col_pp%dz                             , & ! Input:  [real(r8) (:,:)  ]  layer thickness (m)  (-nlevsno+1:nlevsoi)
-         volrat         =>    col_pp%volrat                         , & ! Input:  [real(r8) (:,:)  ]  volume ratio for compressing layer due to excess ice melt (1:nlevgrnd)
-         z              =>    col_pp%z                              , & ! Input:  [real(r8) (:,:)  ]  layer depth (m) (-nlevsno+1:nlevsoi)
-         zi             =>    col_pp%zi                             , & ! Input:  [real(r8) (:,:)  ]  interface level below a "z" level (m)
+         ! Reference frame: every dz/zi use below is a BGC quantity over
+         ! 1:nlevsoi soil layers (no snow index ever appears in this routine),
+         ! so this binds to the fixed mineral-soil grid rather than the
+         ! deforming one. (z has no use site in this routine, so it is not
+         ! bound at all.)
+         dz             =>    col_pp%dz_ref                         , & ! Input:  [real(r8) (:,:)  ]  reference layer thickness (m)  (1:nlevgrnd)
+         zi             =>    col_pp%zi_ref                         , & ! Input:  [real(r8) (:,:)  ]  reference interface level below a "z" level (m) (0:nlevgrnd)
 
          t_soisno       =>    col_es%t_soisno      , & ! Input:  [real(r8) (:,:)  ]  soil temperature (Kelvin)  (-nlevsno+1:nlevsoi)
 
@@ -2145,7 +2154,9 @@ contains
             if (t_soisno(c,j) <= tfrz .and. (nlevdecomp == 1 .or. lake)) base_decomp = 0._r8
 
             ! depth dependence of production either from rootfr or decomp model
-            ! RPF - I don't think either of these need to be scaled, since they are not molar concentrations
+            ! partition_z is a dimensionless fraction of column-total decomposition,
+            ! not a molar concentration, so dz here is just the reference-frame
+            ! layer thickness used to build that fraction; no volume scaling applies.
             if (.not. lake) then ! use default rootfr, averaged to the column level in the ch4 driver, or vert HR
                if (nlevdecomp == 1) then ! not VERTSOILC
                   if (j <= nlev_soildecomp_standard) then  ! Top 5 levels are also used in the CLM code for establishing temperature
@@ -2243,7 +2254,7 @@ contains
             ! Add root respiration
             if (.not. lake) then
                !o2_decomp_depth(c,j) = o2_decomp_depth(c,j) + col_rr(c)*rootfr(c,j)/catomw/dz(c,j) ! mol/m^3/s
-               o2_decomp_depth(c,j) = o2_decomp_depth(c,j) + rr_vr(c,j)/catomw/(dz(c,j)*volrat(c,j)) ! mol/m^3/s - RPF
+               o2_decomp_depth(c,j) = o2_decomp_depth(c,j) + rr_vr(c,j)/catomw/dz(c,j) ! mol/m^3/s, reference frame
                ! g C/m2/s ! gC/mol O2 ! m
             end if
 
@@ -2255,8 +2266,10 @@ contains
 
             if (j  >  jwt(c)) then ! Below the water table so anaerobic CH4 production can occur
                ! partition decomposition to layer
-               ! turn into per volume-total by dz
-               ch4_prod_depth(c,j) = f_ch4_adj * base_decomp * partition_z / dz (c,j)! [mol/m3-total/s] - RPF not sure about this one! might need to be scaled.
+               ! turn into per volume-total by dz (reference frame: ch4_prod_depth
+               ! is a molar concentration rate carried through ch4_tran/ch4_oxid on
+               ! the reference grid, same as conc_ch4/conc_o2)
+               ch4_prod_depth(c,j) = f_ch4_adj * base_decomp * partition_z / dz (c,j)! [mol/m3-total/s]
             else ! Above the WT
                if (anoxicmicrosites) then
                   ch4_prod_depth(c,j) = f_ch4_adj * base_decomp * partition_z / dz (c,j) &
@@ -2499,9 +2512,12 @@ contains
     ! Enforce expected array sizes
 
     associate(                                                     &
-         z             =>    col_pp%z                               , & ! Input:  [real(r8) (:,:)  ]  layer depth (m) (-nlevsno+1:nlevsoi)
-         dz            =>    col_pp%dz                              , & ! Input:  [real(r8) (:,:)  ]  layer thickness (m)  (-nlevsno+1:nlevsoi)
-         volrat        =>    col_pp%volrat                          , & ! Input:  [real(r8) (:,:)  ]  volume ratio accounting for layer compression due to excess ice melt (1:nlevgrnd)
+         ! Reference frame: z/dz are passed down to SiteOxAere, which operates
+         ! entirely on 1:nlevsoi molar concentrations and root fractions, so
+         ! this binds to the fixed mineral-soil grid rather than the deforming
+         ! one.
+         z             =>    col_pp%z_ref                           , & ! Input:  [real(r8) (:,:)  ]  reference layer depth (m) (1:nlevgrnd)
+         dz            =>    col_pp%dz_ref                          , & ! Input:  [real(r8) (:,:)  ]  reference layer thickness (m) (1:nlevgrnd)
          wtcol         =>    veg_pp%wtcol                           , & ! Input:  [real(r8) (:)    ]  weight (relative to column)
 
          elai          =>    canopystate_vars%elai_patch         , & ! Input:  [real(r8) (:)    ]  one-sided leaf area index with burying by snow
@@ -2614,7 +2630,7 @@ contains
                  annsum_npp_ptr, annavg_agnpp_ptr, annavg_bgnpp_ptr, &
                  elai(p), frootc_ptr, poros_tiller, rootfr_vr(1:nlevsoi), &
                  grnd_ch4_cond(p), conc_o2(c,1:nlevsoi), c_atm(g,1:2), &
-                 z(c,1:nlevsoi), dz(c,1:nlevsoi), volrat(c,1:nlevsoi), sat, & 
+                 z(c,1:nlevsoi), dz(c,1:nlevsoi), sat, &
                  tranloss(1:nlevsoi), &    ! Out
                  aere(1:nlevsoi), &         ! Out
                  oxaere(1:nlevsoi))         ! Out
@@ -2658,7 +2674,6 @@ contains
                     c_atm,            &
                     z,                &
                     dz,               &
-                    volrat,           &
                     sat,              &
                     tranloss,         & ! Out
                     aere,             & ! Out
@@ -2690,7 +2705,6 @@ contains
     real(r8), intent(in) :: c_atm(:)
     real(r8), intent(in) :: z(:)
     real(r8), intent(in) :: dz(:)
-    real(r8), intent(in) :: volrat(:)
     integer,  intent(in) :: sat
 
     ! Arguments (out)
@@ -2725,8 +2739,8 @@ contains
           k_h_cc = t_soisno(j) / k_h_inv * rgasLatm
           conc_ch4_wat = conc_ch4(j) / ( (watsat(j)-h2osoi_vol_min)/k_h_cc + h2osoi_vol_min)
 
-          ! RPF - think it is needed here.
-          tranloss(j) = conc_ch4_wat * rootr(j)*qflx_tran_veg / (dz(j)*volrat(j)) / 1000._r8
+          ! dz is the reference-frame thickness passed in from ch4_aere.
+          tranloss(j) = conc_ch4_wat * rootr(j)*qflx_tran_veg / dz(j) / 1000._r8
           ! mol/m3/s    mol/m3                                   mm / s         m           mm/m
           ! Use rootr here for effective per-layer transpiration, which may not be the same as rootfr
           tranloss(j) = max(tranloss(j), 0._r8) ! in case transpiration is pathological
@@ -2779,8 +2793,8 @@ contains
           ! Add in boundary layer resistance
           aerecond = 1._r8 / (1._r8/(aerecond+smallnumber) + 1._r8/(grnd_ch4_cond+smallnumber))
 
-          !RPF - both aere and oxaere I think need scaling
-          aere(j) = aerecond * (conc_ch4(j)/watsat(j)/k_h_cc - c_atm(1)) / (volrat(j)*dz(j)) ![mol/m3-total/s]
+          ! dz is the reference-frame thickness passed in from ch4_aere.
+          aere(j) = aerecond * (conc_ch4(j)/watsat(j)/k_h_cc - c_atm(1)) / dz(j) ![mol/m3-total/s]
           !ZS: Added watsat & Henry's const.
           aere(j) = max(aere(j), 0._r8) ! prevent backwards diffusion
 
@@ -2790,7 +2804,7 @@ contains
           oxdiffus = diffus_aere * d_con_g(2,1) / d_con_g(1,1) ! adjust for O2:CH4 molecular diffusion
           aerecond = area_tiller * rootfr(j) * oxdiffus / (z(j)*CH4ParamsInst%rob)
           aerecond = 1._r8 / (1._r8/(aerecond+smallnumber) + 1._r8/(grnd_ch4_cond+smallnumber))
-          oxaere(j) = -aerecond *(conc_o2(j)/watsat(j)/k_h_cc - c_atm(2)) / (volrat(j)*dz(j)) ![mol/m3-total/s]
+          oxaere(j) = -aerecond *(conc_o2(j)/watsat(j)/k_h_cc - c_atm(2)) / dz(j) ![mol/m3-total/s]
           oxaere(j) = max(oxaere(j), 0._r8)
           ! Diffusion in is positive; prevent backwards diffusion
           if ( .not. use_aereoxid_prog ) then ! fixed aere oxid proportion; will be done in ch4_tran
@@ -2860,8 +2874,11 @@ contains
     ! Enforce expected array sizes
 
     associate(                                                      &
-         z            =>    col_pp%z                              , & ! Input:  [real(r8) (:,:) ]  soil layer depth (m)
-         zi           =>    col_pp%zi                             , & ! Input:  [real(r8) (:,:) ]  interface level below a "z" level (m)
+         ! Reference frame: z/zi here build the hydrostatic pressure at a soil
+         ! layer node (1:nlevsoi, no snow index), so this binds to the fixed
+         ! mineral-soil grid rather than the deforming one.
+         z            =>    col_pp%z_ref                          , & ! Input:  [real(r8) (:,:) ]  reference soil layer depth (m) (1:nlevgrnd)
+         zi           =>    col_pp%zi_ref                         , & ! Input:  [real(r8) (:,:) ]  reference interface level below a "z" level (m) (0:nlevgrnd)
          lakedepth    =>    col_pp%lakedepth                      , & ! Input:  [real(r8) (:)   ]  column lake depth (m)
          forc_pbot    =>    top_as%pbot                           , & ! Input:  [real(r8) (:)   ]  atmospheric pressure (Pa)
          t_soisno     =>    col_es%t_soisno         , & ! Input:  [real(r8) (:,:) ]  soil temperature (Kelvin)  (-nlevsno+1:nlevsoi)
@@ -2959,6 +2976,7 @@ contains
       !$acc routine seq
     use TridiagonalMod     , only : Tridiagonal
     use CH4varcon          , only : ch4frzout, use_aereoxid_prog
+    use elm_varctl         , only : use_polygonal_tundra
     !
     ! !ARGUMENTS:
     type(bounds_type)      , intent(in)    :: bounds
@@ -2975,7 +2993,7 @@ contains
 
     !
     ! !LOCAL VARIABLES:
-    integer :: c,j,g,p,s,i,ll                                              ! indices
+    integer :: c,j,g,l,p,s,i,ll                                            ! indices
     integer :: fc                                                          ! soil filter column index
     integer :: fp                                                          ! soil filter pft index
     integer  :: jtop(bounds%begc:bounds%endc)                              ! top level at each column
@@ -3048,10 +3066,14 @@ contains
 
 
     associate(                                                 &
-         z             =>    col_pp%z                           , & ! Input:  [real(r8) (:,:) ]  soil layer depth (m)
+         ! This routine needs BOTH frames. Snow has no reference frame -- dz_ref
+         ! is allocated only 1:nlevgrnd -- so the snow-resistance/ice-fraction
+         ! lines (do j = -nlevsno+1,0) must stay on the deforming dz. Everything
+         ! else below is a soil-layer (1:nlevsoi) molar-concentration or
+         ! diffusion quantity and binds to dz_ref instead. (z/zi have no use site
+         ! anywhere in this routine, snow or soil, so they are not bound at all.)
          dz            =>    col_pp%dz                          , & ! Input:  [real(r8) (:,:) ]  layer thickness (m)  (-nlevsno+1:nlevsoi)
-         volrat        =>    col_pp%volrat                      , & ! Input:  [real(r8) (:,:) ]  volume scaling due to deformation from excess ice melt
-         zi            =>    col_pp%zi                          , & ! Input:  [real(r8) (:,:) ]  interface level below a "z" level (m)
+         dz_ref        =>    col_pp%dz_ref                      , & ! Input:  [real(r8) (:,:) ]  reference layer thickness (m) (1:nlevgrnd)
          snl           =>    col_pp%snl                         , & ! Input:  [integer  (:)   ]  negative of number of snow layers
 
          bsw           =>    soilstate_vars%bsw_col          , & ! Input:  [real(r8) (:,:) ]  Clapp and Hornberger "b" (nlevgrnd)
@@ -3192,7 +3214,7 @@ contains
          do fc = 1, num_methc
             c = filter_methc (fc)
             if (j == 1) ch4_ebul_total(c) = 0._r8
-            ch4_ebul_total(c) = ch4_ebul_total(c) + ch4_ebul_depth(c,j) * dz(c,j) * volrat(c,j) ! RPF
+            ch4_ebul_total(c) = ch4_ebul_total(c) + ch4_ebul_depth(c,j) * dz_ref(c,j)
          enddo
       enddo
 
@@ -3277,7 +3299,7 @@ contains
          do fc = 1, num_methc
             c = filter_methc (fc)
             if (j==1) ch4_surf_aere(c) = 0._r8
-            ch4_surf_aere(c) = ch4_surf_aere(c) + ch4_aere_depth(c,j) * dz(c,j) * volrat(c,j)
+            ch4_surf_aere(c) = ch4_surf_aere(c) + ch4_aere_depth(c,j) * dz_ref(c,j)
          enddo
       enddo
 
@@ -3285,7 +3307,7 @@ contains
       do fc = 1, num_methc
          c = filter_methc(fc)
          if (jwt(c) /= 0) then
-            source(c,jwt(c),1) = source(c,jwt(c),1) + ch4_ebul_total(c)/(dz(c,jwt(c))*volrat(c,jwt(c)))
+            source(c,jwt(c),1) = source(c,jwt(c),1) + ch4_ebul_total(c)/dz_ref(c,jwt(c))
          endif
       enddo ! fc
 
@@ -3301,12 +3323,16 @@ contains
             else
                h2osoi_vol_min(c,j) = min(watsat(c,j), h2osoi_vol(c,j))
                if (ch4frzout) then
-                  if (j >= 1) then
-                     ! RPF - probably need to adjust liqfrac for excess ice
+                  l = col_pp%landunit(c)
+                  if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
+                     ! Fold the excess-ice mass into the ice term, so freeze-out partitions
+                     ! liquid vs. ice correctly on columns that carry excess ground ice.
+                     ! excess_ice is allocated only under use_polygonal_tundra, so this read
+                     ! stays nested inside that guard rather than reached via an unguarded
+                     ! `.and.` -- Fortran does not guarantee short-circuit evaluation.
                      liqfrac(c,j) = max(0.05_r8, (h2osoi_liq(c,j)/denh2o+smallnumber)/ &
                        (h2osoi_liq(c,j)/denh2o+(h2osoi_ice(c,j)+excess_ice(c,j))/denice+smallnumber))
-                  else 
-                     ! RPF - probably need to adjust liqfrac for excess ice
+                  else
                      liqfrac(c,j) = max(0.05_r8, (h2osoi_liq(c,j)/denh2o+smallnumber)/ &
                        (h2osoi_liq(c,j)/denh2o+h2osoi_ice(c,j)/denice+smallnumber))
                   endif
@@ -3348,7 +3374,9 @@ contains
                ! Add snow resistance
                if (j >= snl(c) + 1) then
                   t_soisno_c = t_soisno(c,j) - tfrz
-                  icefrac = h2osoi_ice(c,j)/denice/dz(c,j) ! RPF - this is snow, so no dz scaling
+                  ! j <= 0 here is an actual snow layer; dz_ref is not allocated over
+                  ! snow indices, so this stays on the deforming dz.
+                  icefrac = h2osoi_ice(c,j)/denice/dz(c,j)
                   waterfrac = h2osoi_liq(c,j)/denh2o/dz(c,j)
                   airfrac = max(1._r8 - icefrac - waterfrac, 0._r8)
                   ! Calculate snow diffusivity
@@ -3384,7 +3412,9 @@ contains
                         ponddiff = (d_con_w(s,1) + d_con_w(s,2)*t_soisno_c + d_con_w(s,3)*t_soisno_c**2) * 1.e-9_r8 &
                              * scale_factor_liqdiff
                      end if
-                     pondz = dz(c,1) * (h2osoi_vol(c,1) - watsat(c,1))
+                     ! Despite sitting inside the j = -nlevsno+1,0 snow loop, index 1 here
+                     ! is soil layer 1, not a snow layer, so this is a reference-frame read.
+                     pondz = dz_ref(c,1) * (h2osoi_vol(c,1) - watsat(c,1))
                      pondres = pondz / ponddiff
                   end if
 
@@ -3451,35 +3481,46 @@ contains
             do fc = 1, num_methc
                c = filter_methc (fc)
 
-               ! RPF - these should use current dz, no scaling
+               ! Reference frame: j runs 1:nlevsoi here (never a snow index), and this
+               ! block is building a diffusion-grid spacing from the soil column, which
+               ! is a BGC quantity like the rest of this routine's soil-range terms.
+               ! The diffusive flux across the j/j+1 (or j/j-1) interface depends on the
+               ! physical separation between the two layers' nodes; using the deforming
+               ! (excess-ice-inflated) dz here would scale that separation by how much
+               ! ground ice happens to be in each layer this timestep -- the opposite of
+               ! what dz_ref vs. dz is for. This overrides the author's original comment
+               ! ("these should use current dz, no scaling"), which predates dz_ref/dz
+               ! splitting and reflects the single-frame code where "current dz" was the
+               ! only dz available; it is not evidence that this site should stay on the
+               ! deforming grid under the new convention.
                ! Set up coefficients for tridiagonal solver.
                if (j == 1 .and. j /= jwt(c) .and. j /= jwt(c)+1) then
-                  dm1_zm1(c,j) = 1._r8/(1._r8/spec_grnd_cond(c,s)+dz(c,j)/(diffus(c,j)*2._r8))
+                  dm1_zm1(c,j) = 1._r8/(1._r8/spec_grnd_cond(c,s)+dz_ref(c,j)/(diffus(c,j)*2._r8))
                   ! replace Diffusivity / Delta_z by conductance (grnd_ch4_cond) for top layer
-                  dp1_zp1(c,j) = 2._r8/(dz(c,j)/diffus(c,j)+dz(c,j+1)/diffus(c,j+1))
+                  dp1_zp1(c,j) = 2._r8/(dz_ref(c,j)/diffus(c,j)+dz_ref(c,j+1)/diffus(c,j+1))
                else if (j == 1 .and. j == jwt(c)) then
-                  dm1_zm1(c,j) = 1._r8/(1._r8/spec_grnd_cond(c,s)+dz(c,j)/(diffus(c,j)*2._r8))
+                  dm1_zm1(c,j) = 1._r8/(1._r8/spec_grnd_cond(c,s)+dz_ref(c,j)/(diffus(c,j)*2._r8))
                   ! layer resistance mult. by k_h_cc for dp1_zp1 term
-                  dp1_zp1(c,j) = 2._r8/(dz(c,j)*k_h_cc(c,j,s)/diffus(c,j)+dz(c,j+1)/diffus(c,j+1))
+                  dp1_zp1(c,j) = 2._r8/(dz_ref(c,j)*k_h_cc(c,j,s)/diffus(c,j)+dz_ref(c,j+1)/diffus(c,j+1))
                else if (j == 1) then ! water table at surface: multiply ground resistance by k_h_cc
-                  dm1_zm1(c,j) = 1._r8/(k_h_cc(c,j-1,s)/spec_grnd_cond(c,s)+dz(c,j)/(diffus(c,j)*2._r8))
+                  dm1_zm1(c,j) = 1._r8/(k_h_cc(c,j-1,s)/spec_grnd_cond(c,s)+dz_ref(c,j)/(diffus(c,j)*2._r8))
                   ! air concentration will be mult. by k_h_cc below
-                  dp1_zp1(c,j) = 2._r8/(dz(c,j)/diffus(c,j)+dz(c,j+1)/diffus(c,j+1))
+                  dp1_zp1(c,j) = 2._r8/(dz_ref(c,j)/diffus(c,j)+dz_ref(c,j+1)/diffus(c,j+1))
                else if (j <= nlevsoi-1 .and. j /= jwt(c) .and. j /= jwt(c)+1) then
-                  dm1_zm1(c,j) = 2._r8/(dz(c,j)/diffus(c,j)+dz(c,j-1)/diffus(c,j-1))
-                  dp1_zp1(c,j) = 2._r8/(dz(c,j)/diffus(c,j)+dz(c,j+1)/diffus(c,j+1))
+                  dm1_zm1(c,j) = 2._r8/(dz_ref(c,j)/diffus(c,j)+dz_ref(c,j-1)/diffus(c,j-1))
+                  dp1_zp1(c,j) = 2._r8/(dz_ref(c,j)/diffus(c,j)+dz_ref(c,j+1)/diffus(c,j+1))
                else if (j <= nlevsoi-1 .and. j == jwt(c)) then ! layer resistance mult. by k_h_cc for dp1_zp1 term
-                  dm1_zm1(c,j) = 2._r8/(dz(c,j)/diffus(c,j)+dz(c,j-1)/diffus(c,j-1))
-                  dp1_zp1(c,j) = 2._r8/(dz(c,j)*k_h_cc(c,j,s)/diffus(c,j)+dz(c,j+1)/diffus(c,j+1))
+                  dm1_zm1(c,j) = 2._r8/(dz_ref(c,j)/diffus(c,j)+dz_ref(c,j-1)/diffus(c,j-1))
+                  dp1_zp1(c,j) = 2._r8/(dz_ref(c,j)*k_h_cc(c,j,s)/diffus(c,j)+dz_ref(c,j+1)/diffus(c,j+1))
                   ! Concentration in layer will be mult. by k_h_cc below
                else if (j <= nlevsoi-1) then ! j==jwt+1: layer above resistance mult. by k_h_cc for dm1_zm1 term
-                  dm1_zm1(c,j) = 2._r8/(dz(c,j)/diffus(c,j)+dz(c,j-1)*k_h_cc(c,j-1,s)/diffus(c,j-1))
+                  dm1_zm1(c,j) = 2._r8/(dz_ref(c,j)/diffus(c,j)+dz_ref(c,j-1)*k_h_cc(c,j-1,s)/diffus(c,j-1))
                   ! Concentration in layer above will be mult. by k_h_cc below
-                  dp1_zp1(c,j) = 2._r8/(dz(c,j)/diffus(c,j)+dz(c,j+1)/diffus(c,j+1))
+                  dp1_zp1(c,j) = 2._r8/(dz_ref(c,j)/diffus(c,j)+dz_ref(c,j+1)/diffus(c,j+1))
                else if (j /= jwt(c)+1) then ! j ==nlevsoi
-                  dm1_zm1(c,j) = 2._r8/(dz(c,j)/diffus(c,j)+dz(c,j-1)/diffus(c,j-1))
+                  dm1_zm1(c,j) = 2._r8/(dz_ref(c,j)/diffus(c,j)+dz_ref(c,j-1)/diffus(c,j-1))
                else                    ! jwt == nlevsoi-1: layer above resistance mult. by k_h_cc for dm1_zm1 term
-                  dm1_zm1(c,j) = 2._r8/(dz(c,j)/diffus(c,j)+dz(c,j-1)*k_h_cc(c,j-1,s)/diffus(c,j-1))
+                  dm1_zm1(c,j) = 2._r8/(dz_ref(c,j)/diffus(c,j)+dz_ref(c,j-1)*k_h_cc(c,j-1,s)/diffus(c,j-1))
                end if
             enddo ! fp; pft
          end do ! j; nlevsoi
@@ -3491,7 +3532,7 @@ contains
                g = col_pp%gridcell(c)
                conc_ch4_rel_old(c,j) = conc_ch4_rel(c,j)
 
-               if (j > 0) dzj = dz(c,j)
+               if (j > 0) dzj = dz_ref(c,j)
                if (j == 0) then ! top layer (atmosphere) doesn't change regardless of where WT is
                   at(c,j) = 0._r8
                   bt(c,j) = 1._r8
@@ -3541,7 +3582,7 @@ contains
                   ! source_old could be removed later
                   epsilon_t_old(c,j,s) = epsilon_t(c,j,s)
                   ! epsilon_t acts like source also
-                  dzj = dz(c,j)
+                  dzj = dz_ref(c,j)
                   if (j < nlevsoi .and. j == jwt(c)) then ! concentration inside needs to be mult. by k_h_cc for dp1_zp1 term
                      rt(c,j) = epsilon_t_old(c,j,s) / dtime_ch4 * conc_ch4_rel(c,j) +           &
                           0.5_r8 / dzj * (dp1_zp1(c,j) * (conc_ch4_rel(c,j+1)-conc_ch4_rel(c,j)*k_h_cc(c,j,s)) - &
@@ -3608,7 +3649,7 @@ contains
                   c = filter_methc (fc)
 
                   if (conc_ch4_rel(c,j) < 0._r8) then
-                     deficit = - conc_ch4_rel(c,j)*epsilon_t(c,j,1)*dz(c,j)*volrat(c,j)  ! Mol/m^2 added
+                     deficit = - conc_ch4_rel(c,j)*epsilon_t(c,j,1)*dz_ref(c,j)  ! Mol/m^2 added
                      if (deficit > 1.e-3_r8 * scale_factor_gasdiff) then
                         if (deficit > 1.e-2_r8) then
                            write(iulog,*)  'Note: sink > source in ch4_tran, sources are changing '// &
@@ -3639,7 +3680,7 @@ contains
                   ! source_old could be removed later
                   epsilon_t_old(c,j,s) = epsilon_t(c,j,s)
                   ! epsilon_t acts like source also
-                  dzj     = dz(c,j)
+                  dzj     = dz_ref(c,j)
                   if (j < nlevsoi .and. j == jwt(c)) then ! concentration inside needs to be mult. by k_h_cc for dp1_zp1 term
                      rt(c,j) = epsilon_t_old(c,j,s) / dtime_ch4 * conc_o2_rel(c,j) +           &
                           0.5_r8 / dzj * (dp1_zp1(c,j) * (conc_o2_rel(c,j+1)-conc_o2_rel(c,j)*k_h_cc(c,j,s)) - &
@@ -3713,10 +3754,9 @@ contains
             c = filter_methc (fc)
 
             if (j == 1) errch4(c) = 0._r8
-            ! RPF
-            errch4(c) = errch4(c) + (conc_ch4(c,j) - conc_ch4_bef(c,j))*dz(c,j)*volrat(c,j)
-            errch4(c) = errch4(c) - ch4_prod_depth(c,j)*dz(c,j)*dtime*volrat(c,j)
-            errch4(c) = errch4(c) + ch4_oxid_depth(c,j)*dz(c,j)*dtime*volrat(c,j)
+            errch4(c) = errch4(c) + (conc_ch4(c,j) - conc_ch4_bef(c,j))*dz_ref(c,j)
+            errch4(c) = errch4(c) - ch4_prod_depth(c,j)*dz_ref(c,j)*dtime
+            errch4(c) = errch4(c) + ch4_oxid_depth(c,j)*dz_ref(c,j)*dtime
          end do
       end do
 

@@ -478,7 +478,6 @@ contains
           col_pp%z_ref(c,1:nlevgrnd)  = zsoi(1:nlevgrnd)
           col_pp%zi_ref(c,0:nlevgrnd) = zisoi(0:nlevgrnd)
           col_pp%dz_ref(c,1:nlevgrnd) = dzsoi(1:nlevgrnd)
-          col_pp%volrat(c,1:nlevgrnd) = 1._r8
        end if
     end do
 
