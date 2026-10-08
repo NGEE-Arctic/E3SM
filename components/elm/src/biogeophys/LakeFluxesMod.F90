@@ -162,7 +162,7 @@ contains
 
     associate(                                                           & 
          snl              =>    col_pp%snl                                , & ! Input:  [integer  (:)   ]  number of snow layers                              
-         dz               =>    col_pp%dz                                 , & ! Input:  [real(r8) (:,:) ]  layer thickness for soil or snow (m)            
+         dz_thermal               =>    col_pp%dz                                 , & ! Input:  [real(r8) (:,:) ]  layer thickness for soil or snow (m)            
          dz_lake          =>    col_pp%dz_lake                            , & ! Input:  [real(r8) (:,:) ]  layer thickness for lake (m)                    
          lakedepth        =>    col_pp%lakedepth                          , & ! Input:  [real(r8) (:)   ]  variable lake depth (m)                           
          
@@ -303,7 +303,7 @@ contains
 
          if (snl(c) < 0) then
             betaprime(c) = sabg_lyr(p,jtop(c))/max(1.e-5_r8,sabg(p))  ! Assuming one pft
-            dzsur(c) = dz(c,jtop(c))/2._r8
+            dzsur(c) = dz_thermal(c,jtop(c))/2._r8
          else ! no snow layers
             ! Calculate the NIR fraction of absorbed solar.
             sabg_nir = fsds_nir_d(p) + fsds_nir_i(p) - fsr_nir_d(p) - fsr_nir_i(p)
@@ -417,7 +417,7 @@ contains
                tsur(c) = t_lake(c,1)
             else
                !Need to calculate thermal conductivity of the top snow layer
-               bw = (h2osoi_ice(c,jtop(c))+h2osoi_liq(c,jtop(c)))/dz(c,jtop(c))
+               bw = (h2osoi_ice(c,jtop(c))+h2osoi_liq(c,jtop(c)))/dz_thermal(c,jtop(c))
                tksur(c) = tkair + (7.75e-5_r8 *bw + 1.105e-6_r8*bw*bw)*(tkice-tkair)
                tsur(c) = t_soisno(c,jtop(c))
             end if
