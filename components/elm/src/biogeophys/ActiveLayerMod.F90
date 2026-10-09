@@ -118,7 +118,6 @@ contains
          vexc                 =>    col_ws%iwp_exclvol                   ,      & ! Output:  [real(r8) (:)]  excluded volume (m)
          ddep                 =>    col_ws%iwp_ddep                      ,      & ! Output:  [real(r8) (:)]  depression depth (m)
          subsidence           =>    col_ws%iwp_subsidence                ,      & ! Input/output:[real(r8)(:)]  subsidence (m)
-         frac_melted          =>    col_ws%frac_melted                          & ! Input/output:[real(r8)(:)]  fraction melted (-)
          )
 
       ! on a set annual timestep, update annual maxima
@@ -314,63 +313,6 @@ contains
                altmax_1989(c) = altmax(c)
                altmax_1989_indx(c) = altmax_indx(c)
             endif
-
-           ! update subsidence based on change in ALT
-           ! melt_profile stores the amount of excess_ice
-           ! melted in this timestep.
-           ! note that this may cause some unexpected results
-           ! for taliks
-
-           ! initialize melt_profile as zero
-           melt_profile(:) = 0._r8
-
-           do j = nlevgrnd,1,-1 ! note, this will go from bottom to top
-              if (j .gt. alt_indx(c) + 1) then ! all layers below alt_indx + 1 remain frozen
-                melt_profile(j) = 0.0_r8
-              else if (j .eq. alt_indx(c) + 1) then ! first layer below the 'thawed' layer
-                ! need to check to see if the active layer thickness is is actually
-                ! in this layer (and not between the midpoint of j_frz and bottom interface
-                ! or else inferred melt will be negative
-                ! also note: only have ice to melt if alt has never been this deep, otherwise
-                ! ice will continue to be removed each time step the alt remains in this layer
-                if ((alt(c)-zisoi(j-1)) .ge. 0._r8 .and. (alt(c) .eq. altmax_ever(c)) .and. (frac_melted(c,j) .lt. 1._r8)) then
-                  orig_excess = (1._r8/(1._r8-frac_melted(c,j))) * excess_ice(c,j)
-                  old_mfrac = frac_melted(c,j)
-                  ! update frac melted
-                  frac_melted(c,j) = min(max(frac_melted(c,j), (alt(c)-zisoi(j-1))/dzsoi(j)),1._r8)
-                  melt_profile(j) = orig_excess*(frac_melted(c,j) - old_mfrac)
-                  excess_ice(c,j) = excess_ice(c,j) - melt_profile(j)
-                else
-                  melt_profile(j) = 0._r8 ! no melt
-                end if
-              else if (j .eq. alt_indx(c)) then
-                if (alt(c) .eq. altmax_ever(c) .and. (frac_melted(c,j) .lt. 1._r8)) then
-                  orig_excess = (1._r8/(1._r8 - frac_melted(c,j))) * excess_ice(c,j)
-                  old_mfrac = frac_melted(c,j)
-                  ! update frac_melted:
-                  frac_melted(c,j) = min(max(frac_melted(c,j), (alt(c)-zsoi(j-1))/dzsoi(j)),1._r8)
-                  ! remove ice, only if alt has never been this deep before:
-                  melt_profile(j) = orig_excess*(frac_melted(c,j) - old_mfrac)
-                  excess_ice(c,j) = excess_ice(c,j) - melt_profile(j)
-                else
-                  melt_profile(j) = 0._r8
-                end if
-              else !
-                 melt_profile(j) = excess_ice(c,j)
-                 ! remove melted excess ice
-                 excess_ice(c,j) = 0._r8
-              end if
-              ! calculate subsidence at this layer:
-              melt_profile(j) = melt_profile(j) * dzsoi(j)
-           end do
-
-           ! subsidence is integral of melt profile:
-           if ((year .ge. 1989) .and. (altmax_ever(c) .ge. altmax_1989(c))) then
-              subsidence(c) = subsidence(c) + sum(melt_profile)
-           end if
-
-           ! limit subsidence to 0.4 m
-           subsidence(c) = min(0.4_r8, subsidence(c))
 
            ! update ice wedge polygon microtopographic parameters if in polygonal ground
            if (lun_pp%ispolygon(col_pp%landunit(c))) then
