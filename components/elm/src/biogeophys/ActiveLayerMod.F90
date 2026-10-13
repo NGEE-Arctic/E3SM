@@ -4,6 +4,11 @@ module ActiveLayerMod
   ! !DESCRIPTION:
   ! Module holding routines for calculation of active layer dynamics
   !
+  ! NOTE (Implementation Update): Excess ice melting is now handled thermodynamically
+  ! in PhaseChange_beta (SoilTemperatureMod.F90) rather than geometrically in this module.
+  ! The geometric melting approach and associated frac_melted tracking have been removed.
+  ! Active layer depth calculations remain unchanged for diagnostic purposes.
+  !
   ! !USES:
   use shr_kind_mod    , only : r8 => shr_kind_r8
   use shr_const_mod   , only : SHR_CONST_TKFRZ
@@ -84,7 +89,6 @@ contains
          altmax_lastyear_indx =>    canopystate_vars%altmax_lastyear_indx_col , & ! Output:  [integer  (:)   ]  prior year maximum annual depth of thaw
          altmax_1989_indx     =>    canopystate_vars%altmax_1989_indx_col,      & ! Output:  [integer  (:)   ]  index of maximum ALT in 1989
          altmax_ever_indx     =>    canopystate_vars%altmax_ever_indx_col,      & ! Output:  [integer  (:)   ]  maximum thaw depth since initialization
-         excess_ice           =>    col_ws%excess_ice                    ,      & ! Input:   [real(r8) (:,:)]  depth variable excess ice content in soil column (kg/m2)
          rmax                 =>    col_ws%iwp_microrel                  ,      & ! Output:  [real(r8) (:)   ]  ice wedge polygon microtopographic relief (m)
          vexc                 =>    col_ws%iwp_exclvol                   ,      & ! Output:  [real(r8) (:)   ]  ice wedge polygon excluded volume (m)
          ddep                 =>    col_ws%iwp_ddep                      ,      & ! Output:  [real(r8) (:)   ]  ice wedge polygon depression depth (m)

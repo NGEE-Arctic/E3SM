@@ -945,7 +945,6 @@ contains
                   if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
                      if (excess_ice(c,j) .gt. 0._r8) then
                         f_exice = excess_ice(c,j)/(denice*dz(c,j))
-                        f_exice = f_exice / (1._r8 + f_exice)
                         f_exice = min(1._r8, max(0._r8, f_exice))
                         dz_soil = dz(c,j) * (1._r8 - f_exice)
                      else
@@ -1039,7 +1038,7 @@ contains
                      ! a geometric mean thk here which should sit between the parallel and
                      ! serial limits.
                      thk(c,j) = exp(f_exice*log(tkice) + (1._r8-f_exice)*log(thk(c,j)))
-                     ! thk(c,j) = 1._r8 / ((1._r8-f_exice)/thk(c,j) + f_exice/tkice) ! old parallel implementation
+                     ! thk(c,j) = 1._r8 / ((1._r8-f_exice)/thk(c,j) + f_exice/tkice) ! old series-resistance implementation
                   endif
                   if (j > nlevbed) thk(c,j) = thk_bedrock
                else if (lun_pp%itype(l) == istice .OR. lun_pp%itype(l) == istice_mec) then
@@ -1426,6 +1425,7 @@ contains
     use elm_time_manager , only : get_curr_date
     use column_varcon    , only : icol_roof, icol_sunwall, icol_shadewall, icol_road_perv
     use landunit_varcon  , only : istsoil, istcrop, istice_mec,istice
+    use ExcessIceMod     , only : recompute_layer_geometry
     !
     ! !ARGUMENTS:
     type(bounds_type)      , intent(in)    :: bounds
@@ -1936,6 +1936,17 @@ contains
             end if
          end if
       end do
+
+      ! Update layer geometry for polygon tundra columns after excess ice change
+      if (use_polygonal_tundra) then
+         do fc = 1, num_nolakec
+            c = filter_nolakec(fc)
+            l = col_pp%landunit(c)
+            if (lun_pp%ispolygon(l)) then
+               call recompute_layer_geometry(c)
+            end if
+         end do
+      end if
 
       call t_stopf('PhaseChangebeta')
       do j = -nlevsno+1,0

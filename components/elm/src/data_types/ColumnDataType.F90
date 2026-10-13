@@ -1576,7 +1576,7 @@ contains
     data2dptr => this%bw(:,-nlevsno+1:0)
      call hist_addfld2d (fname='SNO_BW', units='kg/m3', type2d='levsno', &
           avgflag='A', long_name='Partial density of water in the snow pack (ice + liquid)', &
-           ptr_col=data2dptr, no_snow_behavior=no_snow_normal, default='inactive')
+          ptr_col=data2dptr, no_snow_behavior=no_snow_normal, default='inactive')
 
     this%snw_rds(begc:endc,-nlevsno+1:0) = spval
     data2dptr => this%snw_rds(:,-nlevsno+1:0)
@@ -1716,6 +1716,7 @@ contains
        this%wf2(c)                    = spval
        this%total_plant_stored_h2o(c) = 0._r8
        this%h2osfc(c)                 = 0._r8
+       this%h2osfc_p(c)               = 0._r8 ! DEBUG
        this%h2ocan(c)                 = 0._r8
        this%frac_h2osfc(c)            = 0._r8
        this%frac_h2osfc_act(c)        = 0._r8
@@ -1890,9 +1891,9 @@ contains
          ! ice maps.
          this%excess_ice_volfrac(c,:) = 0.36_r8
          
-         ! Convert to mass (kg/m2)
+         ! Convert to mass (kg/m2), using reference (mineral soil) layer thickness
          do j = 1, nlevgrnd
-            this%excess_ice(c,j) = this%excess_ice_volfrac(c,j) * col_pp%dz(c,j) * denice
+            this%excess_ice(c,j) = this%excess_ice_volfrac(c,j) * col_pp%dz_ref(c,j) * denice
          end do
          
          this%iwp_subsidence(c) = 0._r8
@@ -1985,23 +1986,26 @@ contains
               end if
           end if
           
-          ! Convert from volumetric to mass
+          ! Convert from volumetric to mass using reference layer thickness.
+          ! volfrac is always relative to the undeformed (mineral soil) thickness.
           do c = bounds%begc, bounds%endc
               l = col_pp%landunit(c)
               if (lun_pp%ispolygon(l)) then
                   do j = 1, nlevgrnd
-                      this%excess_ice(c,j) = this%excess_ice_volfrac(c,j) * col_pp%dz(c,j) * denice
+                      this%excess_ice(c,j) = this%excess_ice_volfrac(c,j) * col_pp%dz_ref(c,j) * denice
                   end do
               end if
           end do
       else if (flag == 'write') then
-          ! Convert from mass to volumetric before writing
+          ! Convert from mass to volumetric before writing, using reference layer
+          ! thickness so the stored fraction is always relative to the undeformed
+          ! (mineral soil) layer and is independent of deformation state.
           do c = bounds%begc, bounds%endc
               l = col_pp%landunit(c)
               if (lun_pp%ispolygon(l)) then
                   do j = 1, nlevgrnd
-                      if (col_pp%dz(c,j) > 0._r8) then
-                          this%excess_ice_volfrac(c,j) = this%excess_ice(c,j) / (col_pp%dz(c,j) * denice)
+                      if (col_pp%dz_ref(c,j) > 0._r8) then
+                          this%excess_ice_volfrac(c,j) = this%excess_ice(c,j) / (col_pp%dz_ref(c,j) * denice)
                       else
                           this%excess_ice_volfrac(c,j) = 0._r8
                       end if
