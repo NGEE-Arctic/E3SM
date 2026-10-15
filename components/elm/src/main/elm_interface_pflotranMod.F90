@@ -1396,11 +1396,6 @@ contains
          cwtgcell   =>  col_pp%wtgcell    , & !  [real(r8) (:)]  weight (relative to gridcell)
          cactive    =>  col_pp%active     , & !  [logic (:)]  column active or not
          !
-         ! Reference frame throughout this file: PFLOTRAN solves Richards and
-         ! reactive transport, which are defined per mineral-soil volume, so the
-         ! grid handed over must not deform with excess ice. Every loop here runs
-         ! j = 1..nlevgrnd (nzelm_mapped == nlevgrnd), so no snow index is read.
-         ! UNTESTED -- no available test exercises the PFLOTRAN coupling.
          z          =>  col_pp%z_ref          , & !  [real(r8) (:,:)]  reference layer node depth (m) (sort of centroid from surface 0 )
          zi         =>  col_pp%zi_ref         , & !  [real(r8) (:,:)]  reference layer interface depth (m)
          dz         =>  col_pp%dz_ref           & !  [real(r8) (:,:)]  reference layer thickness (m)

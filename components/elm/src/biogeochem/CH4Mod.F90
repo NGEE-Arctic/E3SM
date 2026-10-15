@@ -1369,10 +1369,6 @@ contains
     !-----------------------------------------------------------------------
 
     associate(                                                                 &
-         ! Reference frame: every dz/z/zi use below is a BGC/rooting quantity
-         ! over 1:nlevsoi soil layers (no snow index ever appears in this
-         ! routine), so this binds to the fixed mineral-soil grid rather than
-         ! the deforming one.
          dz                   =>   col_pp%dz_ref                                , & ! Input:  [real(r8) (:,:) ]  reference layer thickness (m)  (1:nlevgrnd)
          zi                   =>   col_pp%zi_ref                                , & ! Input:  [real(r8) (:,:) ]  reference interface level below a "z" level (m) (0:nlevgrnd)
          z                    =>   col_pp%z_ref                                 , & ! Input:  [real(r8) (:,:) ]  reference layer depth (m) (1:nlevgrnd)
@@ -1997,10 +1993,6 @@ contains
 
     associate(                                                     &
          wtcol          =>    veg_pp%wtcol                          , & ! Input:  [real(r8) (:)    ]  weight (relative to column)
-         ! Reference frame: every dz/zi use below is a BGC quantity over
-         ! 1:nlevsoi soil layers (no snow index ever appears in this routine),
-         ! so this binds to the fixed mineral-soil grid rather than the
-         ! deforming one.
          dz             =>    col_pp%dz_ref                         , & ! Input:  [real(r8) (:,:)  ]  reference layer thickness (m)  (1:nlevgrnd)
          zi             =>    col_pp%zi_ref                         , & ! Input:  [real(r8) (:,:)  ]  reference interface level below a "z" level (m) (0:nlevgrnd)
 
@@ -3041,9 +3033,6 @@ contains
 
 
     associate(                                                 &
-         ! This routine needs vertical frames when excess ice is on. Everything
-         ! else below is a soil-layer (1:nlevsoi) molar-concentration or
-         ! diffusion quantity and binds to dz_ref instead.
          dz            =>    col_pp%dz                          , & ! Input:  [real(r8) (:,:) ]  layer thickness (m)  (-nlevsno+1:nlevsoi)
          dz_ref        =>    col_pp%dz_ref                      , & ! Input:  [real(r8) (:,:) ]  reference layer thickness (m) (1:nlevgrnd)
          snl           =>    col_pp%snl                         , & ! Input:  [integer  (:)   ]  negative of number of snow layers

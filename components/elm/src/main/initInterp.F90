@@ -1145,13 +1145,6 @@ contains
        end if
        call ncd_io(ncid=ncidi, varname=trim(varname), flag='read', data=rbuf2di)
 
-       !!! The zsoi read from each file is the REFERENCE (undeformed) node
-       !!! grid, which is what should be interpolated: a vertical remap pairs
-       !!! mineral-soil positions, and excess ground ice deforms col_pp%z
-       !!! without moving any soil. This is easy to misread as operating on
-       !!! the live grid. It does not -- col_pp%z/zi/dz are reconstructed
-       !!! after interpolation by inflate_layers_from_excess_ice
-       !!! (restFileMod.F90), so no deformed depth enters here.
        if ( ( nlevi .eq. 15) .and. (nlevo .eq. 30) ) then
           !!! this is the case for variables on the levgrnd grid
           allocate(zsoii(nlevi), zsoio(nlevo))
@@ -1170,13 +1163,6 @@ contains
           zsoii(1:5) = (/ -5._r8, -4._r8, -3._r8, -2._r8, 0._r8 /)
           zsoio(1:5) = (/ -5._r8, -4._r8, -3._r8, -2._r8, 0._r8 /)
        else
-          !!! general case: interpolate between any pair of soil layer
-          !!! structures (10SL_3.5m, 20SL_8.5m, 49SL_10m, 4SL_2m or a
-          !!! user-defined grid). Node depths are read from each file's zsoi
-          !!! variable; for a levtot grid the leading snow layers are given
-          !!! dummy monotonic coordinates below the surface. The two special
-          !!! cases above are retained verbatim so the legacy 10SL_3.5m ->
-          !!! 23SL_3.5m interpolation stays bit-for-bit.
           allocate(zsoii(nlevi), zsoio(nlevo))
           call get_levinterp_coord(ncidi, lev_dimname, nlevi, zsoii)
           call get_levinterp_coord(ncido, lev_dimname, nlevo, zsoio)

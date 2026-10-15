@@ -2201,9 +2201,7 @@ contains
        do ifld = 1,nflds
 
           ! WJS (10-25-11): Note about l2g_scale_type in the following: ZSOI & DZSOI are
-          ! populated from col_pp%z_ref/dz_ref -- the fixed (reference) mineral-soil grid,
-          ! not the deforming col_pp%z/dz used for heat conduction under excess ground ice
-          ! -- so they are constant in space except for urban points, and their scale type
+          ! currently constant in space, except for urban points, so their scale type
           ! doesn't matter at the moment as long as it excludes urban points. I am using
           ! 'nonurb' so that the values are output everywhere where the fields are
           ! constant (i.e., everywhere except urban points). For the other fields, I am

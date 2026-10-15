@@ -248,14 +248,6 @@ contains
     character(len= 32) :: subname = 'get_elm_soil_property' ! subroutine name
 
     associate ( &
-         ! Assign local pointer to derived subtypes components (column-level)
-         ! Both frames are bound here. elm_idata%z/zi/dz span -nlevsno+1:nlevgrnd
-         ! (elm_interface_dataType.F90:101-103), so the snow range must be copied
-         ! from the deforming arrays -- the reference arrays start at index 1 and a
-         ! whole-slice copy would not conform. The soil range takes the reference
-         ! frame, because it is packed in the same loop as bd/bsw/hksat/sucsat/
-         ! watsat, all of which are built on the fixed grid in SoilStateType.
-         ! UNTESTED -- no available test exercises this coupling path.
          z                  => col_pp%z                                                , & !  [real(r8) (:,:)]  layer depth (m)
          dz                 => col_pp%dz                                               , & !  [real(r8) (:,:)]  layer thickness depth (m)
          zi                 => col_pp%zi                                               , & !  [real(r8) (:,:)]  interface depth (m)

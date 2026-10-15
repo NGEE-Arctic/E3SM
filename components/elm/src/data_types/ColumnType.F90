@@ -126,11 +126,6 @@ contains
     allocate(this%snl         (begc:endc))                     ; this%snl         (:)   = ispval  !* cannot be averaged up
     allocate(this%dz          (begc:endc,-nlevsno+1:nlevgrnd)) ; this%dz          (:,:) = spval
     allocate(this%dz_ref      (begc:endc, 1:nlevgrnd))         ; this%dz_ref      (:,:) = spval
-    ! NOTE: dz_ref/z_ref/zi_ref are written only over owned columns
-    ! (begc:endc) and are NOT packed by ColumnMod's ghost exchange, which carries
-    ! dz/z/zi only. Ghost columns therefore hold spval in the reference arrays.
-    ! Any consumer that reads reference geometry outside begc:endc -- a lateral-flow
-    ! or ghost-cell path -- must extend NumValuesPerColumn/Get/SetValuesForColumn first.
     allocate(this%z_ref       (begc:endc, 1:nlevgrnd))         ; this%z_ref       (:,:) = spval
     allocate(this%zi_ref      (begc:endc, 0:nlevgrnd))         ; this%zi_ref      (:,:) = spval
     allocate(this%z           (begc:endc,-nlevsno+1:nlevgrnd)) ; this%z           (:,:) = spval
