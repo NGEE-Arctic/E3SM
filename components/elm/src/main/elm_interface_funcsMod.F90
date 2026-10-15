@@ -248,10 +248,12 @@ contains
     character(len= 32) :: subname = 'get_elm_soil_property' ! subroutine name
 
     associate ( &
-         ! Assign local pointer to derived subtypes components (column-level)
          z                  => col_pp%z                                                , & !  [real(r8) (:,:)]  layer depth (m)
          dz                 => col_pp%dz                                               , & !  [real(r8) (:,:)]  layer thickness depth (m)
-         zi                 => col_pp%zi                                               , & !
+         zi                 => col_pp%zi                                               , & !  [real(r8) (:,:)]  interface depth (m)
+         z_ref              => col_pp%z_ref                                            , & !  [real(r8) (:,:)]  reference layer node depth (m)
+         dz_ref             => col_pp%dz_ref                                           , & !  [real(r8) (:,:)]  reference layer thickness (m)
+         zi_ref             => col_pp%zi_ref                                           , & !  [real(r8) (:,:)]  reference interface depth (m)
 
          bd                 => soilstate_vars%bd_col                                , & !
          bsw                => soilstate_vars%bsw_col                               , & !  [real(r8) (:,:)]  Clapp and Hornberger "b" (nlevgrnd)
@@ -297,9 +299,14 @@ contains
     do fc = 1, num_soilc
         c = filter_soilc(fc)
 
-        elm_idata%z(c,:)                 = z(c,:)
-        elm_idata%zi(c,:)                = zi(c,:)
-        elm_idata%dz(c,:)                = dz(c,:)
+        ! Snow range: deforming only (no reference frame exists for snow).
+        elm_idata%z (c,-nlevsno+1:0)     = z (c,-nlevsno+1:0)
+        elm_idata%dz(c,-nlevsno+1:0)     = dz(c,-nlevsno+1:0)
+        elm_idata%zi(c,-nlevsno+0:0)     = zi(c,-nlevsno+0:0)
+        ! Soil range: reference frame, matching the soil properties below.
+        elm_idata%z (c,1:nlevgrnd)       = z_ref (c,1:nlevgrnd)
+        elm_idata%dz(c,1:nlevgrnd)       = dz_ref(c,1:nlevgrnd)
+        elm_idata%zi(c,1:nlevgrnd)       = zi_ref(c,1:nlevgrnd)
         elm_idata%bd_col(c,:)            = bd(c,:)
         elm_idata%bsw_col(c,:)           = bsw(c,:)
         elm_idata%hksat_col(c,:)         = hksat(c,:)

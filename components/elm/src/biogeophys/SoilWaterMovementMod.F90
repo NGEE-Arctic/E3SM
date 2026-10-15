@@ -119,7 +119,7 @@ contains
     !------------------------------------------------------------------------------
     associate(                                                         &
       wa                 =>    soilhydrology_vars%wa_col             , & ! Input:  [real(r8) (:)   ] water in the unconfined aquifer (mm)
-      dz                 =>    col_pp%dz                                , & ! Input:  [real(r8) (:,:) ]  layer thickness (m)
+      dz                 =>    col_pp%dz_ref                             , & ! Input:  [real(r8) (:,:) ]  reference layer thickness (m)
       zwt                =>    soilhydrology_vars%zwt_col            , & ! Input:  [real(r8) (:)   ]  water table depth (m)
       nlev2bed           =>    col_pp%nlevbed                           , & ! Input:  [integer  (:)   ]  number of layers to bedrock
       h2osoi_ice         =>    col_ws%h2osoi_ice        , & ! Output: [real(r8) (:,:) ] liquid water (kg/m2)
@@ -348,9 +348,9 @@ contains
     !-----------------------------------------------------------------------
 
     associate(&
-         z                 =>    col_pp%z                              , & ! Input:  [real(r8) (:,:) ]  layer depth (m)
-         zi                =>    col_pp%zi                             , & ! Input:  [real(r8) (:,:) ]  interface level below a "z" level (m)
-         dz                =>    col_pp%dz                             , & ! Input:  [real(r8) (:,:) ]  layer thickness (m)
+         z                 =>    col_pp%z_ref                          , & ! Input:  [real(r8) (:,:) ]  reference layer node depth (m)
+         zi                =>    col_pp%zi_ref                         , & ! Input:  [real(r8) (:,:) ]  reference interface depth (m)
+         dz                =>    col_pp%dz_ref                         , & ! Input:  [real(r8) (:,:) ]  reference layer thickness (m)
          nlev2bed          =>    col_pp%nlevbed                        , & ! Input:  [integer  (:)   ]  number of layers to bedrock
 
          origflag          =>    soilhydrology_vars%origflag        , & ! Input:  constant
@@ -901,8 +901,8 @@ contains
      !-----------------------------------------------------------------------
 
      associate( &
-          zi                        =>    col_pp%zi                                     , & ! Input:  [real(r8) (:,:) ]  interface level below a "z" level (m)
-          dz                        =>    col_pp%dz                                     , & ! Input:  [real(r8) (:,:) ]  layer thickness (m)
+          zi                        =>    col_pp%zi_ref                                  , & ! Input:  [real(r8) (:,:) ]  reference interface depth (m)
+          dz                        =>    col_pp%dz_ref                                  , & ! Input:  [real(r8) (:,:) ]  reference layer thickness (m)
           snl                       =>    col_pp%snl                                    , & ! Input:  [integer  (:)   ]  minus number of snow layers
 
           zwt                       =>    soilhydrology_vars%zwt_col                 , & ! Input:  [real(r8) (:)   ]  water table depth (m)
@@ -1318,7 +1318,7 @@ contains
               frac_veg_nosno      => canopystate_vars%frac_veg_nosno_patch , & ! Input:  [integer  (:)  ]
                                                                             ! fraction of vegetation not
                                                                             ! covered by snow (0 OR 1) [-]
-              z                   => col_pp%z                              , & ! Input: [real(r8) (:,:) ]  layer node depth (m)
+              z                   => col_pp%z_ref                          , & ! Input: [real(r8) (:,:) ]  reference layer node depth (m)
               vegwp               => canopystate_vars%vegwp_patch         & ! Input: [real(r8) (:,:) ]  vegetation water
                                                                             ! matric potential (mm)
               )

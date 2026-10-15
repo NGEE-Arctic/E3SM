@@ -54,7 +54,7 @@ contains
     use elm_varpar       , only : nlevgrnd
     use elm_time_manager , only : get_curr_date, get_step_size
     use elm_varctl       , only : iulog
-    use elm_varcon       , only : zsoi, dzsoi, zisoi
+    use elm_varcon       , only : zsoi
     !
     ! !ARGUMENTS:
     integer                , intent(in)    :: num_soilc       ! number of soil columns in filter
@@ -72,8 +72,7 @@ contains
     integer  :: dtime                                   ! time step length in seconds
     integer  :: k_frz                                   ! index of first nonfrozen soil layer
     logical  :: found_thawlayer                         ! used to break loop when first unfrozen layer reached
-    real(r8) :: t1, t2, z1, z2, orig_excess, old_mfrac  ! temporary variables
-    real(r8), dimension(nlevgrnd) :: melt_profile       ! profile of melted excess ice
+    real(r8) :: t1, t2, z1, z2                          ! temporary variables
     !-----------------------------------------------------------------------
 
     associate(                                                                &
