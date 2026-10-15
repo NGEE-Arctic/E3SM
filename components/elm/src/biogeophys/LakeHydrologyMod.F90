@@ -130,10 +130,6 @@ contains
          z                    =>  col_pp%z                                 , & ! Input:  [real(r8) (:,:) ]  layer depth  (m)                      
          dz                   =>  col_pp%dz                                , & ! Input:  [real(r8) (:,:) ]  layer thickness depth (m)             
          zi                   =>  col_pp%zi                                , & ! Input:  [real(r8) (:,:) ]  interface depth (m)                   
-         ! Deforming (z/dz/zi, above) is used for snow-layer bookkeeping; reference
-         ! (dz_ref, below) is used wherever soil-under-lake hydrology quantities
-         ! (volumetric water content) are computed. No z_ref/zi_ref binding: this
-         ! routine reads no soil node or interface depth.
          dz_ref               =>  col_pp%dz_ref                            , & ! Input:  [real(r8) (:,:) ]  reference layer thickness (m)
          snl                  =>  col_pp%snl                               , & ! Input:  [integer  (:)   ]  number of snow layers                    
 

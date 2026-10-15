@@ -1837,9 +1837,6 @@ contains
          root_conductance_patch => soilstate_inst%root_conductance_patch , & ! Output:   [real(r8) (:,:)] root conductance
          soil_conductance_patch => soilstate_inst%soil_conductance_patch , & ! Output:   [real(r8) (:,:)] soil conductance
          rootfr       => soilstate_inst%rootfr_patch         , & ! Input: [real(r8) (:,:)]
-         ! Reference frame: root_biomass_density is a per-mineral-volume density,
-         ! and grav2 is gravitational head paired with smp, which SoilWaterMovement
-         ! computes on the reference grid. Both must see undeformed depth.
          dz           => col_pp%dz_ref                          , & ! Input: [real(r8) (:,:) ]  reference layer thickness (m)
          z            => col_pp%z_ref                           , & ! Input: [real(r8) (:,:) ]  reference layer node depth (m)
 

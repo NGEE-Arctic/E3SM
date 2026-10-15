@@ -883,13 +883,6 @@ contains
 
     associate(                                                 &
          snl          =>    col_pp%snl                       , & ! Input:  [integer  (:)   ]  number of snow layers
-         ! This routine needs BOTH frames. Deforming (dz/zi/z) owns the
-         ! conduction geometry -- tk interface weighting, the snow slices, and
-         ! the conductivity blend -- because heat really must cross the extra
-         ! ice. Reference (dz_ref) owns the mineral-matrix terms: the dry-solid
-         ! heat capacity at the cv line below and the soil-tk layer thickness.
-         ! Counting excess-ice volume as rock would charge that volume twice,
-         ! once as solids and again as ice.
          dz_thermal           =>    col_pp%dz                        , & ! Input:  [real(r8) (:,:) ]  layer thickness, deforming (m)
          zi_thermal           =>    col_pp%zi                        , & ! Input:  [real(r8) (:,:) ]  interface level below a "z" level (m)
          z_thermal            =>    col_pp%z                         , & ! Input:  [real(r8) (:,:) ]  layer node depth (m)
@@ -950,14 +943,7 @@ contains
                     col_pp%itype(c) /= icol_roof) then
                   ! f_exice is still needed for the conductivity blend at the
                   ! geometric-mean step below, but the layer thickness the soil
-                  ! tk scheme acts on is just dz_ref: by the core geometry
-                  ! formula dz == dz_ref + excess_ice/denice (ExcessIceMod),
-                  ! so dz*(1 - f_exice) == dz - excess_ice/denice == dz_ref
-                  ! identically. Reading dz_ref directly removes the algebraic
-                  ! round trip, and is also the right answer on any path where
-                  ! dz and excess_ice have not yet been resynced by
-                  ! recompute_layer_geometry -- there the clamp below would make
-                  ! dz*(1 - f_exice) disagree with the true reference thickness.
+                  ! tk scheme acts on is just dz_ref
                   if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
                      if (excess_ice(c,j) .gt. 0._r8) then
                         f_exice = excess_ice(c,j)/(denice*dz_thermal(c,j))
@@ -969,8 +955,7 @@ contains
                      f_exice = 0._r8
                   endif
                   ! Pore saturation is a reference-volume quantity: watsat is
-                  ! built on the fixed grid, so the pore volume it multiplies
-                  ! must be the undeformed one.
+                  ! built on the fixed grid
                   satw = (h2osoi_liq(c,j)/denh2o + h2osoi_ice(c,j)/denice)/(dz_ref(c,j)*watsat(c,j))
                   satw = min(1._r8, satw)
 
@@ -981,14 +966,6 @@ contains
                         else                               ! Frozen soil
                            dke = satw
                         end if
-                        ! fl is FRAME-INVARIANT and deliberately left on dz.
-                        ! Every term in both numerator and denominator carries
-                        ! the same /dz(c,j) -- including the excess-ice term in
-                        ! the polygon branch below -- so dz cancels identically
-                        ! and the ratio does not depend on which frame is used.
-                        ! Do NOT "fix" this to dz_ref: retargeting only some of
-                        ! the four terms would introduce a real bug where there
-                        ! is currently none.
                         fl = (h2osoi_liq(c,j)/(denh2o*dz_thermal(c,j))) / (h2osoi_liq(c,j)/(denh2o*dz_thermal(c,j)) + &
                            h2osoi_ice(c,j)/(denice*dz_thermal(c,j)))
 
@@ -1036,14 +1013,6 @@ contains
                      else ! if frozen or partially frozen
                         ! Equation 18, Balland and Arp 2005
                         dke = satw**(1.0_r8+om_adj)
-                        ! fl is FRAME-INVARIANT and deliberately left on dz.
-                        ! Every term in both numerator and denominator carries
-                        ! the same /dz(c,j) -- including the excess-ice term in
-                        ! the polygon branch below -- so dz cancels identically
-                        ! and the ratio does not depend on which frame is used.
-                        ! Do NOT "fix" this to dz_ref: retargeting only some of
-                        ! the four terms would introduce a real bug where there
-                        ! is currently none.
                         fl = (h2osoi_liq(c,j)/(denh2o*dz_thermal(c,j))) / (h2osoi_liq(c,j)/(denh2o*dz_thermal(c,j)) + &
                            h2osoi_ice(c,j)/(denice*dz_thermal(c,j)))
 
@@ -1183,12 +1152,6 @@ contains
             else if (lun_pp%itype(l) /= istwet .AND. lun_pp%itype(l) /= istice .AND. lun_pp%itype(l) /= istice_mec &
                  .AND. col_pp%itype(c) /= icol_sunwall .AND. col_pp%itype(c) /= icol_shadewall .AND. &
                  col_pp%itype(c) /= icol_roof) then
-               ! Dry-solid heat capacity is a property of the mineral matrix, so
-               ! it takes reference thickness: csol and watsat are both built on
-               ! the fixed grid (SoilStateType), and deformed dz would inflate
-               ! the solid volume by the excess-ice fraction -- counting that
-               ! volume once as rock and again as ice below. The water and ice
-               ! terms are masses and need no thickness at all.
                cv(c,j) = csol(c,j)*(1._r8-watsat(c,j))*dz_ref(c,j) + (h2osoi_ice(c,j)*cpice + h2osoi_liq(c,j)*cpliq)
 
                ! Add excess ice heat capacity for soil layers in polygonal tundra
@@ -1649,12 +1612,6 @@ contains
                   if(t_soisno(c,j) < tfrz) then
                      smp_i(c,j) = hfus*(tfrz-t_soisno(c,j))/(grav*t_soisno(c,j)) * 1000._r8  !(mm)
                      supercool(c,j) = watsat(c,j)*(smp_i(c,j)/sucsat(c,j))**(-1._r8/bsw(c,j))
-                     ! Reference thickness (dz_ref): supercool is a pore-water
-                     ! capacity built from watsat/sucsat/bsw, all of which live
-                     ! on the fixed grid, so the volume it converts to a mass
-                     ! must be the undeformed pore volume. Written inline rather
-                     ! than aliased because this is the only dz reference in
-                     ! Phasechange_beta, so the routine needs no frame rebind.
                      supercool(c,j) = supercool(c,j)*col_pp%dz_ref(c,j)*1000._r8  ! (mm)
                   endif
                endif
@@ -1977,25 +1934,8 @@ contains
                end do
 
                ! Cap cumulative subsidence at the upper end of the range the
-               ! polygonal-tundra parameterizations were fit over. This clamp
-               ! existed in the old geometric melt scheme in ActiveLayerMod and
-               ! was dropped with it; without it the SUBSIDENCE diagnostic and
-               ! restart field can exceed what the consumers actually use,
-               ! because SoilHydrologyMod.F90:583 still clamps on its own.
-               !
-               ! 0.4 m is a calibration endpoint, not a physical subsidence
-               ! limit. Two independent confirmations: (1) the low-centered
-               ! k_wet quartic (SoilHydrologyMod.F90:588) evaluated at
-               ! phi_eff = 0.4 gives 24.9248, which is the constant 24.925
-               ! hardwired for the high-centered branch at :591 -- the
-               ! high-centered case is the same fit pinned at its endpoint, and
-               ! past 0.4 the quartic diverges (1868 at 1.0, 37456 at 2.0);
-               ! (2) at 0.4 m every min/max in the ActiveLayerMod
-               ! microtopography update (:190-194) reaches its bound at once,
-               ! and the flat-centered relief/excluded-volume/depression-depth
-               ! land exactly on the high-centered constants. Relaxing this
-               ! bound means refitting those relations over a wider subsidence
-               ! range, not widening the clamp.
+               ! polygonal-tundra parameterizations were fit over. 0.4 m is a 
+               ! calibration endpoint, not a physical subsidence limit.
                iwp_subsidence(c) = min(iwp_subsidence(c), 0.4_r8)
             end if
          end if

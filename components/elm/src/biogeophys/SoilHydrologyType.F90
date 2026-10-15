@@ -814,10 +814,6 @@ contains
      !-----------------------------------------------------------------------
 
      associate(                                                    &
-          ! dz is the only geometry read below. The zi and z bindings that used to
-          ! sit here were dead before this work and are deleted rather than
-          ! retargeted, matching the treatment of the same defect in
-          ! BalanceCheckMod's two BeginWaterBalance routines.
           dz            =>    col_pp%dz_ref ,                         & ! Input:  [real(r8) (:,:)   ]  reference layer thickness (m)
 
           depth         =>    soilhydrology_vars%depth_col ,       & ! Input:  [real(r8) (:,:)   ]  layer depth of VIC (m)

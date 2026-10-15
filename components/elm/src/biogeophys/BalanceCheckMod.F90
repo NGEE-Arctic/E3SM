@@ -871,15 +871,6 @@ contains
          begwb_col(c) = begwb_col(c) + total_plant_stored_h2o(c)
       end do
 
-      ! Excess ground ice is part of the column water inventory and must be
-      ! counted here exactly as the end-of-step counterpart counts it at
-      ! HydrologyDrainageMod.F90:198-201 -- in begwb_col AND in the ice
-      ! depth-integral. Both this begwb_col and that endwb_col are c2g'd to the
-      ! grid budget (:1113 here, :900 below), so omitting the term made the
-      ! grid-level balance asymmetric by the entire excess-ice inventory, which
-      ! at 0.36 volumetric fraction is the largest single ice term in a polygon
-      ! column. The column-level begwb at :122 already had this branch; the
-      ! grid-level one associated excess_ice (:828) but never used it.
       do j = 1, nlevgrnd
          do f = 1, num_nolakec
             c = filter_nolakec(f)

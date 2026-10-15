@@ -73,30 +73,9 @@ contains
     real(r8) :: exice_abv ! cumulative excess-ice thickness (m) in layers above j; this is
                           ! the downward displacement of layer j's whole reference position
     real(r8) :: frac      ! fractional position (unitless) of the reference node z_ref(c,j)
-                          ! within its own layer. zsoi(j) is NOT the midpoint of its
-                          ! interfaces on node-based grids (10SL_3.5m, 23SL_3.5m): zsoi is
-                          ! built exponentially (initVerticalMod.F90:203) and zisoi derived
-                          ! from it as a node midpoint (:216), and that inverse does not
-                          ! hold. A hardwired 0.5_r8 would therefore displace z even at
-                          ! zero excess ice -- by up to 1.4 m on 10SL_3.5m.
+                          
     !-----------------------------------------------------------------------
 
-    ! Geometry is written as a PERTURBATION of the reference grid rather than
-    ! rebuilt by cumulative summation of dz. The two are algebraically identical
-    ! -- frac*dz_ref(c,j) == z_ref(c,j) - zi_ref(c,j-1) by the definition of frac,
-    ! and sum(dz_ref(c,1:j)) == zi_ref(c,j) -- but the perturbation form makes
-    ! every term reduce to x + 0._r8 when excess_ice is zero, which is an exact
-    ! IEEE754 identity. So excess_ice == 0 reproduces dz_ref/z_ref/zi_ref
-    ! BIT-FOR-BIT on all five layer structures.
-    !
-    ! Re-summation would not: on the node-based grids zisoi is constructed
-    ! directly as a node midpoint, never as a running sum of dzsoi, so
-    ! accumulating dz rounds differently and leaves z/zi off the reference grid
-    ! -- 4 of 15 zi nodes on 10SL_3.5m and 5 of 30 on 23SL_3.5m, worst case
-    ! 7.1e-15 m at the bottom interface. That residual is physically negligible
-    ! -- one ulp at 42 m depth -- but it would forfeit the bit-for-bit restart
-    ! property for polygon columns, which is what makes the Phase 2/3/5
-    ! non-polygon BFB criterion provable rather than approximate.
     exice_abv = 0._r8
     do j = 1, nlevgrnd
        exice_thk = col_ws%excess_ice(c,j) / denice

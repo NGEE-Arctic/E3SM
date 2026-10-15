@@ -1589,7 +1589,6 @@ contains
                   else if (veg_pp%wtcol(p) < 0.99_r8) then
                      rootfraction(p,j) = spval
                   else
-                     ! Uniform distribution over the reference (mineral-soil) column.
                      rootfraction(p,j) = dz(c,j) / zi(c,nlevsoi)   ! Set equal to uniform distribution
                   end if
                end do
@@ -1611,7 +1610,6 @@ contains
          do j=1, nlevsoi
             do fc = 1, num_soilc
                c = filter_soilc(fc)
-               ! Same uniform-distribution fallback as above, reference frame.
                if (.not. col_pp%active(c)) rootfr_col(c,j) = dz(c,j) / zi(c,nlevsoi)
             end do
          end do
@@ -1779,8 +1777,6 @@ contains
                ! ch4_oxid_tot and ch4_prod_tot are initialized to zero above
             end if
 
-            ! Molar concentrations integrated to a column total over the reference
-            ! (mineral-soil) layer thicknesses.
             ch4_oxid_tot(c) = ch4_oxid_tot(c) + (finundated(c)*ch4_oxid_depth_sat(c,j) + &
                  (1._r8 - finundated(c))*ch4_oxid_depth_unsat(c,j))*dz(c,j) * catomw
             !Convert from mol to g C
@@ -1818,9 +1814,6 @@ contains
                   ch4_surf_flux_tot(c) = totalsat*catomw / 1000._r8
                end if
 
-               ! Lake columns carry no excess ice, so dz (reference frame) equals
-               ! the deforming dz identically here; stated for consistency with
-               ! the soil-column accumulation above.
                ch4_oxid_tot(c) = ch4_oxid_tot(c) + ch4_oxid_depth_sat(c,j)*dz(c,j)*catomw
                ch4_prod_tot(c) = ch4_prod_tot(c) + ch4_prod_depth_sat(c,j)*dz(c,j)*catomw
 
@@ -1891,8 +1884,6 @@ contains
             do fc = 1, num_lakec
                c = filter_lakec(fc)
 
-               ! Lake columns carry no excess ice; dz (reference frame) equals
-               ! the deforming dz identically here.
                totcolch4(c) = totcolch4(c) + conc_ch4_sat(c,j)*dz(c,j)*catomw ! mol CH4 --> g C
 
                if (j == nlevsoi .and. totcolch4_bef(c) /= spval) then ! not first timestep
@@ -2009,8 +2000,7 @@ contains
          ! Reference frame: every dz/zi use below is a BGC quantity over
          ! 1:nlevsoi soil layers (no snow index ever appears in this routine),
          ! so this binds to the fixed mineral-soil grid rather than the
-         ! deforming one. (z has no use site in this routine, so it is not
-         ! bound at all.)
+         ! deforming one.
          dz             =>    col_pp%dz_ref                         , & ! Input:  [real(r8) (:,:)  ]  reference layer thickness (m)  (1:nlevgrnd)
          zi             =>    col_pp%zi_ref                         , & ! Input:  [real(r8) (:,:)  ]  reference interface level below a "z" level (m) (0:nlevgrnd)
 
@@ -2154,9 +2144,6 @@ contains
             if (t_soisno(c,j) <= tfrz .and. (nlevdecomp == 1 .or. lake)) base_decomp = 0._r8
 
             ! depth dependence of production either from rootfr or decomp model
-            ! partition_z is a dimensionless fraction of column-total decomposition,
-            ! not a molar concentration, so dz here is just the reference-frame
-            ! layer thickness used to build that fraction; no volume scaling applies.
             if (.not. lake) then ! use default rootfr, averaged to the column level in the ch4 driver, or vert HR
                if (nlevdecomp == 1) then ! not VERTSOILC
                   if (j <= nlev_soildecomp_standard) then  ! Top 5 levels are also used in the CLM code for establishing temperature
@@ -2254,7 +2241,7 @@ contains
             ! Add root respiration
             if (.not. lake) then
                !o2_decomp_depth(c,j) = o2_decomp_depth(c,j) + col_rr(c)*rootfr(c,j)/catomw/dz(c,j) ! mol/m^3/s
-               o2_decomp_depth(c,j) = o2_decomp_depth(c,j) + rr_vr(c,j)/catomw/dz(c,j) ! mol/m^3/s, reference frame
+               o2_decomp_depth(c,j) = o2_decomp_depth(c,j) + rr_vr(c,j)/catomw/dz(c,j) ! mol/m^3/s
                ! g C/m2/s ! gC/mol O2 ! m
             end if
 
@@ -2266,9 +2253,6 @@ contains
 
             if (j  >  jwt(c)) then ! Below the water table so anaerobic CH4 production can occur
                ! partition decomposition to layer
-               ! turn into per volume-total by dz (reference frame: ch4_prod_depth
-               ! is a molar concentration rate carried through ch4_tran/ch4_oxid on
-               ! the reference grid, same as conc_ch4/conc_o2)
                ch4_prod_depth(c,j) = f_ch4_adj * base_decomp * partition_z / dz (c,j)! [mol/m3-total/s]
             else ! Above the WT
                if (anoxicmicrosites) then
@@ -2512,10 +2496,6 @@ contains
     ! Enforce expected array sizes
 
     associate(                                                     &
-         ! Reference frame: z/dz are passed down to SiteOxAere, which operates
-         ! entirely on 1:nlevsoi molar concentrations and root fractions, so
-         ! this binds to the fixed mineral-soil grid rather than the deforming
-         ! one.
          z             =>    col_pp%z_ref                           , & ! Input:  [real(r8) (:,:)  ]  reference layer depth (m) (1:nlevgrnd)
          dz            =>    col_pp%dz_ref                          , & ! Input:  [real(r8) (:,:)  ]  reference layer thickness (m) (1:nlevgrnd)
          wtcol         =>    veg_pp%wtcol                           , & ! Input:  [real(r8) (:)    ]  weight (relative to column)
@@ -2739,7 +2719,6 @@ contains
           k_h_cc = t_soisno(j) / k_h_inv * rgasLatm
           conc_ch4_wat = conc_ch4(j) / ( (watsat(j)-h2osoi_vol_min)/k_h_cc + h2osoi_vol_min)
 
-          ! dz is the reference-frame thickness passed in from ch4_aere.
           tranloss(j) = conc_ch4_wat * rootr(j)*qflx_tran_veg / dz(j) / 1000._r8
           ! mol/m3/s    mol/m3                                   mm / s         m           mm/m
           ! Use rootr here for effective per-layer transpiration, which may not be the same as rootfr
@@ -2793,7 +2772,6 @@ contains
           ! Add in boundary layer resistance
           aerecond = 1._r8 / (1._r8/(aerecond+smallnumber) + 1._r8/(grnd_ch4_cond+smallnumber))
 
-          ! dz is the reference-frame thickness passed in from ch4_aere.
           aere(j) = aerecond * (conc_ch4(j)/watsat(j)/k_h_cc - c_atm(1)) / dz(j) ![mol/m3-total/s]
           !ZS: Added watsat & Henry's const.
           aere(j) = max(aere(j), 0._r8) ! prevent backwards diffusion
@@ -2874,9 +2852,6 @@ contains
     ! Enforce expected array sizes
 
     associate(                                                      &
-         ! Reference frame: z/zi here build the hydrostatic pressure at a soil
-         ! layer node (1:nlevsoi, no snow index), so this binds to the fixed
-         ! mineral-soil grid rather than the deforming one.
          z            =>    col_pp%z_ref                          , & ! Input:  [real(r8) (:,:) ]  reference soil layer depth (m) (1:nlevgrnd)
          zi           =>    col_pp%zi_ref                         , & ! Input:  [real(r8) (:,:) ]  reference interface level below a "z" level (m) (0:nlevgrnd)
          lakedepth    =>    col_pp%lakedepth                      , & ! Input:  [real(r8) (:)   ]  column lake depth (m)
@@ -3066,12 +3041,9 @@ contains
 
 
     associate(                                                 &
-         ! This routine needs BOTH frames. Snow has no reference frame -- dz_ref
-         ! is allocated only 1:nlevgrnd -- so the snow-resistance/ice-fraction
-         ! lines (do j = -nlevsno+1,0) must stay on the deforming dz. Everything
+         ! This routine needs vertical frames when excess ice is on. Everything
          ! else below is a soil-layer (1:nlevsoi) molar-concentration or
-         ! diffusion quantity and binds to dz_ref instead. (z/zi have no use site
-         ! anywhere in this routine, snow or soil, so they are not bound at all.)
+         ! diffusion quantity and binds to dz_ref instead.
          dz            =>    col_pp%dz                          , & ! Input:  [real(r8) (:,:) ]  layer thickness (m)  (-nlevsno+1:nlevsoi)
          dz_ref        =>    col_pp%dz_ref                      , & ! Input:  [real(r8) (:,:) ]  reference layer thickness (m) (1:nlevgrnd)
          snl           =>    col_pp%snl                         , & ! Input:  [integer  (:)   ]  negative of number of snow layers
@@ -3325,22 +3297,6 @@ contains
                if (ch4frzout) then
                   l = col_pp%landunit(c)
                   if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
-                     ! Fold the excess-ice mass into the ice term, so freeze-out partitions
-                     ! liquid vs. ice correctly on columns that carry excess ground ice.
-                     !
-                     ! excess_ice is allocated only under use_polygonal_tundra
-                     ! (ColumnDataType.F90:1480-1488), and before this guard existed the
-                     ! branch tested only `j >= 1`, so ch4frzout with polygons off
-                     ! dereferenced an unallocated pointer.
-                     !
-                     ! A flat `.and.` is safe HERE only because both operands are
-                     ! themselves safe to evaluate: lun_pp%ispolygon is allocated
-                     ! unconditionally and defaults .false. (LandunitType.F90:98), and the
-                     ! excess_ice read sits in the BODY, which is reached only when both
-                     ! are true. Do not copy this shape to a test that dereferences a
-                     ! conditionally-allocated field in the CONDITION itself -- Fortran
-                     ! does not guarantee short-circuit `.and.`, so that needs the nested
-                     ! form used at SoilTemperatureMod.F90:1573-1578.
                      liqfrac(c,j) = max(0.05_r8, (h2osoi_liq(c,j)/denh2o+smallnumber)/ &
                        (h2osoi_liq(c,j)/denh2o+(h2osoi_ice(c,j)+excess_ice(c,j))/denice+smallnumber))
                   else
@@ -3385,8 +3341,6 @@ contains
                ! Add snow resistance
                if (j >= snl(c) + 1) then
                   t_soisno_c = t_soisno(c,j) - tfrz
-                  ! j <= 0 here is an actual snow layer; dz_ref is not allocated over
-                  ! snow indices, so this stays on the deforming dz.
                   icefrac = h2osoi_ice(c,j)/denice/dz(c,j)
                   waterfrac = h2osoi_liq(c,j)/denh2o/dz(c,j)
                   airfrac = max(1._r8 - icefrac - waterfrac, 0._r8)
@@ -3423,8 +3377,6 @@ contains
                         ponddiff = (d_con_w(s,1) + d_con_w(s,2)*t_soisno_c + d_con_w(s,3)*t_soisno_c**2) * 1.e-9_r8 &
                              * scale_factor_liqdiff
                      end if
-                     ! Despite sitting inside the j = -nlevsno+1,0 snow loop, index 1 here
-                     ! is soil layer 1, not a snow layer, so this is a reference-frame read.
                      pondz = dz_ref(c,1) * (h2osoi_vol(c,1) - watsat(c,1))
                      pondres = pondz / ponddiff
                   end if
@@ -3492,18 +3444,6 @@ contains
             do fc = 1, num_methc
                c = filter_methc (fc)
 
-               ! Reference frame: j runs 1:nlevsoi here (never a snow index), and this
-               ! block is building a diffusion-grid spacing from the soil column, which
-               ! is a BGC quantity like the rest of this routine's soil-range terms.
-               ! The diffusive flux across the j/j+1 (or j/j-1) interface depends on the
-               ! physical separation between the two layers' nodes; using the deforming
-               ! (excess-ice-inflated) dz here would scale that separation by how much
-               ! ground ice happens to be in each layer this timestep -- the opposite of
-               ! what dz_ref vs. dz is for. This overrides the author's original comment
-               ! ("these should use current dz, no scaling"), which predates dz_ref/dz
-               ! splitting and reflects the single-frame code where "current dz" was the
-               ! only dz available; it is not evidence that this site should stay on the
-               ! deforming grid under the new convention.
                ! Set up coefficients for tridiagonal solver.
                if (j == 1 .and. j /= jwt(c) .and. j /= jwt(c)+1) then
                   dm1_zm1(c,j) = 1._r8/(1._r8/spec_grnd_cond(c,s)+dz_ref(c,j)/(diffus(c,j)*2._r8))

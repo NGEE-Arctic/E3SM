@@ -129,13 +129,6 @@ contains
          z                  => col_pp%z                                  , & ! Input:  [real(r8) (:,:) ]  layer depth  (m)                      
          dz                 => col_pp%dz                                 , & ! Input:  [real(r8) (:,:) ]  layer thickness depth (m)             
          zi                 => col_pp%zi                                 , & ! Input:  [real(r8) (:,:) ]  interface depth (m)                   
-         ! Deforming (z/dz/zi, above) is used for snow-layer bookkeeping and for the
-         ! tsoi17/t_soi_10cm depth integrals, which integrate t_soisno -- a field
-         ! solved on the deforming grid -- over a physical depth of actual ground.
-         ! Reference (z_ref/dz_ref, below) is used wherever soil hydrology
-         ! quantities (porosity, volumetric water, root-zone water) are computed.
-         ! No zi_ref binding: every interface-depth read here is on the deforming
-         ! frame, per the above.
          z_ref              => col_pp%z_ref                              , & ! Input:  [real(r8) (:,:) ]  reference layer node depth (m)
          dz_ref             => col_pp%dz_ref                             , & ! Input:  [real(r8) (:,:) ]  reference layer thickness (m)
          snl                => col_pp%snl                                , & ! Input:  [integer  (:)   ]  number of snow layers                    
@@ -201,51 +194,6 @@ contains
 
       ! Route excess-ice meltwater that exceeds the pore volume of the layer it
       ! formed in.
-      !
-      ! PhaseChange_beta adds melted excess ice to h2osoi_liq
-      ! (SoilTemperatureMod.F90:1834) with no saturation cap. That is the
-      ! expected state of a thawing ice-rich column, not an edge case: excess
-      ! ice at the 0.36 initial volumetric fraction melts to ~0.33 m3/m3 of
-      ! liquid, which against a watsat of ~0.4 already filled to 0.70 by
-      ! use_arctic_init (ColumnDataType.F90:1779) leaves the layer about 50%
-      ! oversaturated. Left alone the surplus propagates into every downstream
-      ! consumer of h2osoi_liq.
-      !
-      ! Surplus moves upward, never down: melt occurs at the thaw front, and
-      ! below it is still-frozen ice-rich permafrost that is effectively
-      ! impermeable. That asymmetry is why thermokarst water ponds at the
-      ! surface rather than draining away.
-      !
-      ! Placed here, after SnowWater and before SurfaceRunoff, for two reasons.
-      ! It cannot go in PhaseChange_beta: h2osfc is Input-only there, and
-      ! PhaseChangeH2osfc plus c_h2osfc/t_h2osfc/dz_h2osfc are all resolved
-      ! before it, so adding mass to h2osfc would desync surface-water energy
-      ! within the step. It also cannot be left to Drainage's existing surplus
-      ! cascade (SoilHydrologyMod.F90:1645-1658), which runs from
-      ! HydrologyDrainage at elm_driver.F90:1237 -- after CH4 (:1211) and after
-      ! everything else that reads h2osoi_liq, so the whole biogeochemistry and
-      ! diffusion sequence would see oversaturated layers for the timestep in
-      ! which melt occurs. The two handlers do not overlap: this one leaves
-      ! every layer at or below saturation, which is Drainage's precondition
-      ! anyway. New surface water participates in runoff this same timestep,
-      ! and h2osfc is already in endwb (HydrologyDrainageMod.F90:186), so water
-      ! conserves through the existing closure with no new flux plumbing.
-      !
-      ! Two things this deliberately does not track, both matching how the
-      ! existing soil-to-pond transfer at SoilHydrologyMod.F90:1675 behaves:
-      ! frac_h2osfc lags, since it is set in CanopyHydrology
-      ! (elm_driver.F90:716) and so is already stale with respect to every
-      ! in-step h2osfc update; and the advective sensible heat of moving water
-      ! from t_soisno(c,j) to t_h2osfc is not accounted, as ELM does not carry
-      ! it for internal water movement. The melt latent heat itself is
-      ! accounted, in xmf at SoilTemperatureMod.F90:1880.
-      !
-      ! Expect most surplus to reach the surface rather than cascade: an
-      ! ice-rich column at thaw has near-saturated layers above the front --
-      ! the same condition that let the excess ice form -- so headroom is
-      ! usually small. The cascade is here because it is correct when headroom
-      ! does exist, not because it will dominate the partition. Compare h2osfc
-      ! against QEXCESSICE in the first polygon run to confirm the split.
       if (use_polygonal_tundra) then
          do fc = 1, num_hydrologyc
             c = filter_hydrologyc(fc)
@@ -254,39 +202,6 @@ contains
                ! Bottom-to-top, carrying the unplaced surplus in exice_carry so
                ! it is offered to every layer on the way up, not just to the one
                ! immediately above.
-               !
-               ! The carry is what makes a single sweep sufficient, and it is
-               ! needed because this loop clamps each transfer to the receiving
-               ! layer's remaining capacity. Drainage's cascade
-               ! (SoilHydrologyMod.F90:1645-1658) does not clamp -- it dumps the
-               ! whole surplus into j-1 and lets that layer go oversaturated,
-               ! which the next iteration then picks up, so there the surplus
-               ! propagates for free. Clamping is preferable here (it never
-               ! leaves h2osoi_liq above capacity even transiently, so the
-               ! invariant holds at every point in the sweep rather than only at
-               ! the end), but it also means a clamped transfer can never make
-               ! the receiving layer oversaturated, so without the carry there
-               ! would be nothing for the next iteration to detect and surplus
-               ! would advance at most one layer before being ponded.
-               !
-               ! Bounded at nlevsoi: bedrock has no meaningful pore space to
-               ! cascade through, and after the nlevbed cap at
-               ! ColumnDataType.F90:1912 it holds no excess ice to melt.
-               !
-               ! The liquid capacity of a layer is its pore volume less the
-               ! part already occupied by pore ice -- eff_porosity as computed
-               ! at :595, but without that line's 0.01 floor. eff_porosity
-               ! itself cannot be used: it is not yet valid here, being
-               ! computed later in this same routine. The floor is dropped
-               ! deliberately, since it exists to keep eff_porosity usable as a
-               ! divisor downstream and would otherwise manufacture capacity in
-               ! a layer that is physically full of ice.
-               !
-               ! Capping against the ice-free pore volume rather than against
-               ! watsat*dz is what makes h2osoi_vol <= watsat actually hold:
-               ! h2osoi_vol sums liquid and ice volume fractions, so a layer
-               ! filled to watsat with liquid *plus* any pore ice is still
-               ! oversaturated.
                exice_carry = 0._r8
                do j = nlevsoi, 1, -1
                   exice_cap = max(0._r8, watsat(c,j) - h2osoi_ice(c,j)/(dz_ref(c,j)*denice)) &
@@ -522,12 +437,6 @@ contains
             l = col_pp%landunit(c)
             if (.not. lun_pp%urbpoi(l)) then
                ! soil T at top 17 cm added by F. Li and S. Levis
-               ! Deforming frame (zi/dz), deliberately: t_soisno is solved on the
-               ! deforming grid, so zi/dz IS this temperature field's own vertical
-               ! coordinate. "Top 0.17 m" also means 0.17 m of actual ground, which
-               ! with excess ice present spans fewer mineral layers. Integrating a
-               ! deforming-frame field against reference-frame limits would mix
-               ! frames -- the defect this convention exists to prevent.
                if (zi(c,j) <= 0.17_r8) then
                   fracl = 1._r8
                   tsoi17(c) = tsoi17(c) + t_soisno(c,j)*dz(c,j)*fracl

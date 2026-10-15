@@ -426,12 +426,6 @@ contains
     associate( &
          snl          => col_pp%snl, & ! number of snow layers
          dz           => col_pp%dz, &  ! layer thickness, deforming (m)
-         ! dz_ref is bound so the soil dry-mass term below tracks
-         ! SoilThermProp's cv (SoilTemperatureMod) term for term. If the two
-         ! heat accountings disagree the energy balance check cannot close, so
-         ! the two must change together. Deforming dz stays bound for the urban
-         ! wall/roof/improad terms, which carry no excess ice and whose cv_* are
-         ! per actual layer volume.
          dz_ref       => col_pp%dz_ref, & ! reference (mineral soil) layer thickness (m)
          nlev_improad => urbanparams_inst%nlev_improad, & ! number of impervious road layers
          cv_wall      => urbanparams_inst%cv_wall, & ! heat capacity of urban wall (J/m^3/K)
@@ -597,11 +591,6 @@ contains
              else if (lun_pp%itype(l) /= istwet .and. lun_pp%itype(l) /= istice .and. lun_pp%itype(l) /= istice_mec) then
                 ! Note that this also includes impervious roads below nlev_improad (where
                 ! we have soil)
-                ! Reference thickness, matching SoilThermProp's cv: csol and
-                ! watsat are built on the fixed grid, so deformed dz would
-                ! inflate the mineral solid volume by the excess-ice fraction
-                ! and charge that volume twice -- once here as dry mass and
-                ! again below as ice.
                 heat_dry_mass(c) = heat_dry_mass(c) + &
                      TempToHeat( t_soisno(c,j), (csol(c,j)*(1-watsat(c,j))*dz_ref(c,j)))
              end if
@@ -617,17 +606,7 @@ contains
              heat_ice(c) = heat_ice(c) + &
                   TempToHeat(t_soisno(c,j), (h2osoi_ice(c,j)*cpice))
 
-             ! Excess ground ice carries sensible heat exactly as pore ice does,
-             ! and SoilThermProp adds excess_ice*cpice to cv for these columns.
-             ! Without the matching term here the two heat accountings differ by
-             ! the whole excess-ice inventory -- at 0.36 volumetric fraction the
-             ! largest single term in a polygon column's ice budget -- and the
-             ! energy balance check cannot close.
-             !
-             ! Nested guard, not `.and.`: Fortran does not guarantee
-             ! short-circuit evaluation, so a combined test could still
-             ! reference col_ws%excess_ice where it is unallocated. Matches the
-             ! form used at SoilTemperatureMod.F90:1573-1578.
+             ! Excess ground ice carries sensible heat exactly as pore ice does
              if (use_polygonal_tundra) then
                 if (lun_pp%ispolygon(l)) then
                    heat_ice(c) = heat_ice(c) + &
@@ -692,14 +671,6 @@ contains
     associate( &
          snl          => col_pp%snl, & ! number of snow layers
          dz           => col_pp%dz, &  ! layer thickness, deforming (m)
-         ! Reference thickness for the soil dry-mass term below, matching
-         ! ComputeHeatNonLake and LakeTemperature's cv. No excess-ice heat term
-         ! is needed in this routine: ispolygon is set only on istsoil
-         ! landunits (initSubgridMod.F90:524-526), which have lakpoi = .false.,
-         ! so a lake column is never a polygon column and carries no excess
-         ! ice. The retarget is therefore bit-for-bit here -- initVerticalMod
-         ! sets deep-lake dz and dz_ref from the same dzsoi (:604-609) -- and is
-         ! made only so both routines state the same frame.
          dz_ref       => col_pp%dz_ref, & ! reference (mineral soil) layer thickness (m)
          watsat       => soilstate_inst%watsat_col, & ! volumetric soil water at saturation (porosity)
          csol         => soilstate_inst%csol_col, & ! heat capacity, soil solids (J/m**3/Kelvin)
