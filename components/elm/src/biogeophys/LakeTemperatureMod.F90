@@ -216,8 +216,8 @@ contains
     associate(                                                       &
          dz_lake         =>   col_pp%dz_lake                          , & ! Input:  [real(r8) (:,:) ]  layer thickness for lake (m)
          z_lake          =>   col_pp%z_lake                           , & ! Input:  [real(r8) (:,:) ]  layer depth for lake (m)
-         dz              =>   col_pp%dz                               , & ! Input:  [real(r8) (:,:) ]  layer thickness for snow & soil (m)
-         z               =>   col_pp%z                                , & ! Input:  [real(r8) (:,:) ]  layer depth for snow & soil (m)
+         dz_thermal              =>   col_pp%dz                               , & ! Input:  [real(r8) (:,:) ]  layer thickness for snow & soil (m)
+         z_thermal               =>   col_pp%z                                , & ! Input:  [real(r8) (:,:) ]  layer depth for snow & soil (m)
          snl             =>   col_pp%snl                              , & ! Input:  [integer  (:)   ]  negative of number of snow layers
          lakedepth       =>   col_pp%lakedepth                        , & ! Input:  [real(r8) (:)   ]  column lake depth (m)
 
@@ -551,7 +551,7 @@ contains
 
           if (j >= jtop(c)) then
              if (j < 1) then !snow layer
-                zx(c,j) = z(c,j)
+                zx(c,j) = z_thermal(c,j)
                 cvx(c,j) = cv(c,j)
                 if (j == jtop(c)) then ! no absorption because it has already been assigned to the surface
                                        ! interface
@@ -566,7 +566,7 @@ contains
                 phix(c,j) = phi(c,j)
                 tx(c,j) = t_lake(c,j)
              else !soil layer
-                zx(c,j) = zx(c,nlevlak) + dz_lake(c,nlevlak)/2._r8 + z(c,jprime)
+                zx(c,j) = zx(c,nlevlak) + dz_lake(c,nlevlak)/2._r8 + z_thermal(c,jprime)
                 cvx(c,j) = cv(c,jprime)
                 if (j == nlevlak + 1) then !top soil layer
                    phix(c,j) = phi_soil(c)
@@ -594,7 +594,7 @@ contains
              else if (j == 0) then !bottom snow layer
                 dzp = zx(c,j+1) - zx(c,j)
                 tkix(c,j) = tk_lake(c,1)*tk(c,j)*dzp / &
-                      (tk(c,j)*z_lake(c,1) + tk_lake(c,1)*(-z(c,j)) )
+                      (tk(c,j)*z_lake(c,1) + tk_lake(c,1)*(-z_thermal(c,j)) )
                 ! tk(c,0) is the conductivity at the middle of that layer, as defined in SoilThermProp_Lake
              else if (j < nlevlak) then !non-bottom lake layer
                 tkix(c,j) = ( tk_lake(c,j)*tk_lake(c,j+1) * (dz_lake(c,j+1)+dz_lake(c,j)) ) &
@@ -602,7 +602,7 @@ contains
              else if (j == nlevlak) then !bottom lake layer
                 dzp = zx(c,j+1) - zx(c,j)
                 tkix(c,j) = (tktopsoillay(c)*tk_lake(c,j)*dzp / &
-                    (tktopsoillay(c)*dz_lake(c,j)/2._r8 + tk_lake(c,j)*z(c,1) ) )
+                    (tktopsoillay(c)*dz_lake(c,j)/2._r8 + tk_lake(c,j)*z_thermal(c,1) ) )
                     ! tktopsoillay is the conductivity at the middle of that layer, as defined in SoilThermProp_Lake
              else !soil layer
                 tkix(c,j) = tk(c,jprime)
@@ -741,7 +741,7 @@ contains
                 puddle(c) = .false.
              end if
 
-             icesum(c) = icesum(c) + lake_icefrac(c,j)*dz(c,j)
+             icesum(c) = icesum(c) + lake_icefrac(c,j)*dz_thermal(c,j)
 
              if (j == nlevlak) then
                 if (icesum(c) >= pudz) puddle(c) = .true.
@@ -949,7 +949,7 @@ contains
              c = filter_lakec(fc)
 
              if (j > jconvect(c) .and. j < jconvectbot(c)) then  ! Assume resistance is zero for levels that convect
-                lakeresist(c) = lakeresist(c) + dz(c,j)/kme(c,j) ! dz/eddy or molecular diffusivity
+                lakeresist(c) = lakeresist(c) + dz_thermal(c,j)/kme(c,j) ! dz/eddy or molecular diffusivity
              end if
 
              if (j == nlevlak) then ! Calculate grnd_ch4_cond
@@ -1102,9 +1102,9 @@ contains
 
      associate(                                           &
           snl         => col_pp%snl                        , & ! Input:  [integer (:)]  number of snow layers
-          dz          => col_pp%dz                         , & ! Input:  [real(r8) (:,:)]  layer thickness (m)
-          zi          => col_pp%zi                         , & ! Input:  [real(r8) (:,:)]  interface level below a "z" level (m)
-          z           => col_pp%z                          , & ! Input:  [real(r8) (:,:)]  layer depth (m)
+          dz_thermal          => col_pp%dz                         , & ! Input:  [real(r8) (:,:)]  layer thickness (m)
+          zi_thermal          => col_pp%zi                         , & ! Input:  [real(r8) (:,:)]  interface level below a "z" level (m)
+          z_thermal           => col_pp%z                          , & ! Input:  [real(r8) (:,:)]  layer depth (m)
 
           watsat      => soilstate_vars%watsat_col      , & ! Input:  [real(r8) (:,:)]  volumetric soil water at saturation (porosity)
           tksatu      => soilstate_vars%tksatu_col      , & ! Input:  [real(r8) (:,:)]  thermal conductivity, saturated soil [W/m-K]
@@ -1143,7 +1143,7 @@ contains
                    dksat = tkmg(c,j)*0.249_r8**(fl*watsat(c,j))*2.29_r8**watsat(c,j)
                 endif
                 thk(c,j) = dke*dksat + (1._r8-dke)*tkdry(c,j)
-                satw = (h2osoi_liq(c,j)/denh2o + h2osoi_ice(c,j)/denice)/(dz(c,j)*watsat(c,j))
+                satw = (h2osoi_liq(c,j)/denh2o + h2osoi_ice(c,j)/denice)/(dz_thermal(c,j)*watsat(c,j))
                 ! Hydrology routine won't let the excess be liquid.
                 if (satw > 1._r8) then
                    xicevol = (satw-1._r8)*watsat(c,j)
@@ -1165,7 +1165,7 @@ contains
              ! Thermal conductivity of snow, which from Jordan (1991) pp. 18
              ! Only examine levels from snl(c)+1 -> 0 where snl(c) < 1
              if (snl(c)+1 < 1 .AND. (j >= snl(c)+1) .AND. (j <= 0)) then
-                bw = (h2osoi_ice(c,j)+h2osoi_liq(c,j))/dz(c,j)
+                bw = (h2osoi_ice(c,j)+h2osoi_liq(c,j))/dz_thermal(c,j)
                 thk(c,j) = tkair + (7.75e-5_r8 *bw + 1.105e-6_r8*bw*bw)*(tkice-tkair)
              end if
 
@@ -1182,8 +1182,8 @@ contains
           do fc = 1,num_lakec
              c = filter_lakec(fc)
              if (j >= snl(c)+1 .AND. j <= nlevgrnd-1 .AND. j /= 0) then
-                tk(c,j) = thk(c,j)*thk(c,j+1)*(z(c,j+1)-z(c,j)) &
-                     /(thk(c,j)*(z(c,j+1)-zi(c,j))+thk(c,j+1)*(zi(c,j)-z(c,j)))
+                tk(c,j) = thk(c,j)*thk(c,j+1)*(z_thermal(c,j+1)-z_thermal(c,j)) &
+                     /(thk(c,j)*(z_thermal(c,j+1)-zi_thermal(c,j))+thk(c,j+1)*(zi_thermal(c,j)-z_thermal(c,j)))
              else if (j == 0 .and. j >= snl(c)+1) then
                 tk(c,j) = thk(c,j)
              else if (j == nlevgrnd) then
@@ -1199,7 +1199,7 @@ contains
        do j = 1, nlevgrnd
           do fc = 1,num_lakec
              c = filter_lakec(fc)
-             cv(c,j) = csol(c,j)*(1-watsat(c,j))*dz(c,j) +   &
+             cv(c,j) = csol(c,j)*(1-watsat(c,j))*dz_thermal(c,j) +   &
                   (h2osoi_ice(c,j)*cpice + h2osoi_liq(c,j)*cpliq)
              !   if (j == 1) then
              !      if (snl(c)+1 == 1 .AND. h2osno(c) > 0._r8) then
@@ -1278,7 +1278,7 @@ contains
 
      associate(                                                   &
           dz_lake         => col_pp%dz_lake                        , & ! Input:  [real(r8)  (:,:) ] lake layer thickness (m)
-          dz              => col_pp%dz                             , & ! Input:  [real(r8)  (:,:) ] layer thickness (m)
+          dz_thermal              => col_pp%dz                             , & ! Input:  [real(r8)  (:,:) ] layer thickness (m)
           snl             => col_pp%snl                            , & ! Input:  [integer   (:)   ] number of snow layers
 
           snow_depth      => col_ws%snow_depth     , & ! Output: [real(r8)  (:)   ] snow height (m)

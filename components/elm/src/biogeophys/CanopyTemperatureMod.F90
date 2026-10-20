@@ -116,7 +116,7 @@ contains
 
     associate(                                                          &
          snl              =>    col_pp%snl                            , & ! Input:  [integer  (:)   ] number of snow layers
-         dz               =>    col_pp%dz                             , & ! Input:  [real(r8) (:,:) ] layer depth (m)
+         dz               =>    col_pp%dz_ref                         , & ! Input:  [real(r8) (:,:) ] reference layer thickness (m)
          zii              =>    col_pp%zii                            , & ! Output: [real(r8) (:)   ] convective boundary height [m]
          z_0_town         =>    lun_pp%z_0_town                       , & ! Input:  [real(r8) (:)   ] momentum roughness length of urban landunit (m)
          z_d_town         =>    lun_pp%z_d_town                       , & ! Input:  [real(r8) (:)   ] displacement height of urban landunit (m)

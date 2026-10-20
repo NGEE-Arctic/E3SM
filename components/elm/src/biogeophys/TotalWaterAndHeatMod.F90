@@ -10,6 +10,7 @@ module TotalWaterAndHeatMod
   use shr_log_mod        , only : errMsg => shr_log_errMsg
   use decompMod          , only : bounds_type
   use elm_varcon         , only : cpice, cpliq, denh2o, tfrz, hfus, aquifer_water_baseline
+  use elm_varctl         , only : use_polygonal_tundra
   use elm_varpar         , only : nlevgrnd, nlevsoi, nlevurb, nlevlak
   use subgridAveMod      , only : p2c
   use SoilHydrologyType  , only : soilhydrology_type
@@ -424,7 +425,8 @@ contains
 
     associate( &
          snl          => col_pp%snl, & ! number of snow layers
-         dz           => col_pp%dz, &  ! layer depth (m)
+         dz           => col_pp%dz, &  ! layer thickness, deforming (m)
+         dz_ref       => col_pp%dz_ref, & ! reference (mineral soil) layer thickness (m)
          nlev_improad => urbanparams_inst%nlev_improad, & ! number of impervious road layers
          cv_wall      => urbanparams_inst%cv_wall, & ! heat capacity of urban wall (J/m^3/K)
          cv_roof      => urbanparams_inst%cv_roof, & ! heat capacity of urban roof (J/m^3/K)
@@ -590,7 +592,7 @@ contains
                 ! Note that this also includes impervious roads below nlev_improad (where
                 ! we have soil)
                 heat_dry_mass(c) = heat_dry_mass(c) + &
-                     TempToHeat( t_soisno(c,j), (csol(c,j)*(1-watsat(c,j))*dz(c,j)))
+                     TempToHeat( t_soisno(c,j), (csol(c,j)*(1-watsat(c,j))*dz_ref(c,j)))
              end if
           end if
 
@@ -603,6 +605,14 @@ contains
                   latent_heat_liquid = latent_heat_liquid(c))
              heat_ice(c) = heat_ice(c) + &
                   TempToHeat(t_soisno(c,j), (h2osoi_ice(c,j)*cpice))
+
+             ! Excess ground ice carries sensible heat exactly as pore ice does
+             if (use_polygonal_tundra) then
+                if (lun_pp%ispolygon(l)) then
+                   heat_ice(c) = heat_ice(c) + &
+                        TempToHeat(t_soisno(c,j), (col_ws%excess_ice(c,j)*cpice))
+                end if
+             end if
           end if
        end do
     end do
@@ -660,7 +670,8 @@ contains
 
     associate( &
          snl          => col_pp%snl, & ! number of snow layers
-         dz           => col_pp%dz, &  ! layer depth (m)
+         dz           => col_pp%dz, &  ! layer thickness, deforming (m)
+         dz_ref       => col_pp%dz_ref, & ! reference (mineral soil) layer thickness (m)
          watsat       => soilstate_inst%watsat_col, & ! volumetric soil water at saturation (porosity)
          csol         => soilstate_inst%csol_col, & ! heat capacity, soil solids (J/m**3/Kelvin)
          t_soisno     => col_es%t_soisno, & ! soil temperature (Kelvin)
@@ -708,7 +719,7 @@ contains
           c = filter_lakec(fc)
 
           heat_dry_mass(c) = heat_dry_mass(c) + &
-               TempToHeat( t_soisno(c,j), (csol(c,j)*(1-watsat(c,j))*dz(c,j)))
+               TempToHeat( t_soisno(c,j), (csol(c,j)*(1-watsat(c,j))*dz_ref(c,j)))
           call AccumulateLiquidWaterHeat( &
                temp = t_soisno(c,j), &
                h2o = h2osoi_liq(c,j), &

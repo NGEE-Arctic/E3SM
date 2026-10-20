@@ -69,6 +69,7 @@ contains
     use column_varcon        , only : icol_roof, icol_road_imperv, icol_road_perv, icol_sunwall
     use column_varcon        , only : icol_shadewall
     use elm_varctl           , only : use_cn, use_betr, use_fates, use_pflotran, pf_hmode, use_fan
+    use elm_varctl           , only : use_polygonal_tundra
     use elm_varpar           , only : nlevgrnd, nlevsno, nlevsoi, nlevurb
     use SnowHydrologyMod     , only : SnowCompaction, CombineSnowLayers, DivideSnowLayers, DivideExtraSnowLayers, SnowCapping
     use SnowHydrologyMod     , only : SnowWater, BuildSnowFilter 
@@ -117,6 +118,10 @@ contains
     real(r8) :: stsw                          ! volumetric soil water to 0.5 m at saturation
     real(r8) :: fracl                         ! fraction of soil layer contributing to 10cm total soil water
     real(r8) :: s_node                        ! soil wetness (-)
+    real(r8) :: exice_cap                     ! liquid capacity of a layer: ice-free pore volume (kg/m2)
+    real(r8) :: exice_surplus                 ! excess-ice meltwater above that capacity (kg/m2)
+    real(r8) :: exice_moved                   ! meltwater absorbed by a layer from below (kg/m2)
+    real(r8) :: exice_carry                   ! meltwater still looking for pore space (kg/m2)
     real(r8) :: icefrac(bounds%begc:bounds%endc,1:nlevgrnd)
     !-----------------------------------------------------------------------
     
@@ -124,6 +129,8 @@ contains
          z                  => col_pp%z                                  , & ! Input:  [real(r8) (:,:) ]  layer depth  (m)                      
          dz                 => col_pp%dz                                 , & ! Input:  [real(r8) (:,:) ]  layer thickness depth (m)             
          zi                 => col_pp%zi                                 , & ! Input:  [real(r8) (:,:) ]  interface depth (m)                   
+         z_ref              => col_pp%z_ref                              , & ! Input:  [real(r8) (:,:) ]  reference layer node depth (m)
+         dz_ref             => col_pp%dz_ref                             , & ! Input:  [real(r8) (:,:) ]  reference layer thickness (m)
          snl                => col_pp%snl                                , & ! Input:  [integer  (:)   ]  number of snow layers                    
          nlev2bed           => col_pp%nlevbed                           , & ! Input:  [integer  (:)   ]  number of layers to bedrock                     
          ctype              => col_pp%itype                              , & ! Input:  [integer  (:)   ]  column type                              
@@ -144,6 +151,7 @@ contains
          snowdp             => col_ws%snowdp             , & ! Input:  [real(r8) (:)   ]  gridcell averaged snow height (m)
          frac_sno_eff       => col_ws%frac_sno_eff       , & ! Input:  [real(r8) (:)   ]  eff.  snow cover fraction (col) [frc]
          frac_h2osfc        => col_ws%frac_h2osfc        , & ! Input:  [real(r8) (:)   ]  fraction of ground covered by surface water (0 to 1)
+         h2osfc             => col_ws%h2osfc             , & ! InOut:  [real(r8) (:)   ]  surface water (mm)
          begwb              => col_ws%begwb              , & ! Input:  [real(r8) (:)   ]  water mass begining of the time step
          snw_rds            => col_ws%snw_rds            , & ! Output: [real(r8) (:,:) ]  effective snow grain radius (col,lyr) [microns, m^-6]
          snw_rds_top        => col_ws%snw_rds_top        , & ! Output: [real(r8) (:)   ]  effective snow grain size, top layer(col) [microns]
@@ -183,6 +191,36 @@ contains
 
       call SnowWater(bounds, num_snowc, filter_snowc, num_nosnowc, filter_nosnowc, &
            atm2lnd_vars, aerosol_vars)
+
+      ! Route excess-ice meltwater that exceeds the pore volume of the layer it
+      ! formed in.
+      if (use_polygonal_tundra) then
+         do fc = 1, num_hydrologyc
+            c = filter_hydrologyc(fc)
+            l = col_pp%landunit(c)
+            if (lun_pp%ispolygon(l)) then
+               ! Bottom-to-top, carrying the unplaced surplus in exice_carry so
+               ! it is offered to every layer on the way up, not just to the one
+               ! immediately above.
+               exice_carry = 0._r8
+               do j = nlev2bed(c), 1, -1
+                  exice_cap = max(0._r8, watsat(c,j) - h2osoi_ice(c,j)/(dz_ref(c,j)*denice)) &
+                              * dz_ref(c,j)*denh2o
+
+                  ! Absorb what fits of the surplus arriving from below.
+                  exice_moved = min(exice_carry, max(0._r8, exice_cap - h2osoi_liq(c,j)))
+                  h2osoi_liq(c,j) = h2osoi_liq(c,j) + exice_moved
+                  exice_carry     = exice_carry - exice_moved
+
+                  ! This layer's own surplus then joins the carry.
+                  exice_surplus = max(0._r8, h2osoi_liq(c,j) - exice_cap)
+                  h2osoi_liq(c,j) = h2osoi_liq(c,j) - exice_surplus
+                  exice_carry     = exice_carry + exice_surplus
+               end do
+               h2osfc(c) = h2osfc(c) + exice_carry
+            end if
+         end do
+      end if
 
       ! mapping soilmoist from CLM to VIC layers for runoff calculations
       if (use_vichydro) then
@@ -463,11 +501,11 @@ contains
             if ((ctype(c) == icol_sunwall .or. ctype(c) == icol_shadewall &
                  .or. ctype(c) == icol_roof) .and. j > nlevurb) then
             else
-               h2osoi_vol(c,j) = h2osoi_liq(c,j)/(dz(c,j)*denh2o) + h2osoi_ice(c,j)/(dz(c,j)*denice)
-               h2osoi_liqvol(c,j) = h2osoi_liq(c,j)/(dz(c,j)*denh2o)
-               h2osoi_icevol(c,j) = h2osoi_ice(c,j)/(dz(c,j)*denice)
+               h2osoi_vol(c,j) = h2osoi_liq(c,j)/(dz_ref(c,j)*denh2o) + h2osoi_ice(c,j)/(dz_ref(c,j)*denice)
+               h2osoi_liqvol(c,j) = h2osoi_liq(c,j)/(dz_ref(c,j)*denh2o)
+               h2osoi_icevol(c,j) = h2osoi_ice(c,j)/(dz_ref(c,j)*denice)
                air_vol(c,j)       = max(1.e-4_r8,watsat(c,j) - h2osoi_vol(c,j))
-               eff_porosity(c,j)  = max(0.01_r8,watsat(c,j) - h2osoi_ice(c,j)/(dz(c,j)*denice))
+               eff_porosity(c,j)  = max(0.01_r8,watsat(c,j) - h2osoi_ice(c,j)/(dz_ref(c,j)*denice))
 
             end if
          end do
@@ -483,7 +521,7 @@ contains
 
                if (h2osoi_liq(c,j) > 0._r8) then
 
-                  vwc = h2osoi_liq(c,j)/(dz(c,j)*denh2o)
+                  vwc = h2osoi_liq(c,j)/(dz_ref(c,j)*denh2o)
 
                   ! the following limit set to catch very small values of
                   ! fractional saturation that can crash the calculation of psi
@@ -515,12 +553,12 @@ contains
          do j = 1, nlevgrnd
             do fc = 1, num_hydrologyc
                c = filter_hydrologyc(fc)
-               !if (z(c,j)+0.5_r8*dz(c,j) <= 0.5_r8) then
-               if (z(c,j)+0.5_r8*dz(c,j) <= 0.05_r8) then
+               !if (z_ref(c,j)+0.5_r8*dz_ref(c,j) <= 0.5_r8) then
+               if (z_ref(c,j)+0.5_r8*dz_ref(c,j) <= 0.05_r8) then
                   watdry = watsat(c,j) * (316230._r8/sucsat(c,j)) ** (-1._r8/bsw(c,j))
-                  rwat(c) = rwat(c) + (h2osoi_vol(c,j)-watdry) * dz(c,j)
-                  swat(c) = swat(c) + (watsat(c,j)    -watdry) * dz(c,j)
-                  rz(c) = rz(c) + dz(c,j)
+                  rwat(c) = rwat(c) + (h2osoi_vol(c,j)-watdry) * dz_ref(c,j)
+                  swat(c) = swat(c) + (watsat(c,j)    -watdry) * dz_ref(c,j)
+                  rz(c) = rz(c) + dz_ref(c,j)
                end if
             end do
          end do
@@ -541,11 +579,11 @@ contains
          do j = 1, nlevgrnd
             do fc = 1, num_hydrologyc
                c = filter_hydrologyc(fc)
-               if (z(c,j)+0.5_r8*dz(c,j) <= 0.17_r8) then
+               if (z_ref(c,j)+0.5_r8*dz_ref(c,j) <= 0.17_r8) then
                   watdry = watsat(c,j) * (316230._r8/sucsat(c,j)) ** (-1._r8/bsw(c,j))
-                  rwat(c) = rwat(c) + (h2osoi_vol(c,j)-watdry) * dz(c,j)
-                  swat(c) = swat(c) + (watsat(c,j)    -watdry) * dz(c,j)
-                  rz(c) = rz(c) + dz(c,j)
+                  rwat(c) = rwat(c) + (h2osoi_vol(c,j)-watdry) * dz_ref(c,j)
+                  swat(c) = swat(c) + (watsat(c,j)    -watdry) * dz_ref(c,j)
+                  rz(c) = rz(c) + dz_ref(c,j)
                end if
             end do
          end do

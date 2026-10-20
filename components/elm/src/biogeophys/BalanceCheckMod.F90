@@ -74,7 +74,6 @@ contains
     !-----------------------------------------------------------------------
 
     associate(                                                         &
-         zi                     =>    col_pp%zi                                  , & ! Input:  [real(r8) (:,:) ]  interface level below a "z" level (m)
          h2ocan_patch           =>    veg_ws%h2ocan               , & ! Input:  [real(r8) (:)   ]  canopy water (mm H2O) (pft-level)
          h2osfc                 =>    col_ws%h2osfc                 , & ! Input:  [real(r8) (:)   ]  surface water (mm)
          h2osno                 =>    col_ws%h2osno                 , & ! Input:  [real(r8) (:)   ]  snow water (mm H2O)
@@ -813,7 +812,7 @@ contains
     type(soilhydrology_type)  , intent(inout) :: soilhydrology_vars
     !
     ! !LOCAL VARIABLES:
-    integer  :: c, p, f, j, fc,g                  ! indices
+    integer  :: c, p, f, j, fc,g,l                ! indices
     real(r8) :: h2osoi_vol
     real(r8) :: h2ocan_col(bounds%begc:bounds%endc)
     real(r8) :: begwb_col (bounds%begc:bounds%endc)
@@ -822,7 +821,6 @@ contains
     real(r8) :: wa_local_col(bounds%begc:bounds%endc)
 
     associate(                                                                        &
-         zi                        =>    col_pp%zi                                  , & ! Input:  [real(r8) (:,:) ]  interface level below a "z" level (m)
          h2ocan_patch              =>    veg_ws%h2ocan               , & ! Input:  [real(r8) (:)   ]  canopy water (mm H2O) (pft-level)
          h2osfc                    =>    col_ws%h2osfc                 , & ! Input:  [real(r8) (:)   ]  surface water (mm)
          h2osno                    =>    col_ws%h2osno                 , & ! Input:  [real(r8) (:)   ]  snow water (mm H2O)
@@ -876,12 +874,19 @@ contains
       do j = 1, nlevgrnd
          do f = 1, num_nolakec
             c = filter_nolakec(f)
+            l = col_pp%landunit(c)
             if ((col_pp%itype(c) == icol_sunwall .or. col_pp%itype(c) == icol_shadewall &
                  .or. col_pp%itype(c) == icol_roof) .and. j > nlevurb) then
             else
-               begwb_col(c) = begwb_col(c) + h2osoi_ice(c,j) + h2osoi_liq(c,j)
-               h2osoi_liq_depth_intg(c) = h2osoi_liq_depth_intg(c) + h2osoi_liq(c,j)
-               h2osoi_ice_depth_intg(c) = h2osoi_ice_depth_intg(c) + h2osoi_ice(c,j)
+               if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
+                  begwb_col(c) = begwb_col(c) + h2osoi_ice(c,j) + h2osoi_liq(c,j) + excess_ice(c,j)
+                  h2osoi_liq_depth_intg(c) = h2osoi_liq_depth_intg(c) + h2osoi_liq(c,j)
+                  h2osoi_ice_depth_intg(c) = h2osoi_ice_depth_intg(c) + h2osoi_ice(c,j) + excess_ice(c,j)
+               else
+                  begwb_col(c) = begwb_col(c) + h2osoi_ice(c,j) + h2osoi_liq(c,j)
+                  h2osoi_liq_depth_intg(c) = h2osoi_liq_depth_intg(c) + h2osoi_liq(c,j)
+                  h2osoi_ice_depth_intg(c) = h2osoi_ice_depth_intg(c) + h2osoi_ice(c,j)
+               end if
             end if
          end do
       end do

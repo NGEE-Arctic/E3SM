@@ -85,7 +85,7 @@ contains
     !-----------------------------------------------------------------------
 
     associate(                                                                  &
-         dz                     => col_pp%dz                                     , & ! Input:  [real(r8) (:,:) ]  layer thickness depth (m)
+         dz                     => col_pp%dz_ref                                 , & ! Input:  [real(r8) (:,:) ]  reference layer thickness (m)
          ctype                  => col_pp%itype                                  , & ! Input:  [integer  (:)   ]  column type
 
          qflx_floodg            => atm2lnd_vars%forc_flood_grc                , & ! Input:  [real(r8) (:)   ]  gridcell flux of flood water from RTM
