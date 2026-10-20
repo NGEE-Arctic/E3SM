@@ -203,7 +203,7 @@ contains
                ! it is offered to every layer on the way up, not just to the one
                ! immediately above.
                exice_carry = 0._r8
-               do j = nlevsoi, 1, -1
+               do j = nlev2bed(c), 1, -1
                   exice_cap = max(0._r8, watsat(c,j) - h2osoi_ice(c,j)/(dz_ref(c,j)*denice)) &
                               * dz_ref(c,j)*denh2o
 
