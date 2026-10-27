@@ -9,7 +9,7 @@ module SoilStateType
   use spmdMod         , only : mpicom, MPI_INTEGER, masterproc, iam
   use ncdio_pio       , only : file_desc_t, ncd_defvar, ncd_io, ncd_double, ncd_int, ncd_inqvdlen
   use ncdio_pio       , only : ncd_pio_openfile, ncd_inqfdims, ncd_pio_closefile, ncd_inqdid, ncd_inqdlen
-  use elm_varpar      , only : more_vertlayers, numpft, numrad
+  use elm_varpar      , only : interp_soil_texture, numpft, numrad
   use elm_varpar      , only : nlevsoi, nlevgrnd, nlevlak, nlevsoifl, nlayer, nlayert, nlevurb, nlevsno
   use elm_varpar      , only : scalez, zecoeff
   use landunit_varcon , only : istice, istdlak, istwet, istsoil, istcrop, istice_mec
@@ -18,9 +18,10 @@ module SoilStateType
   use elm_varcon      , only : secspday, mu, denh2o, denice, grlnd
   use landunit_varcon , only : istice, istdlak, istwet, istsoil, istcrop, istice_mec
   use column_varcon   , only : icol_roof, icol_sunwall, icol_shadewall, icol_road_perv, icol_road_imperv
-  use elm_varctl      , only : use_cn, use_lch4,use_dynroot, use_fates
+  use elm_varctl      , only : use_cn, use_lch4,use_dynroot, use_fates, soil_thermal_conductivity_model
   use elm_varctl      , only : use_erosion
   use elm_varctl      , only : use_var_soil_thick
+  use elm_varctl      , only : squareomfrac
   use elm_varctl      , only : iulog, fsurdat, hist_wrtch4diag
   use CH4varcon       , only : allowlakeprod
   use LandunitType    , only : lun_pp                
@@ -72,6 +73,7 @@ module SoilStateType
 
   !!!   ! thermal conductivity / heat capacity
      real(r8), pointer :: thk_col              (:,:) ! col thermal conductivity of each layer [W/m-K]
+     real(r8), pointer :: tk_h2osfc_col        (:)   ! col thermal conductivity of surface water [W/(m K)]
      real(r8), pointer :: tkmg_col             (:,:) ! col thermal conductivity, soil minerals  [W/m-K] (new) (nlevgrnd)
      real(r8), pointer :: tkdry_col            (:,:) ! col thermal conductivity, dry soil (W/m/Kelvin) (nlevgrnd)
      real(r8), pointer :: tksatu_col           (:,:) ! col thermal conductivity, saturated soil [W/m-K] (new) (nlevgrnd)
@@ -179,6 +181,7 @@ contains
     allocate(this%gwc_thr_col          (begc:endc))                     ; this%gwc_thr_col          (:)   = spval
 
     allocate(this%thk_col              (begc:endc,-nlevsno+1:nlevgrnd)) ; this%thk_col              (:,:) = spval
+    allocate(this%tk_h2osfc_col        (begc:endc))                     ; this%tk_h2osfc_col        (:)   = spval
     allocate(this%tkmg_col             (begc:endc,nlevgrnd))            ; this%tkmg_col             (:,:) = spval
     allocate(this%tkdry_col            (begc:endc,nlevgrnd))            ; this%tkdry_col            (:,:) = spval
     allocate(this%tksatu_col           (begc:endc,nlevgrnd))            ; this%tksatu_col           (:,:) = spval
@@ -240,28 +243,28 @@ contains
        this%bsw_col(begc:endc,:) = spval
        call hist_addfld2d (fname='bsw', units='1', type2d='levgrnd', &
             avgflag='A', long_name='clap and hornberger B', &
-            ptr_col=this%bsw_col, default='inactive')
+            ptr_col=this%bsw_col, default='active')
     end if
 
     if (use_cn) then
        this%rootfr_patch(begp:endp,:) = spval
        call hist_addfld2d (fname='ROOTFR', units='proportion', type2d='levgrnd', &
             avgflag='A', long_name='fraction of roots in each soil layer', &
-            ptr_patch=this%rootfr_patch, default='inactive')
+            ptr_patch=this%rootfr_patch, default='active')
     end if
 
     if (use_cn) then
        this%rootr_patch(begp:endp,:) = spval
        call hist_addfld2d (fname='ROOTR', units='proportion', type2d='levgrnd', &
             avgflag='A', long_name='effective fraction of roots in each soil layer', &
-            ptr_patch=this%rootr_patch, default='inactive')
+            ptr_patch=this%rootr_patch, default='active')
     end if
 
     if (use_cn) then
        this%rootr_col(begc:endc,:) = spval
        call hist_addfld2d (fname='ROOTR_COLUMN', units='proportion', type2d='levgrnd', &
             avgflag='A', long_name='effective fraction of roots in each soil layer', &
-            ptr_col=this%rootr_col, default='inactive')
+            ptr_col=this%rootr_col, default='active')
 
     end if
 
@@ -269,7 +272,7 @@ contains
        this%root_depth_patch(begp:endp) = spval
        call hist_addfld1d (fname='ROOT_DEPTH', units="m", &
             avgflag='A', long_name='rooting depth', &
-            ptr_patch=this%root_depth_patch, default='inactive' )
+            ptr_patch=this%root_depth_patch, default='active' )
     end if
 
     if (use_cn .or. use_fates) then
@@ -285,10 +288,21 @@ contains
          avgflag='A', long_name='Thermal conductivity', &
          ptr_col=data2dptr, no_snow_behavior=no_snow_normal, default='inactive')
 
+    this%thk_col(begc:endc,1:nlevgrnd) = spval
+    data2dptr => this%thk_col(:,1:nlevgrnd)
+    call hist_addfld2d (fname='TK', units='W/m-K', type2d='levgrnd', &
+         avgflag='A', long_name='Thermal conductivity at soil layer centers', &
+         ptr_col=data2dptr, l2g_scale_type='veg', default='active')
+
+    this%tk_h2osfc_col(begc:endc) = spval
+    call hist_addfld1d (fname='TK_H2OSFC', units='W/(m K)', &
+         avgflag='A', long_name='Thermal conductivity of surface water', &
+         ptr_col=this%tk_h2osfc_col, default='active')
+
     this%hk_l_col(begc:endc,:) = spval
     call hist_addfld2d (fname='HK',  units='mm/s', type2d='levgrnd',  &
          avgflag='A', long_name='hydraulic conductivity (vegetated landunits only)', &
-         ptr_col=this%hk_l_col, set_spec=spval, l2g_scale_type='veg', default='inactive')
+         ptr_col=this%hk_l_col, set_spec=spval, l2g_scale_type='veg', default='active')
 
     this%soilalpha_col(begc:endc) = spval
     call hist_addfld1d (fname='SoilAlpha',  units='1',  &
@@ -304,21 +318,21 @@ contains
        this%watsat_col(begc:endc,:) = spval
        call hist_addfld2d (fname='watsat', units='m^3/m^3', type2d='levgrnd', &
             avgflag='A', long_name='water saturated', &
-            ptr_col=this%watsat_col, default='inactive')
+            ptr_col=this%watsat_col, default='active')
     end if
 
     if (use_cn) then
        this%eff_porosity_col(begc:endc,:) = spval
        call hist_addfld2d (fname='EFF_POROSITY', units='proportion', type2d='levgrnd', &
             avgflag='A', long_name='effective porosity = porosity - vol_ice', &
-            ptr_col=this%eff_porosity_col, default='inactive')
+            ptr_col=this%eff_porosity_col, default='active')
     end if
 
     if (use_cn) then
        this%watfc_col(begc:endc,:) = spval
        call hist_addfld2d (fname='watfc', units='m^3/m^3', type2d='levgrnd', &
             avgflag='A', long_name='water field capacity', &
-            ptr_col=this%watfc_col, default='inactive')
+            ptr_col=this%watfc_col, default='active')
     end if
 
   end subroutine InitHistory
@@ -336,6 +350,7 @@ contains
     use FuncPedotransferMod , only : pedotransf, get_ipedof
     use RootBiophysMod      , only : init_vegrootfr
     use, intrinsic :: ieee_exceptions
+    use elm_varcon          , only : tkair
     !
     ! !ARGUMENTS:
     class(soilstate_type) :: this
@@ -367,7 +382,12 @@ contains
     real(r8)           :: bd                            ! bulk density of dry soil material [kg/m^3]
     real(r8)           :: tkm                           ! mineral conductivity
     real(r8)           :: xksat                         ! maximum hydraulic conductivity of soil [mm/s]
-    real(r8)           :: clay,sand,gravel              ! temporaries
+    real(r8)           :: clay,sand,gravel              ! temporaries for percents (%)
+    real(r8)           :: sand_adj                      ! temporary, sand fraction for current layer relative to total solid volume (not just fine mineral volume)
+    real(r8)           :: gravel_adj                    ! temporary, gravel fraction for current layer relative to total solid volume
+    real(r8)           :: om_adj                        ! temporary, organic matter fraction for current layer relative to total solid volume
+    real(r8)           :: quartz_adj                    ! temporary, gravel fraction for current layer relative to total solid volume
+    real(r8)           :: rho_p, rho_b                  ! temporaries, particle and bulk densities adjusted by organic matter
     real(r8)           :: organic_max                   ! organic matter (kg/m3) where soil is assumed to act like peat
     integer            :: dimid                         ! dimension id
     logical            :: readvar
@@ -452,7 +472,7 @@ contains
     ! differs from the default (10 layers).
     ! --------------------------------------------------------------------
     call ncd_inqdlen(ncid,dimid,nlevsoifl,name='nlevsoi')
-    if ( .not. more_vertlayers )then
+    if ( .not. interp_soil_texture )then
        if ( nlevsoifl /= nlevsoi )then
           call endrun(msg=' ERROR: Number of soil layers on file does NOT match the number being used'//&
                errMsg(__FILE__, __LINE__))
@@ -521,6 +541,12 @@ contains
        call ncd_io(ncid=ncid, varname='PCT_GRVL', flag='read', data=grvl3d, dim1name=grlnd, readvar=readvar)
        if (.not. readvar) then
           call endrun(msg=' ERROR: PCT_GRVL NOT on surfdata file'//errMsg(__FILE__, __LINE__))
+       end if
+    elseif (trim(soil_thermal_conductivity_model) == 'balland_and_arp') then
+       call ncd_io(ncid=ncid, varname='PCT_GRVL', flag='read', data=grvl3d, dim1name=grlnd, readvar=readvar)
+       if (.not. readvar) then
+          write(iulog,*) "Using Balland and Arp thermal conductivity, but without gravel!"
+          grvl3d(:,:,:) = 0._r8
        end if
     else
        grvl3d(:,:,:) = 0._r8
@@ -681,34 +707,38 @@ contains
           do lev = 1,nlevgrnd
              ! Number of soil layers in hydrologically active columns = NLEV2BED
 	     nlevbed = col_pp%nlevbed(c)
-             if ( more_vertlayers )then ! duplicate clay and sand values from last soil layer
+             if ( interp_soil_texture )then ! interpolate clay/sand/organic onto the model grid
 
                 if (lev .eq. 1) then
                    clay = clay3d(g,ti,1)
                    sand = sand3d(g,ti,1)
                    gravel = grvl3d(g,ti,1)
-                   om_frac = organic3d(g,ti,1)/organic_max 
-                else if (lev <= nlevsoi) then
+                   om_frac = max(0.0_r8, min(organic3d(g,ti,1)/organic_max, 1._r8))
+                else if (lev <= min(nlevbed,nlevsoi) .and. zisoi(lev) < zisoifl(nlevsoifl)) then
                    do j = 1,nlevsoifl-1
                       if (zisoi(lev) >= zisoifl(j) .AND. zisoi(lev) < zisoifl(j+1)) then
                          clay = clay3d(g,ti,j+1)
                          sand = sand3d(g,ti,j+1)
                          gravel = grvl3d(g,ti,j+1)
-                         om_frac = organic3d(g,ti,j+1)/organic_max    
+                         om_frac = max(0.0_r8, min(organic3d(g,ti,j+1)/organic_max, 1._r8))
                       endif
                    end do
-                else
+                else ! target interface at/below source data bottom: use deepest source layer
                    clay = clay3d(g,ti,nlevsoifl)
                    sand = sand3d(g,ti,nlevsoifl)
                    gravel = grvl3d(g,ti,nlevsoifl)
                    om_frac = 0._r8
                 endif
              else
-                if (lev <= nlevsoi) then ! duplicate clay and sand values from 10th soil layer
+                if (lev <= min(nlevbed,nlevsoi)) then ! duplicate clay and sand values from 10th soil layer
                    clay = clay3d(g,ti,lev)
                    sand = sand3d(g,ti,lev)
                    gravel = grvl3d(g,ti,lev)
-                   om_frac = (organic3d(g,ti,lev)/organic_max)**2._r8
+                   if (squareomfrac) then
+                      om_frac = (organic3d(g,ti,lev)/organic_max)**2._r8
+                   else
+                      om_frac = max(0.0_r8, min((organic3d(g,ti,lev)/organic_max), 1._r8))
+                   endif
                 else
                    clay = clay3d(g,ti,nlevsoi)
                    sand = sand3d(g,ti,nlevsoi)
@@ -719,7 +749,7 @@ contains
 
              if (col_pp%is_lake(c)) then
 
-                if (lev <= nlevsoi) then
+                if (lev <= min(nlevbed,nlevsoi)) then
                    this%cellsand_col(c,lev) = sand
                    this%cellclay_col(c,lev) = clay
                    this%cellgrvl_col(c,lev) = gravel
@@ -732,7 +762,7 @@ contains
                    om_frac = 0._r8 ! No organic matter for urban
                 end if
 
-                if (lev <= nlevbed) then
+                if (lev <= min(nlevbed,nlevsoi)) then
                    this%cellsand_col(c,lev) = sand
                    this%cellclay_col(c,lev) = clay
                    this%cellgrvl_col(c,lev) = gravel
@@ -812,6 +842,34 @@ contains
                 this%watmin_col(c,lev) = &
                      this%watsat_col(c,lev)*(-min_liquid_pressure/this%sucsat_col(c,lev))**(-1._r8/this%bsw_col(c,lev))
 
+               if (trim(soil_thermal_conductivity_model) == 'balland_and_arp') then
+                  ! Adjust fractions to be relative to total solid volume 
+                  ! (gravel_adj + om_adj + sand_adj + siltandclay_adj(implicit) = 1)
+                  ! Assuming gravel is measured relative to total solid volume 
+                  ! (remove coarse first, them adjust OM, then adjust fine minerals)
+                  gravel_adj = max(0._r8, min(1._r8, gravel/100.0_r8)) ! pct to frac
+                  om_adj     = max(0._r8, min(1._r8, (1._r8-gravel_adj)*om_frac))
+                  sand_adj   = max(0._r8, min(1._r8, (1._r8-gravel_adj-om_adj)*sand/100.0_r8)) ! pct to frac
+
+                  ! Assume gravel has same mineralogy as fine mineral fractions
+                  quartz_adj = sand_adj + gravel_adj*(sand/100._r8)
+
+                  ! Equation 15, Balland and Arp 2005
+                  tkm = (om_tkm**om_adj)*(8.0_r8**quartz_adj)*(2.5_r8**(1._r8-om_adj-quartz_adj))
+
+                  ! Equation 12, Balland and Arp 2005 (tkmg and tksatu)
+                  this%tkmg_col(c,lev)   = tkm ** (1._r8- this%watsat_col(c,lev))
+                  this%tksatu_col(c,lev) = this%tkmg_col(c,lev)*0.57_r8**this%watsat_col(c,lev)
+
+                  ! Equation 16, Balland and Arp 2005
+                  ! Update bulk and particle densities to include organic matter
+                  rho_p = om_adj*1.3_r8 + (1._r8-om_adj)*2.7_r8   ! particle density of soils and organics combined, g/cm3
+                  rho_b = rho_p * (1._r8-this%watsat_col(c,lev))  ! bulk density updated, g/cm3
+                  this%tkdry_col(c,lev) = ((0.053_r8*tkm-tkair)*rho_b + tkair*rho_p) / &
+                     (rho_p - 0.947_r8*rho_b)
+                  this%bd_col(c,lev) = rho_b*1000._r8 ! g/cm3 -> kg/m3
+               end if
+
              end if
           end do
 
@@ -844,7 +902,11 @@ contains
                 clay    =  this%cellclay_col(c,lev)
                 sand    =  this%cellsand_col(c,lev)
                 gravel  =  this%cellgrvl_col(c,lev)
-                om_frac = (this%cellorg_col(c,lev)/organic_max)**2._r8
+                if (squareomfrac) then
+                   om_frac = (this%cellorg_col(c,lev)/organic_max)**2._r8
+                else
+                   om_frac = max(0.0_r8, min((this%cellorg_col(c,lev)/organic_max), 1._r8))
+                endif
              else
                 clay    = this%cellclay_col(c,nlevsoi)
                 sand    = this%cellsand_col(c,nlevsoi)

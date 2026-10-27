@@ -3,7 +3,7 @@ module FuncPedotransferMod
 !DESCRIPTIONS:
 !module contains different pedotransfer functions to
 !compute the mineral soil hydraulic properties.
-!currenty, only the Clapp-Hornberg formulation is used.
+!currently, only the Clapp-Hornberger formulation is used.
 !HISTORY:
 !created by Jinyun Tang, Mar.1st, 2014
 implicit none

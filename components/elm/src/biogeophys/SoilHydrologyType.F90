@@ -6,7 +6,7 @@ Module SoilHydrologyType
   use spmdMod               , only : masterproc, mpicom
   use abortutils            , only : endrun
   use elm_varpar            , only : nlevgrnd, nlayer, nlayert, nlevsoi
-  use elm_varpar            , only : more_vertlayers, nlevsoifl, toplev_equalspace
+  use elm_varpar            , only : interp_soil_texture, nlevsoifl, toplev_equalspace
   use elm_varcon            , only : zsoi, dzsoi, zisoi, spval
   use elm_varctl            , only : iulog, use_lnd_rof_two_way
   use SharedParamsMod     , only : ParamsShareInst
@@ -237,7 +237,7 @@ contains
     use shr_log_mod     , only : errMsg => shr_log_errMsg
     use shr_spfn_mod    , only : shr_spfn_erf
     use shr_kind_mod    , only : r8 => shr_kind_r8
-    use elm_varctl      , only : fsurdat, iulog, use_vichydro, use_var_soil_thick
+    use elm_varctl      , only : fsurdat, iulog, use_vichydro, use_var_soil_thick, squareomfrac
     use elm_varpar      , only : nlevsoi, nlevgrnd, nlevsno, nlevlak, nlevurb
     use elm_varcon      , only : denice, denh2o, sb, bdsno
     use elm_varcon      , only : h2osno_max, zlnd, tfrz, spval
@@ -472,21 +472,21 @@ contains
                 ! do nothing
              else  
                   do lev = 1,nlevgrnd
-                    if ( more_vertlayers )then
-                      ! duplicate clay and sand values from last soil layer
+                    if ( interp_soil_texture )then
+                      ! interpolate clay/sand/organic onto the model grid
                       if (lev .eq. 1) then
                          clay    = clay3d(g,ti,1)
                          sand    = sand3d(g,ti,1)
-                         om_frac = organic3d(g,ti,1)/organic_max 
-                      else if (lev <= nlevsoi) then
+                         om_frac = max(0.0_r8, min(organic3d(g,ti,1)/organic_max, 1._r8))
+                      else if (lev <= nlevsoi .and. zisoi(lev) < zisoifl(nlevsoifl)) then
                          do j = 1,nlevsoifl-1
                             if (zisoi(lev) >= zisoifl(j) .AND. zisoi(lev) < zisoifl(j+1)) then
                                clay    = clay3d(g,ti,j+1)
                                sand    = sand3d(g,ti,j+1)
-                               om_frac = organic3d(g,ti,j+1)/organic_max    
+                               om_frac = max(0.0_r8, min(organic3d(g,ti,j+1)/organic_max, 1._r8))
                             endif
                          end do
-                      else
+                      else ! target interface at/below source data bottom: use deepest source layer
                          clay    = clay3d(g,ti,nlevsoifl)
                          sand    = sand3d(g,ti,nlevsoifl)
                          om_frac = 0._r8
@@ -496,7 +496,11 @@ contains
                       if (lev <= nlevsoi) then
                          clay    = clay3d(g,ti,lev)
                          sand    = sand3d(g,ti,lev)
-                         om_frac = (organic3d(g,ti,lev)/organic_max)**2._r8
+                         if (squareomfrac) then
+                            om_frac = (organic3d(g,ti,lev)/organic_max)**2._r8
+                         else
+                            om_frac = max(0.0_r8, min(organic3d(g,ti,lev)/organic_max, 1._r8))
+                         endif
                       else
                          clay    = clay3d(g,ti,nlevsoi)
                          sand    = sand3d(g,ti,nlevsoi)

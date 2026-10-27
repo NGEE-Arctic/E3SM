@@ -53,8 +53,15 @@ _TESTS = {
             "ERS_Ld150.ELM_USRDAT.I1850CNPRDCTCBC.elm-snowveg_arctic",
             "ERS.ELM_USRDAT.I1850CNPRDCTCBC.elm-usrpft_default_I1850CNPRDCTCBC",
             "ERS.ELM_USRDAT.I1850CNPRDCTCBC.elm-usrpft_codetest_I1850CNPRDCTCBC",
+            "ERS.ELM_USRDAT.I1850CNPRDCTCBC.elm-usrpft_arctic_codetest_I1850CNPRDCTCBC",
+            "ERS.ELM_USRDAT.I1850CNPRDCTCBC.elm-usrpft_arctic_onsetgdd_I1850CNPRDCTCBC",
             "ERS.1x1_icycape.I1850GSWCNPRDCTCBC.elm-polygonal_tundra",
             "SMS_Ly1.ELM_USRDAT.I1850CNPRDCTCBC.elm-kilocraft",
+            "SMS_Ld1_P1x1.1x1_icycape.I1850CNPRDCTCBC.elm-soil_10SL_3p5m",
+            "SMS_Ld1_P1x1.1x1_icycape.I1850CNPRDCTCBC.elm-soil_23SL_3p5m",
+            "SMS_Ld1_P1x1.1x1_icycape.I1850CNPRDCTCBC.elm-soil_20SL_8p5m",
+            "SMS_Ld1_P1x1.1x1_icycape.I1850CNPRDCTCBC.elm-soil_49SL_10m",
+            "SMS_Ld1_P1x1.1x1_icycape.I1850CNPRDCTCBC.elm-soil_4SL_2m",
             )
         },
 
@@ -67,6 +74,7 @@ _TESTS = {
             "ERS.f09_g16.IELMBC.elm-simple_decomp",
             "ERS_Vmct.hcru_hcru.IELM.elm-multi_inst",
             "SMS_Vmct.ELM_USRDAT.GTSM2ELM.elm-lnd_docn_1way",
+            "ERS_Ly5_Vmct.ELM_USRDAT.I1850CNPRDCTCBC.elm-usrpft_arctic_maxpft12_I1850CNPRDCTCBC"
             )
         },
 
@@ -92,6 +100,8 @@ _TESTS = {
             "SMS_Ld1.hcru_hcru.I1850CRUELMCN",
             "SMS_Ly5_P1x1.1x1_smallvilleIA.IELMCNCROP.elm-force_netcdf_pio",
             "ERS.f19_g16.I1850ELM.elm-vst",
+            "ERS.f19_g16.I1850ELM.elm-balland_and_arp",
+            "SMS.r05_r05.I1850ELM.elm-balland_and_arp_gravel",
             "ERS.f09_g16.I1850ELMCN.elm-bgcinterface",
             "SMS.r05_r05.I1850ELMCN.elm-qian_1948",
             "SMS_Ly5_P1x1.1x1_smallvilleIA.IELMCNCROP.elm-per_crop",

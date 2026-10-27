@@ -391,6 +391,23 @@ module elm_varctl
   logical, public :: use_mexicocity      = .false.
   logical, public :: use_noio            = .false.
   logical, public :: use_var_soil_thick  = .false.
+  logical, public :: squareomfrac        = .true.   ! use squared organic matter fraction in soil calculations
+
+  !----------------------------------------------------------
+  ! Soil vertical layer structure selection (ported from CTSM)
+  !   soil_layerstruct_predefined : named predefined structure, one of
+  !     '10SL_3.5m','23SL_3.5m','20SL_8.5m','49SL_10m','4SL_2m'. 'UNSET'
+  !     defers to the legacy more_vertlayers boolean for backwards
+  !     compatibility.
+  !   soil_layerstruct_userdefined : user-supplied vector of layer
+  !     thicknesses dzsoi (m); its non-default length sets nlevgrnd.
+  !   soil_layerstruct_userdefined_nlevsoi : number of hydrologically
+  !     active soil layers when using the user-defined vector.
+  ! Predefined and user-defined are mutually exclusive (see controlMod).
+  !----------------------------------------------------------
+  character(len=16), public :: soil_layerstruct_predefined          = 'UNSET'
+  real(r8),          public :: soil_layerstruct_userdefined(99)      = rundef
+  integer,           public :: soil_layerstruct_userdefined_nlevsoi  = iundef
   logical, public :: use_T_rho_dependent_snowthk     = .false.
   logical, public :: use_atm_downscaling_to_topunit  = .false.
   character(len = SHR_KIND_CS), public :: precip_downscaling_method  = 'ERMM' ! Precip downscaling method values can be ERMM or FNM
@@ -412,7 +429,9 @@ module elm_varctl
   ! NGEE Arctic parameterizations
   !----------------------------------------------------------
   logical, public :: use_polygonal_tundra = .false.
-  logical, public :: use_arctic_init     = .false.
+  logical, public :: prohibit_subsidence  = .false.
+  logical, public :: use_arctic_init      = .false.
+  character(len=32), public :: soil_thermal_conductivity_model = 'farouki'  ! Soil thermal conductivity model: 'farouki' (default) or 'balland_and_arp'
 
   !----------------------------------------------------------
   ! Stub EM switches
@@ -501,6 +520,20 @@ module elm_varctl
   !$acc declare copyin(initth_pf2clm)
   !$acc declare copyin(pf_clmnstep0 )
 
+  !-----------------------------------------------------------------------
+  ! N fixation parameters are assigned for individual pft
+  logical, public :: nfix_npp_patch = .false.
+  !$acc declare create(nfix_npp_patch)
+
+  !-----------------------------------------------------------------------
+  ! onset_gdd summation ending switch in phenology
+  ! by default, onset_gdd will reset to zero passing summer-solstice
+  ! This may cause non-growing if heavy winter snowing which results in
+  ! snow-melting passing summer-solstice in arctic.
+  ! When this switches, it will end by offset critical daylength (i.e. vegetation senescence starts normally in Fall)
+  logical, public :: onset_gdd_extension = .false.
+  !$acc declare create(onset_gdd_extension)
+
   ! cpl_bypass
    character(len=fname_len), public :: metdata_type   = ' '    ! metdata type for CPL_BYPASS mode
    character(len=fname_len), public :: metdata_bypass = ' '    ! met data directory for CPL_BYPASS mode (site, qian, cru_ncep)
@@ -528,6 +561,10 @@ module elm_varctl
   !$acc declare copyin(use_mexicocity     )
   !$acc declare copyin(use_noio           )
   !$acc declare copyin(use_var_soil_thick )
+  !$acc declare copyin(squareomfrac       )
+  !$acc declare copyin(soil_layerstruct_predefined)
+  !$acc declare copyin(soil_layerstruct_userdefined)
+  !$acc declare copyin(soil_layerstruct_userdefined_nlevsoi)
   !$acc declare copyin(tw_irr)
 
 

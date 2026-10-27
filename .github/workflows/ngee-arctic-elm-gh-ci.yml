@@ -1,0 +1,124 @@
+name: NGEE Arctic ELM Github CI
+
+# Keep all workflow triggers under a single top-level 'on' block.
+# GitHub Actions supports multiple event types here, which is cleaner than
+# splitting closely related behavior across duplicate 'on' sections or multiple
+# files when the same workflow logic should be reused.
+on:
+  # Run on pull request lifecycle events that matter for CI freshness.
+  #
+  # Why these subkeys exist:
+  # - branches: limits CI to the integration branch we care about.
+  # - types: makes the intended PR events explicit instead of relying on
+  #   defaults, so future readers can see exactly when the workflow reruns.
+  # - paths: prevents this workflow from running for unrelated changes,
+  #   which matters because these tests are comparatively expensive.
+  pull_request:
+    branches:
+      - develop
+    types:
+      # A new PR should get an initial CI result.
+      - opened
+      # New commits pushed to the PR should replace stale CI results.
+      - synchronize
+      # Draft PRs often become actionable only when marked ready for review.
+      - ready_for_review
+      # Reopened PRs should resume normal CI behavior.
+      - reopened
+    paths:
+      # Positive path filters define the files and directories that are
+      # expected to affect this workflow's test coverage.
+      - '.github/workflows/ngee-arctic-elm-gh-ci.yml'
+      - 'cime_config/**'
+      - 'components/elm/**'
+      - 'driver-moab/**'
+      - 'driver-mct/**'
+      # Negative path filters carve out documentation-only changes so that
+      # doc edits do not consume CI capacity for code paths they cannot affect.
+      - '!components/eam/docs/**'
+      - '!components/eam/mkdocs.yml'
+      - '!components/eamxx/docs/**'
+      - '!components/eamxx/mkdocs.yml'
+      - '!components/elm/docs/**'
+      - '!components/elm/mkdocs.yml'
+
+  # Nightly runs provide a time-based backstop even when no pull request event
+  # occurs. This is useful for catching environmental drift, dependency issues,
+  # or failures caused by merged changes outside the PR currently under test.
+  schedule:
+    # Daily at 09:00 UTC. GitHub evaluates scheduled workflows in UTC.
+    - cron: '0 9 * * *'
+
+  # Allow maintainers to run the workflow manually from the Actions UI.
+  # This intentionally has no inputs: the goal is a simple rerun/debug entry
+  # point without introducing operator choices that change workflow behavior.
+  workflow_dispatch:
+
+# Concurrency avoids wasting CI resources on obsolete in-flight runs.
+#
+# The group key is composed of:
+# - github.workflow: keep cancellation scoped to this workflow only.
+# - github.event_name: keep pull_request, schedule, and workflow_dispatch runs
+#   independent from one another. In particular, a manual run should not cancel
+#   a nightly run on the same branch, and vice versa.
+# - github.ref: within a given event type, newer runs for the same branch or PR
+#   ref supersede older ones.
+#
+# With cancel-in-progress enabled, GitHub cancels only runs that share the same
+# computed group key. That gives us the desired behavior of replacing stale PR
+# updates while preserving separately triggered nightly and manual executions.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  ci:
+    # Restrict execution to the NGEE-Arctic repository.
+    # This restricts context to that project and avoids running this workflow
+    # on E3SM-Project/E3SM.
+    if: ${{ github.repository == 'NGEE-Arctic/E3SM' }}
+    name: ELM CIME / ${{ matrix.test }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        test:
+          # These were copied from E3SM-Project/E3SM's e3sm-gh-ci-cime-tests.yml
+          # restricted to tests focused on ELM
+          - SMS_Vmct_D_Ln5_P4.ne4pg2_oQU480.F2010.ghci-oci_gnu
+          - ERS_Vmct_Ld5_P4.ne4pg2_oQU480.F2010.ghci-oci_gnu.eam-wcprod_F2010
+          - ERS_Vmct_P4.ne4pg2_oQU480.A.ghci-oci_gnu
+          - ERS_Vmct_P4.ne4pg2_oQU480.I1850ELMCN.ghci-oci_gnu.elm-qian_1948
+    # This container image provides the E3SM test environment used by
+    # create_test, including the expected /projects/e3sm/scratch layout used by
+    # the artifact collection paths below.
+    container:
+      image: ghcr.io/e3sm-project/containers-ghci:ghci-0.2.1
+
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          show-progress: false
+          submodules: recursive
+      -
+        name: CIME
+        working-directory: cime/scripts
+        run: |
+          ./create_test ${{ matrix.test }} --wait --debug
+      -
+        name: Artifacts
+        uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: ${{ matrix.test }}
+          path: |
+            /projects/e3sm/scratch/${{ matrix.test }}*/TestStatus.log
+            /projects/e3sm/scratch/${{ matrix.test }}*/bld/*.bldlog.*
+            /projects/e3sm/scratch/${{ matrix.test }}*/run/*.log.*
+            /projects/e3sm/scratch/${{ matrix.test }}*/run/*.cprnc.out

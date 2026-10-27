@@ -1,0 +1,4 @@
+Test with 23 soil layer / 30 ground layer structure (~3.5m depth).
+This configuration is used for permafrost simulations with finer vertical resolution.
+The directory name spells the decimal point as 'p' because CIME test names are
+split on '.'; the namelist value set here is '23SL_3.5m'.

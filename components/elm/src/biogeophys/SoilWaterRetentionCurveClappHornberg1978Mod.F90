@@ -53,7 +53,7 @@ contains
     class(soil_water_retention_curve_clapp_hornberg_1978_type), intent(in) :: this
     real(r8), intent(in) :: hksat    !saturated hydraulic conductivity [mm/s]
     real(r8), intent(in) :: imped    !ice impedance
-    real(r8), intent(in) :: s        !reletive saturation, [0, 1]
+    real(r8), intent(in) :: s        !relative saturation, [0, 1]
     real(r8), intent(in) :: bsw      !shape parameter
     real(r8), intent(out):: hk       !hydraulic conductivity [mm/s]
     real(r8), optional, intent(out):: dhkds    !d[hk]/ds   [mm/s]

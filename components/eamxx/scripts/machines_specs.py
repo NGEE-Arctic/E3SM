@@ -372,6 +372,35 @@ class GHCICuda(Machine):
         cls.num_run_res = int(run_cmd_no_fail("nvidia-smi --query-gpu=name --format=csv,noheader | wc -l"))
 
 ###############################################################################
+class GHCIOCI(Machine):
+###############################################################################
+    concrete = True
+    @classmethod
+    def setup(cls):
+        super().setup_base(name="ghci-oci")
+        cls.env_setup = [f"eval $({CIMEROOT}/CIME/Tools/get_case_env -c SMS.ne4pg2_ne4pg2.F2010-SCREAMv1.ghci-oci_gnu)"]
+
+###############################################################################
+class Lassen(Machine):
+###############################################################################
+    concrete = True
+    @classmethod
+    def setup(cls):
+        super().setup_base("lassen")
+        cls.baselines_dir = "/projects/e3sm/baselines/scream/master-baselines"
+
+        cls.env_setup = ["module --force purge",
+                          "module load git gcc/8.3.1 cuda/11.8.0 cmake/3.16.8 spectrum-mpi python/3.7.2",
+                          "export LLNL_USE_OMPI_VARS='y'",
+                          "export PATH=/usr/workspace/e3sm/netcdf/bin:$PATH",
+                          "export LD_LIBRARY_PATH=/usr/workspace/e3sm/netcdf/lib:$LD_LIBRARY_PATH",
+                         ]
+        cls.batch = "bsub -Ip -qpdebug"
+
+        cls.num_run_res = 4 # four gpus
+        cls.gpu_arch = "cuda"
+
+###############################################################################
 class LLNLIntel(Machine):
 ###############################################################################
     @classmethod

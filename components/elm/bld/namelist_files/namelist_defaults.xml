@@ -99,6 +99,9 @@ attributes from the config_cache.xml file (with keys converted to upper-case).
 <!-- Do variable soil thickness -->
 <use_var_soil_thick>.false.</use_var_soil_thick>
 
+<!-- Use squared organic matter fraction -->
+<squareomfrac>.true.</squareomfrac>
+
 <!-- Do downscaling to topounit -->
 <precip_downscaling_method>ERMM</precip_downscaling_method>
 <!-- Do lake water storage -->
@@ -2338,6 +2341,7 @@ this mask will have smb calculated over the entire global land surface
 
 <!-- NGEE Arctic Options -->
 <use_polygonal_tundra>.false.</use_polygonal_tundra>;
+<prohibit_subsidence>.false.</prohibit_subsidence>;
 <use_arctic_init>.false.</use_arctic_init>;
 
 </namelist_defaults>

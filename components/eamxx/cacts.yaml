@@ -128,6 +128,21 @@ machines:
     gpu_arch: "cuda"
     num_run_res: "$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)"
 
+  ghci-oci:
+    env_setup: ["eval $(${project.root_dir}/../../cime/CIME/Tools/get_case_env -c SMS.ne4pg2_ne4pg2.F2010-SCREAMv1.ghci-oci_gnu)"]
+
+  lassen:
+    baselines_dir: "/projects/e3sm/baselines/scream/master-baselines"
+    env_setup:
+      - "module --force purge"
+      - "module load git gcc/8.3.1 cuda/11.8.0 cmake/3.16.8 spectrum-mpi python/3.7.2"
+      - "export LLNL_USE_OMPI_VARS='y'"
+      - "export PATH=/usr/workspace/e3sm/netcdf/bin:$PATH"
+      - "export LD_LIBRARY_PATH=/usr/workspace/e3sm/netcdf/lib:$LD_LIBRARY_PATH"
+    batch: "bsub -Ip -qpdebug"
+    num_run_res: 4 # four gpus
+    gpu_arch: "cuda"
+
   ruby-intel:
     env_setup:
       - "module --force purge"

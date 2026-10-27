@@ -36,6 +36,7 @@ module ColumnDataType
   use elm_time_manager, only : is_restart, get_nstep
   use elm_time_manager, only : is_first_step, get_step_size, is_first_restart_step
   use landunit_varcon , only : istice, istwet, istsoil, istdlak, istcrop, istice_mec, istlowcenpoly, isthighcenpoly
+  use landunit_varcon , only : ilowcenpoly, iflatcenpoly, ihighcenpoly
   use column_varcon   , only : icol_road_perv, icol_road_imperv, icol_roof, icol_sunwall, icol_shadewall
   use histFileMod     , only : hist_addfld1d, hist_addfld2d, no_snow_normal
   use histFileMod     , only : hist_addfld_decomp
@@ -175,8 +176,11 @@ module ColumnDataType
     real(r8), pointer :: iwp_exclvol      (:) => null() ! ice wedge polygon excluded volume (m)
     real(r8), pointer :: iwp_ddep         (:) => null() ! ice wedge polygon depression depth (m)
     real(r8), pointer :: iwp_subsidence   (:) => null() ! ice wedge polygon ground subsidence (m)
-    real(r8), pointer :: excess_ice     (:,:) => null() ! excess ground ice in column (1:nlevgrnd) (0 to 1)
-    real(r8), pointer :: frac_melted    (:,:) => null() ! fraction of layer that has ever thawed (for tracking excess ice removal) (0 to 1)
+    real(r8), pointer :: supercool      (:,:) => null() ! supercooled liquid water in soil (kg/m2)
+    real(r8), pointer :: smp_i          (:,:) => null() ! frozen water potential
+    real(r8), pointer :: excess_ice          (:,:) => null() ! excess ground ice mass (kg/m2) (1:nlevgrnd)
+    real(r8), pointer :: excess_ice_volfrac  (:,:) => null() ! excess ice volumetric fraction (0 to 1) (1:nlevgrnd)
+    real(r8), pointer :: h2osfc_p          (:) => null() ! h2osfc from previous timestep (kg/m2)
 
   contains
     procedure, public :: Init    => col_ws_init
@@ -420,6 +424,7 @@ module ColumnDataType
     real(r8), pointer :: eflx_snomelt            (:)   => null() ! snow melt heat flux (W/m**2)
     real(r8), pointer :: eflx_snomelt_r          (:)   => null() ! rural snow melt heat flux (W/m2)
     real(r8), pointer :: eflx_snomelt_u          (:)   => null() ! urban snow melt heat flux (W/m2)
+    real(r8), pointer :: eflx_exice_melt         (:)   => null() ! excess ice melt latent heat flux (W/m2)
     real(r8), pointer :: eflx_bot                (:)   => null() ! heat flux from beneath the soil or ice column (W/m2)
     real(r8), pointer :: eflx_fgr12              (:)   => null() ! ground heat flux between soil layers 1 and 2 (W/m2)
     real(r8), pointer :: eflx_fgr                (:,:) => null() ! (rural) soil downward heat flux (W/m2) (1:nlevgrnd)  (pos upward; usually eflx_bot >= 0)
@@ -437,6 +442,7 @@ module ColumnDataType
     real(r8), pointer :: xmf                     (:)   => null() ! total latent heat of phase change of ground water
     real(r8), pointer :: xmf_h2osfc              (:)   => null() ! latent heat of phase change of surface water
     integer , pointer :: imelt                   (:,:) => null() ! flag for melting (=1), freezing (=2), Not=0 (-nlevsno+1:nlevgrnd)
+    real(r8), pointer :: tinc                    (:,:) => null() ! phase-change temperature increment tfrz - t_soisno (K) (-nlevsno+1:nlevgrnd)
     ! for couplig with pflotran
     real(r8), pointer :: eflx_soil_grnd          (:)   => null() ! integrated soil ground heat flux (W/m2)  [+ = into ground]
     real(r8), pointer :: eflx_rnet_soil          (:)   => null() ! soil net (sw+lw) radiation flux (W/m2) [+ = into soil]
@@ -501,6 +507,8 @@ module ColumnDataType
     real(r8), pointer :: qflx_snomelt         (:)   => null() ! snow melt (mm H2O /s)
     real(r8), pointer :: qflx_snow_melt       (:)   => null() ! snow melt (net)
     real(r8), pointer :: qflx_snomelt_lyr     (:,:) => null() ! snow melt (net)
+    real(r8), pointer :: qflx_exice_melt      (:)   => null() ! excess ice melt (mm H2O/s)
+    real(r8), pointer :: qflx_exice_melt_lyr  (:,:) => null() ! excess ice melt (kg/m2/s) per layer
     real(r8), pointer :: qflx_qrgwl           (:)   => null() ! qflx_surf at glaciers, wetlands, lakes
     real(r8), pointer :: qflx_runoff          (:)   => null() ! total runoff (qflx_drain+qflx_surf+qflx_qrgwl) (mm H2O /s)
     real(r8), pointer :: qflx_runoff_r        (:)   => null() ! Rural total runoff (qflx_drain+qflx_surf+qflx_qrgwl) (mm H2O /s)
@@ -1149,7 +1157,7 @@ contains
     data2dptr => this%t_soisno(:,-nlevsno+1:0)
      call hist_addfld2d (fname='SNO_T', units='K', type2d='levsno',  &
           avgflag='A', long_name='Snow temperatures', &
-           ptr_col=data2dptr, no_snow_behavior=no_snow_normal, default='inactive')
+           ptr_col=data2dptr, no_snow_behavior=no_snow_normal, default='active')
 
     this%t_soisno(begc:endc,:) = spval
     data2dptr => this%t_soisno(:,1:nlevgrnd)
@@ -1196,12 +1204,12 @@ contains
     this%snot_top(begc:endc) = spval
      call hist_addfld1d (fname='SNOTTOPL', units='K', &
           avgflag='A', long_name='snow temperature (top layer)', &
-           ptr_col=this%snot_top, set_urb=spval, default='inactive')
+           ptr_col=this%snot_top, set_urb=spval, default='active')
 
     this%dTdz_top(begc:endc) = spval
      call hist_addfld1d (fname='SNOdTdzL', units='K/m', &
           avgflag='A', long_name='top snow layer temperature gradient (land)', &
-           ptr_col=this%dTdz_top, set_urb=spval, default='inactive')
+           ptr_col=this%dTdz_top, set_urb=spval, default='active')
 
     this%hc_soi(begc:endc) = spval
      call hist_addfld1d (fname='HCSOI',  units='MJ/m2',  &
@@ -1217,7 +1225,7 @@ contains
        this%emg(begc:endc) = spval
         call hist_addfld1d (fname='EMG', units='proportion', &
              avgflag='A', long_name='ground emissivity', &
-              ptr_col=this%emg, default='inactive')
+              ptr_col=this%emg, default='active')
     end if
 
     !-----------------------------------------------------------------------
@@ -1407,6 +1415,7 @@ contains
     allocate(this%h2osoi_ice         (begc:endc,-nlevsno+1:nlevgrnd)) ; this%h2osoi_ice         (:,:) = spval
     allocate(this%h2osoi_vol         (begc:endc, 1:nlevgrnd))         ; this%h2osoi_vol         (:,:) = spval
     allocate(this%h2osfc             (begc:endc))                     ; this%h2osfc             (:)   = spval
+    allocate(this%h2osfc_p           (begc:endc))                     ; this%h2osfc_p           (:)   = spval
     allocate(this%h2ocan             (begc:endc))                     ; this%h2ocan             (:)   = spval
     allocate(this%wslake_col         (begc:endc))                     ; this%wslake_col         (:)   = spval
     allocate(this%total_plant_stored_h2o(begc:endc))                  ; this%total_plant_stored_h2o(:)= spval  
@@ -1464,14 +1473,16 @@ contains
     allocate(this%h2orof             (begc:endc))                     ; this%h2orof             (:)   = spval
     allocate(this%frac_h2orof        (begc:endc))                     ; this%frac_h2orof        (:)   = spval
     allocate(this%frac_h2oocn        (begc:endc))                     ; this%frac_h2oocn        (:)   = nan
+    allocate(this%supercool          (begc:endc,1:nlevgrnd))          ; this%supercool        (:,:)   = spval
+    allocate(this%smp_i              (begc:endc,1:nlevgrnd))          ; this%smp_i            (:,:)   = spval
     if (use_polygonal_tundra) then
       ! polygonal tundra/ice wedge polygons:
       allocate(this%iwp_microrel       (begc:endc))                   ; this%iwp_microrel     (:) = spval
       allocate(this%iwp_exclvol        (begc:endc))                   ; this%iwp_exclvol      (:) = spval
       allocate(this%iwp_ddep           (begc:endc))                   ; this%iwp_ddep         (:) = spval
       allocate(this%iwp_subsidence     (begc:endc))                   ; this%iwp_subsidence   (:) = spval
-      allocate(this%frac_melted        (begc:endc,1:nlevgrnd))        ; this%frac_melted    (:,:) = spval
       allocate(this%excess_ice         (begc:endc,1:nlevgrnd))        ; this%excess_ice     (:,:) = spval
+      allocate(this%excess_ice_volfrac (begc:endc,1:nlevgrnd))        ; this%excess_ice_volfrac(:,:) = spval
     end if
 
     !-----------------------------------------------------------------------
@@ -1480,12 +1491,12 @@ contains
     data2dptr => this%h2osoi_liq(:,-nlevsno+1:0)
      call hist_addfld2d (fname='SNO_LIQH2O', units='kg/m2', type2d='levsno',  &
           avgflag='A', long_name='Snow liquid water content', &
-           ptr_col=data2dptr, no_snow_behavior=no_snow_normal, default='inactive')
+           ptr_col=data2dptr, no_snow_behavior=no_snow_normal, default='active')
 
     data2dptr => this%h2osoi_ice(:,-nlevsno+1:0)
      call hist_addfld2d (fname='SNO_ICE', units='kg/m2', type2d='levsno',  &
           avgflag='A', long_name='Snow ice content', &
-           ptr_col=data2dptr, no_snow_behavior=no_snow_normal, default='inactive')
+           ptr_col=data2dptr, no_snow_behavior=no_snow_normal, default='active')
 
     this%h2osoi_liq(begc:endc,:) = spval
 
@@ -1513,14 +1524,17 @@ contains
       this%iwp_ddep(begc:endc)          = spval
       this%iwp_exclvol(begc:endc)       = spval
       this%iwp_microrel(begc:endc)      = spval
-      this%frac_melted(begc:endc,:)     = spval
-      this%excess_ice(begc:endc,:)      = spval
+      this%excess_ice(begc:endc,:)      = 0._r8 ! specify as zero to avoid any excess ice in non-polygonal tundra cells
+      this%excess_ice_volfrac(begc:endc,:) = 0._r8
 
-      call hist_addfld2d (fname='EXCESS_ICE', units = '1', type2d='levgrnd', &
-           avgflag='A', long_name='Excess ground ice (0 to 1)', &
+      ! History output for excess ice mass per layer (for debugging)
+      call hist_addfld2d (fname='EXCESS_ICE', units='kg/m2', type2d='levgrnd', &
+           avgflag='A', long_name='excess ground ice mass per layer', &
            ptr_col=this%excess_ice, l2g_scale_type='veg')
+      
+      ! Cumulative subsidence since 1989
       call hist_addfld1d (fname="SUBSIDENCE", units='m', avgflag='A', &
-            long_name='ground subsidence (m)', ptr_col=this%iwp_subsidence)
+            long_name='cumulative ground subsidence since 1989', ptr_col=this%iwp_subsidence)
       call hist_addfld1d (fname="DEPRESS_DEPTH", units='m', avgflag='A', &
             long_name='microtopographic depression depth (m)', ptr_col=this%iwp_ddep)
       call hist_addfld1d (fname="EXCLUDED_VOL", units='m', avgflag='A', &
@@ -1528,9 +1542,6 @@ contains
             ptr_col=this%iwp_exclvol)
       call hist_addfld1d (fname="MICROREL", units='m', avgflag='A', &
             long_name='microtopographic relief (m)', ptr_col=this%iwp_microrel)
-      call hist_addfld2d (fname="FRAC_MELTED", units='-', type2d='levgrnd', &
-            avgflag='A', long_name='fraction of layer that has melted (-)', &
-            ptr_col=this%frac_melted, l2g_scale_type='veg')
     endif
     !/polygonal tundra
 
@@ -1538,6 +1549,21 @@ contains
      call hist_addfld1d (fname='H2OSFC',  units='mm',  &
           avgflag='A', long_name='surface water depth', &
            ptr_col=this%h2osfc)
+
+    this%h2osfc_p(begc:endc) = spval
+     call hist_addfld1d (fname='H2OSFC_P', units = 'mm',  &
+          avgflag='A', long_name='surface water depth previous time step', &
+           ptr_col=this%h2osfc_p)
+
+    this%supercool(begc:endc, 1:nlevgrnd) = spval
+      call hist_addfld2d (fname='SUPERCOOL', units='mm', type2d='levgrnd', &
+          avgflag='A', long_name='supercooled soil water', &
+          ptr_col=this%supercool, default='active')
+   
+    this%smp_i(begc:endc, 1:nlevgrnd) = spval
+      call hist_addfld2d (fname='SMP_I', units='mm?', type2d='levgrnd', &
+          avgflag='A', long_name='frozen water potential', &
+          ptr_col=this%smp_i, default='active')
 
     this%h2osoi_vol(begc:endc,:) = spval
      call hist_addfld2d (fname='H2OSOI',  units='mm3/mm3', type2d='levgrnd', &
@@ -1554,17 +1580,17 @@ contains
     data2dptr => this%snw_rds(:,-nlevsno+1:0)
      call hist_addfld2d (fname='SNO_GS', units='Microns', type2d='levsno',  &
           avgflag='A', long_name='Mean snow grain size', &
-           ptr_col=data2dptr, no_snow_behavior=no_snow_normal, default='inactive')
+           ptr_col=data2dptr, no_snow_behavior=no_snow_normal, default='active')
 
     this%snw_rds_top(begc:endc) = spval
      call hist_addfld1d (fname='SNORDSL', units='m^-6', &
           avgflag='A', long_name='top snow layer effective grain radius', &
-           ptr_col=this%snw_rds_top, set_urb=spval, default='inactive')
+           ptr_col=this%snw_rds_top, set_urb=spval, default='active')
 
     this%sno_liq_top(begc:endc) = spval
      call hist_addfld1d (fname='SNOLIQFL', units='fraction', &
           avgflag='A', long_name='top snow layer liquid water fraction (land)', &
-           ptr_col=this%sno_liq_top, set_urb=spval, default='inactive')
+           ptr_col=this%sno_liq_top, set_urb=spval, default='active')
 
     this%h2osoi_liqice_10cm(begc:endc) = spval
     call hist_addfld1d (fname='SOILWATER_10CM',  units='kg/m2', &
@@ -1599,7 +1625,7 @@ contains
     this%snow_depth(begc:endc) = spval
      call hist_addfld1d (fname='SNOW_DEPTH',  units='m',  &
           avgflag='A', long_name='snow height of snow covered area', &
-           ptr_col=this%snow_depth, c2l_scale_type='urbanf')!, default='inactive')
+           ptr_col=this%snow_depth, c2l_scale_type='urbanf')!, default='active')
 
     this%snowdp(begc:endc) = spval
      call hist_addfld1d (fname='SNOWDP',  units='m',  &
@@ -1619,7 +1645,7 @@ contains
          fname='SOILWATERTEND_TSL',  units='kg/m2/s', &
          avgflag='A', long_name='Tendency of soil water in the topmost soil layer', &
          ptr_col=this%h2osoi_tend_tsl_col, l2g_scale_type='veg', &
-         default='inactive')
+         default='active')
     end if
 
     this%frac_sno(begc:endc) = spval
@@ -1630,13 +1656,13 @@ contains
     this%frac_sno_eff(begc:endc) = spval
     call hist_addfld1d (fname='FSNO_EFF',  units='1',  &
          avgflag='A', long_name='effective fraction of ground covered by snow', &
-         ptr_col=this%frac_sno_eff, c2l_scale_type='urbanf')!, default='inactive')
+         ptr_col=this%frac_sno_eff, c2l_scale_type='urbanf')!, default='active')
 
     if (use_cn)then
        this%frac_iceold(begc:endc,:) = spval
         call hist_addfld2d (fname='FRAC_ICEOLD', units='proportion', type2d='levgrnd', &
              avgflag='A', long_name='fraction of ice relative to the tot water', &
-              ptr_col=this%frac_iceold, default='inactive')
+              ptr_col=this%frac_iceold, default='active')
     end if
 
     this%frac_h2osfc(begc:endc) = spval
@@ -1746,16 +1772,11 @@ contains
                 if (j > nlevbed) then
                    this%h2osoi_vol(c,j) = 0.0_r8
                 else
-		             if (use_fates .or. use_hydrstress) then
+		             if (use_fates .or. use_hydrstress .or. use_arctic_init) then
                       this%h2osoi_vol(c,j) = 0.70_r8*watsat_input(c,j) !0.15_r8 to avoid very dry conditions that cause errors in FATES
-                   else if (use_arctic_init) then
-                      this%h2osoi_vol(c,j) = watsat_input(c,j) ! start saturated for arctic
                    else
                       this%h2osoi_vol(c,j) = 0.15_r8
                    endif
-                   if (use_polygonal_tundra) then
-                     this%frac_melted(c,j) = 0._r8
-                   end if
                 endif
              end do
           else if (lun_pp%urbpoi(l)) then
@@ -1860,10 +1881,34 @@ contains
 
        this%h2osoi_liq_old(c,:) = this%h2osoi_liq(c,:)
        this%h2osoi_ice_old(c,:) = this%h2osoi_ice(c,:)
-       if (use_polygonal_tundra) then
-         this%excess_ice(c,:) = 0.36_r8
+       if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
+         ! Initialize volumetric fraction to 36%
+         ! This estimate comes from field observations on the AK north slope
+         ! Future development should replace this with best available ground
+         ! ice maps.
+         this%excess_ice_volfrac(c,:) = 0.36_r8
+         
+         ! Convert to mass (kg/m2)
+         do j = 1, nlevgrnd
+            this%excess_ice(c,j) = this%excess_ice_volfrac(c,j) * col_pp%dz(c,j) * denice
+         end do
+         
          this%iwp_subsidence(c) = 0._r8
-         this%frac_melted(c,:)  = 0._r8
+         
+         ! set initial microtopographic parameters derived from high-res ATS simulations
+         if (lun_pp%polygontype(l) .eq. ilowcenpoly) then
+            this%iwp_microrel(c) = 0.4_r8
+            this%iwp_exclvol(c) = 0.2_r8
+            this%iwp_ddep(c) = 0.15_r8
+         else if (lun_pp%polygontype(l) .eq. iflatcenpoly) then
+            this%iwp_microrel(c) = 0.1_r8
+            this%iwp_exclvol(c) = 0.05_r8
+            this%iwp_ddep(c) = 0.01_r8
+         else if (lun_pp%polygontype(l) .eq. ihighcenpoly) then
+            this%iwp_microrel(c) = 0.4_r8
+            this%iwp_exclvol(c) = 0.2_r8
+            this%iwp_ddep(c) = 0.05_r8
+         endif
        end if
     end do
 
@@ -1919,13 +1964,54 @@ contains
          interpinic_flag='interp', readvar=readvar, data=this%h2osoi_ice)
 
     if (use_polygonal_tundra) then
-      call restartvar(ncid=ncid, flag=flag, varname='EXCESS_ICE', xtype=ncd_double, &
+      ! Write/read volumetric fraction with new name
+      call restartvar(ncid=ncid, flag=flag, varname='EXCESS_ICE_FRAC', xtype=ncd_double, &
            dim1name='column', dim2name='levgrnd', switchdim=.true., &
-           long_name='excess ground ice (0 to 1)', units='1', &
-           interpinic_flag='interp', readvar=readvar, data=this%excess_ice)
+           long_name='excess ground ice volumetric fraction (0 to 1)', units='1', &
+           interpinic_flag='interp', readvar=readvar, data=this%excess_ice_volfrac)
+      
+      ! Convert between volumetric and mass
+      if (flag == 'read') then
+          ! Backward compatibility: try old name if new name fails
+          if (.not. readvar) then
+              call restartvar(ncid=ncid, flag=flag, varname='EXCESS_ICE', xtype=ncd_double, &
+                   dim1name='column', dim2name='levgrnd', switchdim=.true., &
+                   long_name='excess ground ice (old format)', units='1', &
+                   interpinic_flag='interp', readvar=readvar, data=this%excess_ice_volfrac)
+              if (readvar) then
+                  write(iulog,*) 'Read EXCESS_ICE from old format, converted to EXCESS_ICE_FRAC'
+              end if
+          end if
+          
+          ! Convert from volumetric to mass
+          do c = bounds%begc, bounds%endc
+              l = col_pp%landunit(c)
+              if (lun_pp%ispolygon(l)) then
+                  do j = 1, nlevgrnd
+                      this%excess_ice(c,j) = this%excess_ice_volfrac(c,j) * col_pp%dz(c,j) * denice
+                  end do
+              end if
+          end do
+      else if (flag == 'write') then
+          ! Convert from mass to volumetric before writing
+          do c = bounds%begc, bounds%endc
+              l = col_pp%landunit(c)
+              if (lun_pp%ispolygon(l)) then
+                  do j = 1, nlevgrnd
+                      if (col_pp%dz(c,j) > 0._r8) then
+                          this%excess_ice_volfrac(c,j) = this%excess_ice(c,j) / (col_pp%dz(c,j) * denice)
+                      else
+                          this%excess_ice_volfrac(c,j) = 0._r8
+                      end if
+                  end do
+              end if
+          end do
+      end if
+      
+      ! SUBSIDENCE - cumulative tracking since 1989
       call restartvar(ncid=ncid, flag=flag, varname='SUBSIDENCE', xtype=ncd_double, &
            dim1name='column', &
-           long_name='ground subsidence', units='m', &
+           long_name='cumulative ground subsidence since 1989', units='m', &
            interpinic_flag='interp', readvar=readvar, data=this%iwp_subsidence)
       call restartvar(ncid=ncid, flag=flag, varname='DEPRESS_DEPTH', xtype=ncd_double, &
            dim1name='column', &
@@ -1939,10 +2025,6 @@ contains
            dim1name='column', &
            long_name='microtopographic relief', units='m', &
            interpinic_flag='interp', readvar=readvar, data=this%iwp_microrel)
-      call restartvar(ncid=ncid, flag=flag, varname='FRAC_MELTED', xtype=ncd_double, &
-           dim1name='column', dim2name='levgrnd', switchdim=.true., &
-           long_name='fraction of layer that has ever melted', units='-', &
-           interpinic_flag='interp', readvar=readvar, data=this%frac_melted)
     end if
 
     call restartvar(ncid=ncid, flag=flag, varname='SOILP', xtype=ncd_double,  &
@@ -2028,6 +2110,30 @@ contains
     if (flag == 'read' .and. .not. readvar) then
        this%frac_h2osfc(bounds%begc:bounds%endc) = 0.0_r8
     end if
+
+    call restartvar(ncid=ncid, flag=flag, varname='FH2OSFC_ACT', xtype=ncd_double,  &
+         dim1name='column',&
+         long_name='fraction of ground covered by h2osfc (0 to 1), ignoring snow cover', units='', &
+         interpinic_flag='interp', readvar=readvar, data=this%frac_h2osfc_act)
+    if (flag == 'read' .and. .not. readvar) then
+       this%frac_h2osfc_act(bounds%begc:bounds%endc) = 0.0_r8
+    end if
+
+    call restartvar(ncid=ncid, flag=flag, varname='SUPERCOOL', xtype=ncd_double, &
+         dim1name='column', dim2name='levgrnd', switchdim=.true., &
+         long_name='supercooled soil water', units='mm', &
+         interpinic_flag='interp', readvar=readvar, data=this%supercool)
+    if (flag == 'read' .and. .not. readvar) then
+      this%supercool(bounds%begc:bounds%endc,:) = 0.0_r8
+    end if
+
+    call restartvar(ncid=ncid, flag=flag, varname='SMP_I', xtype=ncd_double,&
+         dim1name='column', dim2name='levgrnd', switchdim=.true., &
+         long_name='frozen water potential', units='mm', &
+         interpinic_flag='interp', readvar=readvar, data=this%smp_i)
+     if (flag == 'read' .and. .not. readvar) then
+       this%smp_i(bounds%begc:bounds%endc,:) = 0.0_r8
+     end if
 
     if (use_cn) then
        call restartvar(ncid=ncid, flag=flag, varname='wf', xtype=ncd_double,  &
@@ -2256,7 +2362,7 @@ contains
        this%ctrunc(begc:endc) = spval
         call hist_addfld1d (fname='COL_CTRUNC', units='gC/m^2',  &
               avgflag='A', long_name='column-level sink for C truncation', &
-               ptr_col=this%ctrunc, default='inactive')
+               ptr_col=this%ctrunc, default='active')
 
        call hist_addfld1d (fname='SOILC', units='gC/m^2', &
              avgflag='A', long_name='soil C', &
@@ -2275,34 +2381,34 @@ contains
        this%prod10c(begc:endc) = spval
        call hist_addfld1d (fname='PROD10C', units='gC/m^2', &
             avgflag='A', long_name='10-yr wood product C', &
-            ptr_col=this%prod10c, default='inactive')
+            ptr_col=this%prod10c, default='active')
 
        this%prod100c(begc:endc) = spval
        call hist_addfld1d (fname='PROD100C', units='gC/m^2', &
             avgflag='A', long_name='100-yr wood product C', &
-            ptr_col=this%prod100c, default='inactive')
+            ptr_col=this%prod100c, default='active')
 
        if(.not.use_fates)then
 
           this%seedc(begc:endc) = spval
           call hist_addfld1d (fname='SEEDC', units='gC/m^2', &
                avgflag='A', long_name='pool for seeding new Patches', &
-               ptr_col=this%seedc, default='inactive')
+               ptr_col=this%seedc, default='active')
 
           this%prod1c(begc:endc) = spval
           call hist_addfld1d (fname='PROD1C', units='gC/m^2', &
                avgflag='A', long_name='1-yr crop product C', &
-               ptr_col=this%prod1c, default='inactive')
+               ptr_col=this%prod1c, default='active')
 
           this%totprodc(begc:endc) = spval
           call hist_addfld1d (fname='TOTPRODC', units='gC/m^2', &
                avgflag='A', long_name='total wood product C', &
-               ptr_col=this%totprodc, default='inactive')
+               ptr_col=this%totprodc, default='active')
 
           this%fuelc(begc:endc) = spval
           call hist_addfld1d (fname='FUELC', units='gC/m^2', &
                avgflag='A', long_name='fuel load', &
-               ptr_col=this%fuelc, default='inactive')
+               ptr_col=this%fuelc, default='active')
 
 
        end if
@@ -2412,7 +2518,7 @@ contains
              fieldname = 'C14_'//trim(decomp_cascade_con%decomp_pool_name_history(l))//'C_1m'
              longname =  'C14_'//trim(decomp_cascade_con%decomp_pool_name_history(l))//' C to 1 meter'
               call hist_addfld1d (fname=fieldname, units='gC/m^2', &
-                     avgflag='A', long_name=longname, ptr_col=data1dptr, default='inactive')
+                     avgflag='A', long_name=longname, ptr_col=data1dptr, default='active')
           endif
        end do
        this%totlitc(begc:endc) = spval
@@ -3462,18 +3568,18 @@ contains
        this%totlitn_1m(begc:endc) = spval
         call hist_addfld1d (fname='TOTLITN_1m', units='gN/m^2', &
              avgflag='A', long_name='total litter N to 1 meter', &
-              ptr_col=this%totlitn_1m, default='inactive')
+              ptr_col=this%totlitn_1m, default='active')
 
        this%totsomn_1m(begc:endc) = spval
         call hist_addfld1d (fname='TOTSOMN_1m', units='gN/m^2', &
              avgflag='A', long_name='total soil organic matter N to 1 meter', &
-              ptr_col=this%totsomn_1m, default='inactive')
+              ptr_col=this%totsomn_1m, default='active')
     endif
 
     this%ntrunc(begc:endc) = spval
      call hist_addfld1d (fname='COL_NTRUNC', units='gN/m^2',  &
           avgflag='A', long_name='column-level sink for N truncation', &
-           ptr_col=this%ntrunc, default='inactive')
+           ptr_col=this%ntrunc, default='active')
 
     ! add suffix if number of soil decomposition depths is greater than 1
     if (nlevdecomp > 1) then
@@ -3550,145 +3656,145 @@ contains
     this%seedn(begc:endc) = spval
      call hist_addfld1d (fname='SEEDN', units='gN/m^2', &
           avgflag='A', long_name='pool for seeding new PFTs ', &
-           ptr_col=this%seedn, default='inactive')
+           ptr_col=this%seedn, default='active')
 
     this%prod10n(begc:endc) = spval
      call hist_addfld1d (fname='PROD10N', units='gN/m^2', &
           avgflag='A', long_name='10-yr wood product N', &
-           ptr_col=this%prod10n, default='inactive')
+           ptr_col=this%prod10n, default='active')
 
     this%prod100n(begc:endc) = spval
      call hist_addfld1d (fname='PROD100N', units='gN/m^2', &
           avgflag='A', long_name='100-yr wood product N', &
-           ptr_col=this%prod100n, default='inactive')
+           ptr_col=this%prod100n, default='active')
 
     this%prod1n(begc:endc) = spval
      call hist_addfld1d (fname='PROD1N', units='gN/m^2', &
           avgflag='A', long_name='1-yr crop product N', &
-           ptr_col=this%prod1n, default='inactive')
+           ptr_col=this%prod1n, default='active')
 
     this%totprodn(begc:endc) = spval
      call hist_addfld1d (fname='TOTPRODN', units='gN/m^2', &
           avgflag='A', long_name='total wood product N', &
-           ptr_col=this%totprodn, default='inactive')
+           ptr_col=this%totprodn, default='active')
 
     if (use_fan) then
        this%tan_g1(begc:endc) = spval
        call hist_addfld1d (fname='TAN_G1', units='gN/m^2', &
             avgflag='A', long_name='Total ammoniacal nitrogen in FAN pool G1', &
-            ptr_col=this%tan_g1, default='inactive')
+            ptr_col=this%tan_g1, default='active')
 
        this%tan_g2(begc:endc) = spval
        call hist_addfld1d (fname='TAN_G2', units='gN/m^2', &
             avgflag='A', long_name='Total ammoniacal nitrogen in FAN pool G2', &
-            ptr_col=this%tan_g2, default='inactive')
+            ptr_col=this%tan_g2, default='active')
 
        this%tan_g3(begc:endc) = spval
        call hist_addfld1d (fname='TAN_G3', units='gN/m^2', &
             avgflag='A', long_name='Total ammoniacal nitrogen in FAN pool G3', &
-            ptr_col=this%tan_g3, default='inactive')
+            ptr_col=this%tan_g3, default='active')
 
        this%tan_f1(begc:endc) = spval
        call hist_addfld1d (fname='TAN_F1', units='gN/m^2', &
             avgflag='A', long_name='Total ammoniacal nitrogen in FAN pool F1', &
-            ptr_col=this%tan_f1, default='inactive')
+            ptr_col=this%tan_f1, default='active')
 
        this%tan_f2(begc:endc) = spval
        call hist_addfld1d (fname='TAN_F2', units='gN/m^2', &
             avgflag='A', long_name='Total ammoniacal nitrogen in FAN pool F2', &
-            ptr_col=this%tan_f2, default='inactive')
+            ptr_col=this%tan_f2, default='active')
 
        this%tan_f3(begc:endc) = spval
        call hist_addfld1d (fname='TAN_F3', units='gN/m^2', &
             avgflag='A', long_name='Total ammoniacal nitrogen in FAN pool F3', &
-            ptr_col=this%tan_f3, default='inactive')
+            ptr_col=this%tan_f3, default='active')
 
        this%tan_f4(begc:endc) = spval
        call hist_addfld1d (fname='TAN_F4', units='gN/m^2', &
             avgflag='A', long_name='Total ammoniacal nitrogen in FAN pool F4', &
-            ptr_col=this%tan_f4, default='inactive')
+            ptr_col=this%tan_f4, default='active')
 
        this%fert_u1(begc:endc) = spval
        call hist_addfld1d (fname='FERT_U1', units='gN/m^2', &
             avgflag='A', long_name='Total ammoniacal nitrogen in FAN pool U1', &
-            ptr_col=this%fert_u1, default='inactive')
+            ptr_col=this%fert_u1, default='active')
 
        this%fert_u2(begc:endc) = spval
        call hist_addfld1d (fname='FERT_U2', units='gN/m^2', &
             avgflag='A', long_name='Total ammoniacal nitrogen in FAN pool U2', &
-            ptr_col=this%fert_u2, default='inactive')
+            ptr_col=this%fert_u2, default='active')
 
        this%tan_s0(begc:endc) = spval
        call hist_addfld1d (fname='TAN_S0', units='gN/m^2', &
             avgflag='A', long_name='Total ammoniacal nitrogen in FAN pool S0', &
-            ptr_col=this%tan_s0, default='inactive')
+            ptr_col=this%tan_s0, default='active')
 
        this%tan_s1(begc:endc) = spval
        call hist_addfld1d (fname='TAN_S1', units='gN/m^2', &
             avgflag='A', long_name='Total ammoniacal nitrogen in FAN pool S1', &
-            ptr_col=this%tan_s1, default='inactive')
+            ptr_col=this%tan_s1, default='active')
 
        this%tan_s2(begc:endc) = spval
        call hist_addfld1d (fname='TAN_S2', units='gN/m^2', &
             avgflag='A', long_name='Total ammoniacal nitrogen in FAN pool S2', &
-            ptr_col=this%tan_s2, default='inactive')
+            ptr_col=this%tan_s2, default='active')
 
        this%tan_s3(begc:endc) = spval
        call hist_addfld1d (fname='TAN_S3', units='gN/m^2', &
             avgflag='A', long_name='Total ammoniacal nitrogen in FAN pool S3', &
-            ptr_col=this%tan_s3, default='inactive')
+            ptr_col=this%tan_s3, default='active')
 
        this%manure_u_grz(begc:endc) = spval
        call hist_addfld1d (fname='MAN_U_GRZ', units='gN/m^2', &
             avgflag='A', long_name='Unavailable manure nitrogen, grazing', &
-            ptr_col=this%manure_u_grz, default='inactive')
+            ptr_col=this%manure_u_grz, default='active')
 
        this%manure_a_grz(begc:endc) = spval
        call hist_addfld1d (fname='MAN_A_GRZ', units='gN/m^2', &
             avgflag='A', long_name='Available manure nitrogen, grazing', &
-            ptr_col=this%manure_a_grz, default='inactive')
+            ptr_col=this%manure_a_grz, default='active')
 
        this%manure_r_grz(begc:endc) = spval
        call hist_addfld1d (fname='MAN_R_GRZ', units='gN/m^2', &
             avgflag='A', long_name='Resistant manure nitrogen, grazing', &
-            ptr_col=this%manure_r_grz, default='inactive')
+            ptr_col=this%manure_r_grz, default='active')
 
        this%manure_u_grz(begc:endc) = spval
        call hist_addfld1d (fname='MAN_U_APP', units='gN/m^2', &
             avgflag='A', long_name='Unavailable manure nitrogen, application', &
-            ptr_col=this%manure_u_app, default='inactive')
+            ptr_col=this%manure_u_app, default='active')
 
        this%manure_a_app(begc:endc) = spval
        call hist_addfld1d (fname='MAN_A_APP', units='gN/m^2', &
             avgflag='A', long_name='Available manure nitrogen, application', &
-            ptr_col=this%manure_a_app, default='inactive')
+            ptr_col=this%manure_a_app, default='active')
 
        this%manure_r_app(begc:endc) = spval
        call hist_addfld1d (fname='MAN_R_APP', units='gN/m^2', &
             avgflag='A', long_name='Resistant manure nitrogen, application', &
-            ptr_col=this%manure_r_app, default='inactive')
+            ptr_col=this%manure_r_app, default='active')
 
        this%manure_n_stored(begc:endc) = spval
        call hist_addfld1d (fname='MAN_N_STORED', units='gN/m^2', &
             avgflag='A', long_name='Manure nitrogen in storage', &
-            ptr_col=this%manure_n_stored, default='inactive')
+            ptr_col=this%manure_n_stored, default='active')
 
        this%manure_tan_stored(begc:endc) = spval
        call hist_addfld1d (fname='MAN_TAN_STORED', units='gN/m^2', &
             avgflag='A', long_name='Manure ammoniacal nitrogen in storage', &
-            ptr_col=this%manure_tan_stored, default='inactive')
+            ptr_col=this%manure_tan_stored, default='active')
 
        this%fan_grz_fract(begc:endc) = spval
        call hist_addfld1d (fname='FAN_GRZ_FRACT', units='', &
             avgflag='A', long_name='Fraction of animals grazing', &
-            ptr_col=this%fan_grz_fract, default='inactive')
+            ptr_col=this%fan_grz_fract, default='active')
 
    end if
 
    this%fan_totn(begc:endc) = spval
    call hist_addfld1d (fname='FAN_TOTN', units='gN/m2', &
       avgflag='A', long_name='FAN total N', &
-      ptr_col=this%fan_totn, default='inactive')
+      ptr_col=this%fan_totn, default='active')
 
     !-----------------------------------------------------------------------
     ! set cold-start initial values for select members of col_ns
@@ -4815,27 +4921,27 @@ contains
     this%seedp(begc:endc) = spval
      call hist_addfld1d (fname='SEEDP', units='gP/m^2', &
           avgflag='A', long_name='P pool for seeding new PFTs ', &
-           ptr_col=this%seedp, default='inactive')
+           ptr_col=this%seedp, default='active')
 
     this%prod10p(begc:endc) = spval
      call hist_addfld1d (fname='PROD10P', units='gP/m^2', &
           avgflag='A', long_name='10-yr wood product P', &
-           ptr_col=this%prod10p, default='inactive')
+           ptr_col=this%prod10p, default='active')
 
     this%prod100p(begc:endc) = spval
      call hist_addfld1d (fname='PROD100P', units='gP/m^2', &
           avgflag='A', long_name='100-yr wood product P', &
-           ptr_col=this%prod100p, default='inactive')
+           ptr_col=this%prod100p, default='active')
 
     this%prod1p(begc:endc) = spval
      call hist_addfld1d (fname='PROD1P', units='gP/m^2', &
           avgflag='A', long_name='1-yr crop product P', &
-           ptr_col=this%prod1p, default='inactive')
+           ptr_col=this%prod1p, default='active')
 
     this%totprodp(begc:endc) = spval
      call hist_addfld1d (fname='TOTPRODP', units='gP/m^2', &
           avgflag='A', long_name='total wood product P', &
-           ptr_col=this%totprodp, default='inactive')
+           ptr_col=this%totprodp, default='active')
 
     !-----------------------------------------------------------------------
     ! set cold-start initial values for select members of col_ps
@@ -5630,6 +5736,7 @@ contains
     allocate(this%eflx_snomelt         (begc:endc))              ; this%eflx_snomelt         (:)   = spval
     allocate(this%eflx_snomelt_r       (begc:endc))              ; this%eflx_snomelt_r       (:)   = spval
     allocate(this%eflx_snomelt_u       (begc:endc))              ; this%eflx_snomelt_u       (:)   = spval
+    allocate(this%eflx_exice_melt      (begc:endc))              ; this%eflx_exice_melt      (:)   = spval
     allocate(this%eflx_bot             (begc:endc))              ; this%eflx_bot             (:)   = spval
     allocate(this%eflx_fgr12           (begc:endc))              ; this%eflx_fgr12           (:)   = spval
     allocate(this%eflx_fgr             (begc:endc, 1:nlevgrnd))  ; this%eflx_fgr             (:,:) = spval
@@ -5645,6 +5752,8 @@ contains
     allocate(this%xmf                  (begc:endc))              ; this%xmf                  (:)   = spval
     allocate(this%xmf_h2osfc           (begc:endc))              ; this%xmf_h2osfc           (:)   = spval
     allocate(this%imelt                (begc:endc,-nlevsno+1:nlevgrnd))  ; this%imelt        (:,:) = huge(1)
+    allocate(this%tinc                 (begc:endc,-nlevsno+1:nlevgrnd))  ; this%tinc         (:,:) = spval
+  
     allocate(this%eflx_soil_grnd       (begc:endc))              ; this%eflx_soil_grnd       (:)   = spval
     allocate(this%eflx_rnet_soil       (begc:endc))              ; this%eflx_rnet_soil       (:)   = spval
     allocate(this%eflx_fgr0_soil       (begc:endc))              ; this%eflx_fgr0_soil       (:)   = spval
@@ -5672,7 +5781,12 @@ contains
      call hist_addfld1d (fname='FSM_U',  units='W/m^2',  &
           avgflag='A', long_name='Urban snow melt heat flux', &
            ptr_col=this%eflx_snomelt_u, c2l_scale_type='urbanf', set_nourb=spval)
-
+    if (use_polygonal_tundra) then
+      this%eflx_exice_melt(begc:endc) = spval
+      call hist_addfld1d (fname='EXICE_MELT_COL',  units='W/m^2',  &
+            avgflag='A', long_name='Excess ice melt latent heat flux', &
+            ptr_col=this%eflx_exice_melt, c2l_scale_type='urbanf', set_nourb=spval)
+    endif
     this%eflx_building_heat(begc:endc) = spval
      call hist_addfld1d (fname='BUILDHEAT', units='W/m^2',  &
           avgflag='A', long_name='heat flux from urban building interior to walls and roof', &
@@ -5696,7 +5810,32 @@ contains
     this%eflx_fgr(begc:endc,:) = spval
      call hist_addfld2d (fname='FGR_SOIL_R', units='watt/m^2', type2d='levgrnd', &
           avgflag='A', long_name='Rural downward heat flux at interface below each soil layer', &
-           ptr_col=this%eflx_fgr, set_spec=spval, default='inactive')
+           ptr_col=this%eflx_fgr, set_spec=spval, default='active')
+
+    this%eflx_fgr12(begc:endc) = spval
+     call hist_addfld1d (fname='FGR0_SOIL',  units='W/m^2',  &
+          avgflag='A', long_name='soil-air heat flux (W/m2) [+ = into soil]', &
+           ptr_col=this%eflx_fgr0_soil, set_lake=spval, default='active')
+
+    this%eflx_fgr12(begc:endc) = spval
+     call hist_addfld1d (fname='FGR0_SNOW',  units='W/m^2',  &
+          avgflag='A', long_name='soil-snow heat flux (W/m2) [+ = into soil]', &
+           ptr_col=this%eflx_fgr0_snow, set_lake=spval, default='active')
+
+    this%eflx_fgr12(begc:endc) = spval
+     call hist_addfld1d (fname='FGR0_H2OSFC',  units='W/m^2',  &
+          avgflag='A', long_name='soil-surfacewater heat flux (W/m2) [+ = into soil]', &
+           ptr_col=this%eflx_fgr0_h2osfc, set_lake=spval, default='active')
+
+    this%xmf(begc:endc) = spval
+     call hist_addfld1d (fname='XMF', units='W/m^2',  &
+          avgflag='A', long_name='total latent heat flux from soil/snow phase change', &
+          ptr_col=this%xmf, default='active')
+
+    this%tinc(begc:endc,:) = spval
+     call hist_addfld2d (fname='TINC', units='K', type2d='levgrnd', &
+          avgflag='A', long_name='phase-change temperature increment before resetting layer to freezing point', &
+          ptr_col=this%tinc, default='active')
 
     this%errsoi(begc:endc) = spval
      call hist_addfld1d (fname='ERRSOI',  units='W/m^2',  &
@@ -5718,6 +5857,8 @@ contains
           this%eflx_urban_heat(c)    = 0._r8
        end if
     end do
+
+    this%tinc(begc:endc,:)  = 0._r8
 
   end subroutine col_ef_init
 
@@ -5816,6 +5957,8 @@ contains
     allocate(this%qflx_snomelt           (begc:endc))             ; this%qflx_snomelt         (:)   = spval
     allocate(this%qflx_snomelt_lyr       (begc:endc,-nlevsno+1:0)) ; this%qflx_snomelt_lyr    (:,:) = spval
     allocate(this%qflx_snow_melt         (begc:endc))             ; this%qflx_snow_melt       (:)   = spval
+    allocate(this%qflx_exice_melt        (begc:endc))             ; this%qflx_exice_melt      (:)   = spval
+    allocate(this%qflx_exice_melt_lyr    (begc:endc,1:nlevgrnd))  ; this%qflx_exice_melt_lyr  (:,:) = spval
     allocate(this%qflx_qrgwl             (begc:endc))             ; this%qflx_qrgwl           (:)   = spval
     allocate(this%qflx_runoff            (begc:endc))             ; this%qflx_runoff          (:)   = spval
     allocate(this%qflx_runoff_r          (begc:endc))             ; this%qflx_runoff_r        (:)   = spval
@@ -5873,7 +6016,7 @@ contains
     this%qflx_snofrz_lyr(begc:endc,-nlevsno+1:0) = spval         
       call hist_addfld2d (fname='QSNOFRZ_LYR', units='kg/m2/s', type2d='levsno',&
           avgflag='I', long_name='layer snow freezing rate', &    
-           ptr_col=this%qflx_snofrz_lyr, no_snow_behavior=no_snow_normal, default='inactive')
+           ptr_col=this%qflx_snofrz_lyr, no_snow_behavior=no_snow_normal, default='active')
 
     this%qflx_snwcp_ice(begc:endc) = spval
      call hist_addfld1d (fname='QSNWCPICE_NODYNLNDUSE', units='mm H2O/s', &
@@ -5919,7 +6062,7 @@ contains
     this%qflx_top_soil(begc:endc) = spval
      call hist_addfld1d (fname='QTOPSOIL',  units='mm/s',  &
           avgflag='A', long_name='water input to surface', &
-           ptr_col=this%qflx_top_soil, c2l_scale_type='urbanf', default='inactive')
+           ptr_col=this%qflx_top_soil, c2l_scale_type='urbanf', default='active')
 
     this%qflx_h2osfc_surf(begc:endc) = spval
      call hist_addfld1d (fname='QH2OSFC',  units='mm/s',  &
@@ -5941,6 +6084,18 @@ contains
           avgflag='A', long_name='snow melt per snow layer', &
            ptr_col=this%qflx_snomelt_lyr,no_snow_behavior=no_snow_normal, c2l_scale_type='urbanf')
 
+    if (use_polygonal_tundra) then
+      this%qflx_exice_melt(begc:endc) = spval
+      call hist_addfld1d (fname='QEXCESSICE',  units='mm/s',  &
+          avgflag='A', long_name='excess ice melt', &
+          ptr_col=this%qflx_exice_melt, c2l_scale_type='urbanf')
+
+      this%qflx_exice_melt_lyr(begc:endc,1:nlevgrnd) = spval
+      call hist_addfld2d (fname='QEXCESSICE_LYR',  units='mm/s',type2d='levgrnd',&
+          avgflag='A', long_name='excess ice melt rate per soil layer', &
+          ptr_col=this%qflx_exice_melt_lyr, c2l_scale_type='urbanf')
+    endif
+    
     this%qflx_qrgwl(begc:endc) = spval
      call hist_addfld1d (fname='QRGWL',  units='mm/s',  &
           avgflag='A', long_name='surface runoff at glaciers (liquid only), wetlands, lakes', &
@@ -6038,7 +6193,8 @@ contains
     this%qflx_dew_snow (begc:endc) = 0.0_r8
 
     this%qflx_h2osfc_surf(begc:endc) = 0._r8
-    this%qflx_snow_melt  (begc:endc)   = 0._r8
+    this%qflx_snow_melt  (begc:endc) = 0._r8
+    this%qflx_exice_melt (begc:endc) = 0._r8
 
     this%dwb(begc:endc) = 0._r8
     this%qflx_surf_irrig(begc:endc) = 0._r8
@@ -6290,7 +6446,7 @@ contains
           this%som_c_leached(begc:endc) = spval
            call hist_addfld1d (fname='SOM_C_LEACHED', units='gC/m^2/s', &
                 avgflag='A', long_name='total flux of C from SOM pools due to leaching', &
-                 ptr_col=this%som_c_leached)!, default='inactive')
+                 ptr_col=this%som_c_leached)!, default='active')
 
           if ( nlevdecomp_full > 1 ) then
              this%hr_vr(begc:endc,:) = spval
@@ -6317,12 +6473,12 @@ contains
           this%hrv_deadstemc_to_prod10c(begc:endc) = spval
           call hist_addfld1d (fname='HRV_DEADSTEMC_TO_PROD10C', units='gC/m^2/s', &
                avgflag='A', long_name='flux into 10-yr wood product C', &
-               ptr_col=this%hrv_deadstemc_to_prod10c, default='inactive')
+               ptr_col=this%hrv_deadstemc_to_prod10c, default='active')
 
           this%hrv_deadstemc_to_prod100c(begc:endc) = spval
           call hist_addfld1d (fname='HRV_DEADSTEMC_TO_PROD100C', units='gC/m^2/s', &
                avgflag='A', long_name='flux into 100-yr wood product C', &
-               ptr_col=this%hrv_deadstemc_to_prod100c, default='inactive')
+               ptr_col=this%hrv_deadstemc_to_prod100c, default='active')
 
           this%nep(begc:endc) = spval
           call hist_addfld1d (fname='NEP', units='gC/m^2/s', &
@@ -6343,7 +6499,7 @@ contains
           this%product_closs(begc:endc) = spval
           call hist_addfld1d (fname='PRODUCT_CLOSS', units='gC/m^2/s', &
                avgflag='A', long_name='total carbon loss from wood product pools', &
-               ptr_col=this%product_closs, default='inactive')
+               ptr_col=this%product_closs, default='active')
 
        end if
        ! end of use_fates (C12) block
@@ -6391,22 +6547,22 @@ contains
        this%somc_fire(begc:endc) = spval
        call hist_addfld1d (fname='SOMC_FIRE', units='gC/m^2/s', &
             avgflag='A', long_name='C loss due to peat burning', &
-            ptr_col=this%somc_fire, default='inactive')
+            ptr_col=this%somc_fire, default='active')
 
        this%somc_erode(begc:endc) = spval
        call hist_addfld1d (fname='SOMC_ERO', units='gC/m^2/s', &
             avgflag='A', long_name='SOC detachment', &
-            ptr_col=this%somc_erode, default='inactive')
+            ptr_col=this%somc_erode, default='active')
 
        this%somc_deposit(begc:endc) = spval
        call hist_addfld1d (fname='SOMC_DEP', units='gC/m^2/s', &
             avgflag='A', long_name='SOC hillslope redeposition', &
-            ptr_col=this%somc_deposit, default='inactive')
+            ptr_col=this%somc_deposit, default='active')
 
        this%somc_yield(begc:endc) = spval
        call hist_addfld1d (fname='SOMC_YLD', units='gC/m^2/s', &
             avgflag='A', long_name='SOC erosional loss to inland waters', &
-            ptr_col=this%somc_yield, default='inactive')
+            ptr_col=this%somc_yield, default='active')
 
        this%decomp_cpools_erode(begc:endc,:)   = spval
        this%decomp_cpools_deposit(begc:endc,:) = spval
@@ -6418,21 +6574,21 @@ contains
              longname =  trim(decomp_cascade_con%decomp_pool_name_long(k))//' C detachment'
              call hist_addfld1d (fname=fieldname, units='gC/m^2/s',  &
                   avgflag='A', long_name=longname, &
-                  ptr_col=data1dptr, default='inactive')
+                  ptr_col=data1dptr, default='active')
 
              data1dptr => this%decomp_cpools_deposit(:,k)
              fieldname = trim(decomp_cascade_con%decomp_pool_name_history(k))//'C_DEP'
              longname =  trim(decomp_cascade_con%decomp_pool_name_long(k))//' C hillslope redeposition'
              call hist_addfld1d (fname=fieldname, units='gC/m^2/s',  &
                   avgflag='A', long_name=longname, &
-                  ptr_col=data1dptr, default='inactive')
+                  ptr_col=data1dptr, default='active')
 
              data1dptr => this%decomp_cpools_yield(:,k)
              fieldname = trim(decomp_cascade_con%decomp_pool_name_history(k))//'C_YLD'
              longname =  trim(decomp_cascade_con%decomp_pool_name_long(k))//' C erosional loss to inland waters'
              call hist_addfld1d (fname=fieldname, units='gC/m^2/s',  &
                   avgflag='A', long_name=longname, &
-                  ptr_col=data1dptr, default='inactive')
+                  ptr_col=data1dptr, default='active')
           endif
        end do
 
@@ -6445,7 +6601,7 @@ contains
              longname =  trim(decomp_cascade_con%decomp_pool_name_long(k))//' C fire loss'
               call hist_addfld1d (fname=fieldname, units='gC/m^2/s',  &
                    avgflag='A', long_name=longname, &
-                    ptr_col=data1dptr, default='inactive')
+                    ptr_col=data1dptr, default='active')
 
              if ( nlevdecomp_full > 1 ) then
                 data2dptr => this%m_decomp_cpools_to_fire_vr(:,:,k)
@@ -6453,7 +6609,7 @@ contains
                 longname =  trim(decomp_cascade_con%decomp_pool_name_long(k))//' C fire loss'
                  call hist_addfld_decomp (fname=fieldname, units='gC/m^3/s', type2d='levdcmp', &
                       avgflag='A', long_name=longname, &
-                       ptr_col=data2dptr, default='inactive')
+                       ptr_col=data2dptr, default='active')
              endif
           endif
 
@@ -6463,7 +6619,7 @@ contains
           longname =  trim(decomp_cascade_con%decomp_pool_name_long(k))//' potential loss coefficient'
            call hist_addfld_decomp (fname=fieldname, units='1/s',  type2d='levdcmp', &
                 avgflag='A', long_name=longname, &
-                 ptr_col=data2dptr, default='inactive')
+                 ptr_col=data2dptr, default='active')
        end do
        this%decomp_cascade_hr(begc:endc,:)             = spval
        this%decomp_cascade_hr_vr(begc:endc,:,:)        = spval
@@ -6531,7 +6687,7 @@ contains
                      trim(decomp_cascade_con%decomp_pool_name_long(decomp_cascade_con%cascade_donor_pool(l)))
                  call hist_addfld_decomp (fname=fieldname, units='gC/m^3/s',  type2d='levdcmp', &
                       avgflag='A', long_name=longname, &
-                       ptr_col=data2dptr, default='inactive')
+                       ptr_col=data2dptr, default='active')
              endif
 
              !-- transfer fluxes (none from terminal pool, if present)
@@ -6590,7 +6746,7 @@ contains
        this%som_c_leached(begc:endc) = spval
         call hist_addfld1d (fname='SOM_C_LEACHED', units='gC/m^2/s', &
              avgflag='A', long_name='total flux of C from SOM pools due to leaching', &
-              ptr_col=this%som_c_leached)!, default='inactive')
+              ptr_col=this%som_c_leached)!, default='active')
 
        this%lithr(begc:endc) = spval
         call hist_addfld1d (fname='LITHR', units='gC/m^2/s', &
@@ -6639,17 +6795,17 @@ contains
        this%litfire(begc:endc) = spval
         call hist_addfld1d (fname='LITFIRE', units='gC/m^2/s', &
              avgflag='A', long_name='litter fire losses', &
-              ptr_col=this%litfire, default='inactive')
+              ptr_col=this%litfire, default='active')
 
        this%somfire(begc:endc) = spval
         call hist_addfld1d (fname='SOMFIRE', units='gC/m^2/s', &
              avgflag='A', long_name='soil organic matter fire losses', &
-              ptr_col=this%somfire, default='inactive')
+              ptr_col=this%somfire, default='active')
 
        this%totfire(begc:endc) = spval
         call hist_addfld1d (fname='TOTFIRE', units='gC/m^2/s', &
              avgflag='A', long_name='total ecosystem fire losses', &
-              ptr_col=this%totfire, default='inactive')
+              ptr_col=this%totfire, default='active')
 
        this%nep(begc:endc) = spval
         call hist_addfld1d (fname='NEP', units='gC/m^2/s', &
@@ -6670,12 +6826,12 @@ contains
        this%fire_closs(begc:endc) = spval
         call hist_addfld1d (fname='COL_FIRE_CLOSS', units='gC/m^2/s', &
              avgflag='A', long_name='total column-level fire C loss for non-peat fires outside land-type converted region', &
-              ptr_col=this%fire_closs, default='inactive')
+              ptr_col=this%fire_closs, default='active')
 
        this%fire_decomp_closs(begc:endc) = spval
         call hist_addfld1d (fname='DECOMP_FIRE_CLOSS', units='gC/m^2/s', &
            avgflag='A', long_name='decomposable fire C loss for non-peat fires outside land-type converted region', &
-            ptr_col=this%fire_decomp_closs, default='inactive')
+            ptr_col=this%fire_decomp_closs, default='active')
 
        this%dwt_slash_cflux(begc:endc) = spval
         call hist_addfld1d (fname='DWT_SLASH_CFLUX', units='gC/m^2/s', &
@@ -6685,72 +6841,72 @@ contains
        this%dwt_conv_cflux(begc:endc) = spval
         call hist_addfld1d (fname='DWT_CONV_CFLUX', units='gC/m^2/s', &
              avgflag='A', long_name='conversion C flux (immediate loss to atm)', &
-              ptr_col=this%dwt_conv_cflux, default='inactive')
+              ptr_col=this%dwt_conv_cflux, default='active')
 
        this%dwt_prod10c_gain(begc:endc) = spval
         call hist_addfld1d (fname='DWT_PROD10C_GAIN', units='gC/m^2/s', &
              avgflag='A', long_name='landcover change-driven addition to 10-yr wood product pool', &
-              ptr_col=this%dwt_prod10c_gain, default='inactive')
+              ptr_col=this%dwt_prod10c_gain, default='active')
 
        this%prod10c_loss(begc:endc) = spval
         call hist_addfld1d (fname='PROD10C_LOSS', units='gC/m^2/s', &
              avgflag='A', long_name='loss from 10-yr wood product pool', &
-              ptr_col=this%prod10c_loss, default='inactive')
+              ptr_col=this%prod10c_loss, default='active')
 
        this%dwt_prod100c_gain(begc:endc) = spval
         call hist_addfld1d (fname='DWT_PROD100C_GAIN', units='gC/m^2/s', &
              avgflag='A', long_name='landcover change-driven addition to 100-yr wood product pool', &
-              ptr_col=this%dwt_prod100c_gain, default='inactive')
+              ptr_col=this%dwt_prod100c_gain, default='active')
 
         this%dwt_crop_productc_gain(begc:endc) = spval
         call hist_addfld1d (fname='DWT_CROP_PRODUCTC_GAIN', units='gC/m^2/s', &
              avgflag='A', long_name='landcover change-driven addition to crop product pool', &
-             ptr_col=this%dwt_crop_productc_gain, default='inactive')
+             ptr_col=this%dwt_crop_productc_gain, default='active')
 
        this%prod100c_loss(begc:endc) = spval
         call hist_addfld1d (fname='PROD100C_LOSS', units='gC/m^2/s', &
              avgflag='A', long_name='loss from 100-yr wood product pool', &
-              ptr_col=this%prod100c_loss, default='inactive')
+              ptr_col=this%prod100c_loss, default='active')
 
        this%prod1c_loss(begc:endc) = spval
         call hist_addfld1d (fname='PROD1C_LOSS', units='gC/m^2/s', &
              avgflag='A', long_name='loss from 1-yr crop product pool', &
-              ptr_col=this%prod1c_loss, default='inactive')
+              ptr_col=this%prod1c_loss, default='active')
 
        this%dwt_frootc_to_litr_met_c(begc:endc,:) = spval
         call hist_addfld_decomp (fname='DWT_FROOTC_TO_LITR_MET_C', units='gC/m^2/s',  type2d='levdcmp', &
              avgflag='A', long_name='fine root to litter due to landcover change', &
-              ptr_col=this%dwt_frootc_to_litr_met_c, default='inactive')
+              ptr_col=this%dwt_frootc_to_litr_met_c, default='active')
 
        this%dwt_frootc_to_litr_cel_c(begc:endc,:) = spval
         call hist_addfld_decomp (fname='DWT_FROOTC_TO_LITR_CEL_C', units='gC/m^2/s',  type2d='levdcmp', &
              avgflag='A', long_name='fine root to litter due to landcover change', &
-              ptr_col=this%dwt_frootc_to_litr_cel_c, default='inactive')
+              ptr_col=this%dwt_frootc_to_litr_cel_c, default='active')
 
        this%dwt_frootc_to_litr_lig_c(begc:endc,:) = spval
         call hist_addfld_decomp (fname='DWT_FROOTC_TO_LITR_LIG_C', units='gC/m^2/s',  type2d='levdcmp', &
              avgflag='A', long_name='fine root to litter due to landcover change', &
-              ptr_col=this%dwt_frootc_to_litr_lig_c, default='inactive')
+              ptr_col=this%dwt_frootc_to_litr_lig_c, default='active')
 
        this%dwt_livecrootc_to_cwdc(begc:endc,:) = spval
         call hist_addfld_decomp (fname='DWT_LIVECROOTC_TO_CWDC', units='gC/m^2/s',  type2d='levdcmp', &
              avgflag='A', long_name='live coarse root to CWD due to landcover change', &
-              ptr_col=this%dwt_livecrootc_to_cwdc, default='inactive')
+              ptr_col=this%dwt_livecrootc_to_cwdc, default='active')
 
        this%dwt_deadcrootc_to_cwdc(begc:endc,:) = spval
         call hist_addfld_decomp (fname='DWT_DEADCROOTC_TO_CWDC', units='gC/m^2/s',  type2d='levdcmp', &
              avgflag='A', long_name='dead coarse root to CWD due to landcover change', &
-              ptr_col=this%dwt_deadcrootc_to_cwdc, default='inactive')
+              ptr_col=this%dwt_deadcrootc_to_cwdc, default='active')
 
        this%dwt_closs(begc:endc) = spval
         call hist_addfld1d (fname='DWT_CLOSS', units='gC/m^2/s', &
              avgflag='A', long_name='total carbon loss from land cover conversion', &
-              ptr_col=this%dwt_closs, default='inactive')
+              ptr_col=this%dwt_closs, default='active')
 
        this%product_closs(begc:endc) = spval
         call hist_addfld1d (fname='PRODUCT_CLOSS', units='gC/m^2/s', &
              avgflag='A', long_name='total carbon loss from wood product pools', &
-              ptr_col=this%product_closs, default='inactive')
+              ptr_col=this%product_closs, default='active')
 
        this%landuseflux(begc:endc) = spval
         call hist_addfld1d (fname='LAND_USE_FLUX', units='gC/m^2/s', &
@@ -6765,20 +6921,20 @@ contains
        this%annsum_npp(begc:endc) = spval
         call hist_addfld1d (fname='CANNSUM_NPP', units='gC/m^2/s', &
              avgflag='A', long_name='annual sum of column-level NPP', &
-              ptr_col=this%annsum_npp, default='inactive')
+              ptr_col=this%annsum_npp, default='active')
 
         if(.not.use_fates)then 
         ! C4MIP output variable, plant carbon flux to cwd (a part of fVegLitter)
            this%plant_c_to_cwdc(begc:endc) = spval
            call hist_addfld1d (fname='VEGC_TO_CWDC', units='gC/m^2/s', &
                 avgflag='A', long_name='plant carbon flux to cwd', &
-                ptr_col=this%plant_c_to_cwdc, default='inactive')
+                ptr_col=this%plant_c_to_cwdc, default='active')
            
            ! C4MIP output variable, plant phosphorus flux to cwd (a part of fVegLitter)
            this%plant_p_to_cwdp(begc:endc) = spval
            call hist_addfld1d (fname='VEGP_TO_CWDP', units='gP/m^2/s', &
                 avgflag='A', long_name='plant phosphorus flux to cwd', &
-                ptr_col=this%plant_p_to_cwdp, default='inactive')
+                ptr_col=this%plant_p_to_cwdp, default='active')
         end if
            
        ! end of C12 block
@@ -6793,7 +6949,7 @@ contains
              longname =  'C13 '//trim(decomp_cascade_con%decomp_pool_name_long(k))//' C fire loss'
               call hist_addfld1d (fname=fieldname, units='gC13/m^2',  &
                    avgflag='A', long_name=longname, &
-                    ptr_col=data1dptr, default='inactive')
+                    ptr_col=data1dptr, default='active')
 
              if ( nlevdecomp_full > 1 ) then
                 data2dptr => this%m_decomp_cpools_to_fire_vr(:,:,k)
@@ -6801,7 +6957,7 @@ contains
                 longname =  'C13 '//trim(decomp_cascade_con%decomp_pool_name_long(k))//' C fire loss'
                  call hist_addfld_decomp (fname=fieldname, units='gC13/m^3',  type2d='levdcmp', &
                       avgflag='A', long_name=longname, &
-                       ptr_col=data2dptr, default='inactive')
+                       ptr_col=data2dptr, default='active')
              end if
           endif
        end do
@@ -6879,17 +7035,17 @@ contains
        this%litfire(begc:endc) = spval
         call hist_addfld1d (fname='C13_LITFIRE', units='gC13/m^2/s', &
              avgflag='A', long_name='C13 litter fire losses', &
-              ptr_col=this%litfire, default='inactive')
+              ptr_col=this%litfire, default='active')
 
        this%somfire(begc:endc) = spval
         call hist_addfld1d (fname='C13_SOMFIRE', units='gC13/m^2/s', &
              avgflag='A', long_name='C13 soil organic matter fire losses', &
-              ptr_col=this%somfire, default='inactive')
+              ptr_col=this%somfire, default='active')
 
        this%totfire(begc:endc) = spval
         call hist_addfld1d (fname='C13_TOTFIRE', units='gC13/m^2/s', &
              avgflag='A', long_name='C13 total ecosystem fire losses', &
-              ptr_col=this%totfire, default='inactive')
+              ptr_col=this%totfire, default='active')
 
        this%nep(begc:endc) = spval
         call hist_addfld1d (fname='C13_NEP', units='gC13/m^2/s', &
@@ -6949,27 +7105,27 @@ contains
        this%dwt_frootc_to_litr_met_c(begc:endc,:) = spval
         call hist_addfld_decomp (fname='C13_DWT_FROOTC_TO_LITR_MET_C', units='gC13/m^2/s',  type2d='levdcmp', &
              avgflag='A', long_name='C13 fine root to litter due to landcover change', &
-              ptr_col=this%dwt_frootc_to_litr_met_c, default='inactive')
+              ptr_col=this%dwt_frootc_to_litr_met_c, default='active')
 
        this%dwt_frootc_to_litr_cel_c(begc:endc,:) = spval
         call hist_addfld_decomp (fname='C13_DWT_FROOTC_TO_LITR_CEL_C', units='gC13/m^2/s',  type2d='levdcmp', &
              avgflag='A', long_name='C13 fine root to litter due to landcover change', &
-              ptr_col=this%dwt_frootc_to_litr_cel_c, default='inactive')
+              ptr_col=this%dwt_frootc_to_litr_cel_c, default='active')
 
        this%dwt_frootc_to_litr_lig_c(begc:endc,:) = spval
         call hist_addfld_decomp (fname='C13_DWT_FROOTC_TO_LITR_LIG_C', units='gC13/m^2/s',  type2d='levdcmp', &
              avgflag='A', long_name='C13 fine root to litter due to landcover change', &
-              ptr_col=this%dwt_frootc_to_litr_lig_c, default='inactive')
+              ptr_col=this%dwt_frootc_to_litr_lig_c, default='active')
 
        this%dwt_livecrootc_to_cwdc(begc:endc,:) = spval
         call hist_addfld_decomp (fname='C13_DWT_LIVECROOTC_TO_CWDC', units='gC13/m^2/s',  type2d='levdcmp', &
              avgflag='A', long_name='C13 live coarse root to CWD due to landcover change', &
-              ptr_col=this%dwt_livecrootc_to_cwdc, default='inactive')
+              ptr_col=this%dwt_livecrootc_to_cwdc, default='active')
 
        this%dwt_deadcrootc_to_cwdc(begc:endc,:) = spval
         call hist_addfld_decomp (fname='C13_DWT_DEADCROOTC_TO_CWDC', units='gC13/m^2/s',  type2d='levdcmp', &
              avgflag='A', long_name='C13 dead coarse root to CWD due to landcover change', &
-              ptr_col=this%dwt_deadcrootc_to_cwdc, default='inactive')
+              ptr_col=this%dwt_deadcrootc_to_cwdc, default='active')
 
        this%dwt_closs(begc:endc) = spval
         call hist_addfld1d (fname='C13_DWT_CLOSS', units='gC13/m^2/s', &
@@ -6993,7 +7149,7 @@ contains
              longname =  'C14 '//trim(decomp_cascade_con%decomp_pool_name_long(k))//' C fire loss'
               call hist_addfld1d (fname=fieldname, units='gC14/m^2',  &
                    avgflag='A', long_name=longname, &
-                    ptr_col=data1dptr, default='inactive')
+                    ptr_col=data1dptr, default='active')
 
              if ( nlevdecomp_full > 1 ) then
                 data2dptr => this%m_decomp_cpools_to_fire_vr(:,:,k)
@@ -7001,7 +7157,7 @@ contains
                 longname =  'C14 '//trim(decomp_cascade_con%decomp_pool_name_long(k))//' C fire loss'
                  call hist_addfld_decomp (fname=fieldname, units='gC14/m^3',  type2d='levdcmp', &
                       avgflag='A', long_name=longname, &
-                       ptr_col=data2dptr, default='inactive')
+                       ptr_col=data2dptr, default='active')
              end if
           endif
        end do
@@ -7078,17 +7234,17 @@ contains
        this%litfire(begc:endc) = spval
         call hist_addfld1d (fname='C14_LITFIRE', units='gC14/m^2/s', &
              avgflag='A', long_name='C14 litter fire losses', &
-              ptr_col=this%litfire, default='inactive')
+              ptr_col=this%litfire, default='active')
 
        this%somfire(begc:endc) = spval
         call hist_addfld1d (fname='C14_SOMFIRE', units='gC14/m^2/s', &
              avgflag='A', long_name='C14 soil organic matter fire losses', &
-              ptr_col=this%somfire, default='inactive')
+              ptr_col=this%somfire, default='active')
 
        this%totfire(begc:endc) = spval
         call hist_addfld1d (fname='C14_TOTFIRE', units='gC14/m^2/s', &
              avgflag='A', long_name='C14 total ecosystem fire losses', &
-              ptr_col=this%totfire, default='inactive')
+              ptr_col=this%totfire, default='active')
 
        this%nep(begc:endc) = spval
         call hist_addfld1d (fname='C14_NEP', units='gC14/m^2/s', &
@@ -7143,27 +7299,27 @@ contains
        this%dwt_frootc_to_litr_met_c(begc:endc,:) = spval
         call hist_addfld_decomp (fname='C14_DWT_FROOTC_TO_LITR_MET_C', units='gC14/m^2/s',  type2d='levdcmp', &
              avgflag='A', long_name='C14 fine root to litter due to landcover change', &
-              ptr_col=this%dwt_frootc_to_litr_met_c, default='inactive')
+              ptr_col=this%dwt_frootc_to_litr_met_c, default='active')
 
        this%dwt_frootc_to_litr_cel_c(begc:endc,:) = spval
         call hist_addfld_decomp (fname='C14_DWT_FROOTC_TO_LITR_CEL_C', units='gC14/m^2/s',  type2d='levdcmp', &
              avgflag='A', long_name='C14 fine root to litter due to landcover change', &
-              ptr_col=this%dwt_frootc_to_litr_cel_c, default='inactive')
+              ptr_col=this%dwt_frootc_to_litr_cel_c, default='active')
 
        this%dwt_frootc_to_litr_lig_c(begc:endc,:) = spval
         call hist_addfld_decomp (fname='C14_DWT_FROOTC_TO_LITR_LIG_C', units='gC14/m^2/s',  type2d='levdcmp', &
              avgflag='A', long_name='C14 fine root to litter due to landcover change', &
-              ptr_col=this%dwt_frootc_to_litr_lig_c, default='inactive')
+              ptr_col=this%dwt_frootc_to_litr_lig_c, default='active')
 
        this%dwt_livecrootc_to_cwdc(begc:endc,:) = spval
         call hist_addfld_decomp (fname='C14_DWT_LIVECROOTC_TO_CWDC', units='gC14/m^2/s',  type2d='levdcmp', &
              avgflag='A', long_name='C14 live coarse root to CWD due to landcover change', &
-              ptr_col=this%dwt_livecrootc_to_cwdc, default='inactive')
+              ptr_col=this%dwt_livecrootc_to_cwdc, default='active')
 
        this%dwt_deadcrootc_to_cwdc(begc:endc,:) = spval
         call hist_addfld_decomp (fname='C14_DWT_DEADCROOTC_TO_CWDC', units='gC14/m^2/s',  type2d='levdcmp', &
              avgflag='A', long_name='C14 dead coarse root to CWD due to landcover change', &
-              ptr_col=this%dwt_deadcrootc_to_cwdc, default='inactive')
+              ptr_col=this%dwt_deadcrootc_to_cwdc, default='active')
 
        this%dwt_closs(begc:endc) = spval
         call hist_addfld1d (fname='C14_DWT_CLOSS', units='gC14/m^2/s', &
@@ -7187,7 +7343,7 @@ contains
        longname=trim(ctag)//' input to '//trim(decomp_cascade_con%decomp_pool_name_history(k))
         call hist_addfld_decomp (fname=fieldname, units='g'//ctag//'/m^3',  type2d='levdcmp', &
              avgflag='A', long_name=longname, &
-              ptr_col=data2dptr, default='inactive')
+              ptr_col=data2dptr, default='active')
 
        this%bgc_cpool_ext_loss_vr(begc:endc, :, k) = spval
        data2dptr => this%bgc_cpool_ext_loss_vr(:,:,k)
@@ -7195,7 +7351,7 @@ contains
        longname=trim(ctag)//' loss of '//trim(decomp_cascade_con%decomp_pool_name_history(k))
         call hist_addfld_decomp (fname=fieldname, units='g'//ctag//'/m^3',  type2d='levdcmp', &
              avgflag='A', long_name=longname, &
-              ptr_col=data2dptr, default='inactive')
+              ptr_col=data2dptr, default='active')
     enddo
 
     !-----------------------------------------------------------------------
@@ -8518,7 +8674,7 @@ contains
     this%nfix_to_ecosysn(begc:endc) = spval
     call hist_addfld1d (fname='NFIX_TO_ECOSYSN', units='gN/m^2/s', &
         avgflag='A', long_name='symbiotic/asymbiotic N fixation to the whole ecosystem', &
-        ptr_col=this%nfix_to_ecosysn,default='inactive')
+        ptr_col=this%nfix_to_ecosysn,default='active')
 
 
     this%nfix_to_sminn(begc:endc) = spval
@@ -8531,7 +8687,7 @@ contains
        this%plant_n_to_cwdn(begc:endc) = spval
        call hist_addfld1d (fname='VEGN_TO_CWDN', units='gN/m^2/s', &
             avgflag='A', long_name='plant nitrogen flux to cwd', &
-            ptr_col=this%plant_n_to_cwdn, default='inactive')
+            ptr_col=this%plant_n_to_cwdn, default='active')
     end if
        
     do k = 1, ndecomp_pools
@@ -8542,7 +8698,7 @@ contains
           longname =  trim(decomp_cascade_con%decomp_pool_name_long(k))//' N fire loss'
            call hist_addfld1d (fname=fieldname, units='gN/m^2',  &
                 avgflag='A', long_name=longname, &
-                 ptr_col=data1dptr, default='inactive')
+                 ptr_col=data1dptr, default='active')
 
           if ( nlevdecomp_full > 1 ) then
              this%m_decomp_npools_to_fire_vr(begc:endc,:,k) = spval
@@ -8551,7 +8707,7 @@ contains
              longname =  trim(decomp_cascade_con%decomp_pool_name_long(k))//' N fire loss'
               call hist_addfld_decomp (fname=fieldname, units='gN/m^3',  type2d='levdcmp', &
                    avgflag='A', long_name=longname, &
-                    ptr_col=data2dptr, default='inactive')
+                    ptr_col=data2dptr, default='active')
           endif
        endif
     end do
@@ -8615,7 +8771,7 @@ contains
                 endif
                  call hist_addfld_decomp (fname=fieldname, units='gN/m^3',  type2d='levdcmp', &
                       avgflag='A', long_name=longname, &
-                       ptr_col=data2dptr, default='inactive')
+                       ptr_col=data2dptr, default='active')
              endif
 
              !-- transfer fluxes (none from terminal pool, if present)
@@ -8630,7 +8786,7 @@ contains
                      ' N to '//trim(decomp_cascade_con%decomp_pool_name_long(decomp_cascade_con%cascade_receiver_pool(l)))//' N'
                  call hist_addfld_decomp (fname=fieldname, units='gN/m^3',  type2d='levdcmp', &
                       avgflag='A', long_name=longname, &
-                       ptr_col=data2dptr, default='inactive')
+                       ptr_col=data2dptr, default='active')
              endif
 
           endif
@@ -8641,14 +8797,14 @@ contains
     fieldname='SMINN_NO3_INPUT_vr'
      call hist_addfld_decomp (fname=fieldname, units='gN/m^3/s',  type2d='levdcmp', &
          avgflag='A', long_name=longname, &
-          ptr_col=data2dptr, default='inactive')
+          ptr_col=data2dptr, default='active')
 
     this%sminn_nh4_input_vr(begc:endc,:)  = spval
     data2dptr => this%sminn_nh4_input_vr(:,:)
     fieldname='SMINN_NH4_INPUT_vr'
      call hist_addfld_decomp (fname=fieldname, units='gN/m^3/s',  type2d='levdcmp', &
          avgflag='A', long_name=longname, &
-          ptr_col=data2dptr, default='inactive')
+          ptr_col=data2dptr, default='active')
 
     do k = 1, ndecomp_pools
       this%bgc_npool_ext_inputs_vr(begc:endc, :, k) = spval
@@ -8657,7 +8813,7 @@ contains
       longname='N input to '//trim(decomp_cascade_con%decomp_pool_name_history(k))
        call hist_addfld_decomp (fname=fieldname, units='gN/m^3',  type2d='levdcmp', &
          avgflag='A', long_name=longname, &
-          ptr_col=data2dptr, default='inactive')
+          ptr_col=data2dptr, default='active')
 
       this%bgc_npool_ext_loss_vr(begc:endc, :, k) = spval
       data2dptr => this%bgc_npool_ext_loss_vr(:,:,k)
@@ -8665,7 +8821,7 @@ contains
       longname='N LOSS to '//trim(decomp_cascade_con%decomp_pool_name_history(k))
        call hist_addfld_decomp (fname=fieldname, units='gN/m^3',  type2d='levdcmp', &
          avgflag='A', long_name=longname, &
-          ptr_col=data2dptr, default='inactive')
+          ptr_col=data2dptr, default='active')
 
     enddo
 
@@ -8677,7 +8833,7 @@ contains
     this%som_n_leached(begc:endc) = spval
      call hist_addfld1d (fname='SOM_N_LEACHED', units='gN/m^2/s', &
           avgflag='A', long_name='total flux of N from SOM pools due to leaching', &
-           ptr_col=this%som_n_leached, default='inactive')
+           ptr_col=this%som_n_leached, default='active')
 
     do k = 1, ndecomp_pools
        if(trim(decomp_cascade_con%decomp_pool_name_history(k))=='')exit
@@ -8688,7 +8844,7 @@ contains
           longname =  trim(decomp_cascade_con%decomp_pool_name_long(k))//' N leaching loss'
            call hist_addfld1d (fname=fieldname, units='gN/m^2/s', &
                 avgflag='A', long_name=longname, &
-                 ptr_col=data1dptr, default='inactive')
+                 ptr_col=data1dptr, default='active')
 
           this%decomp_npools_transport_tendency(begc:endc,:,k) = spval
           data2dptr => this%decomp_npools_transport_tendency(:,:,k)
@@ -8703,17 +8859,17 @@ contains
     this%somn_erode(begc:endc) = spval
     call hist_addfld1d (fname='SOMN_ERO', units='gN/m^2/s', &
          avgflag='A', long_name='SON detachment', &
-         ptr_col=this%somn_erode, default='inactive')
+         ptr_col=this%somn_erode, default='active')
 
     this%somn_deposit(begc:endc) = spval
     call hist_addfld1d (fname='SOMN_DEP', units='gN/m^2/s', &
          avgflag='A', long_name='SON hillslope redeposition', &
-         ptr_col=this%somn_deposit, default='inactive')
+         ptr_col=this%somn_deposit, default='active')
 
     this%somn_yield(begc:endc) = spval
     call hist_addfld1d (fname='SOMN_YLD', units='gN/m^2/s', &
          avgflag='A', long_name='SON erosional loss to inland waters', &
-         ptr_col=this%somn_yield, default='inactive')
+         ptr_col=this%somn_yield, default='active')
 
     this%decomp_npools_erode(begc:endc,:) = spval
     this%decomp_npools_deposit(begc:endc,:) = spval
@@ -8725,21 +8881,21 @@ contains
           longname =  trim(decomp_cascade_con%decomp_pool_name_long(k))//' N detachment'
           call hist_addfld1d (fname=fieldname, units='gN/m^2/s',  &
                avgflag='A', long_name=longname, &
-               ptr_col=data1dptr, default='inactive')
+               ptr_col=data1dptr, default='active')
 
           data1dptr => this%decomp_npools_deposit(:,k)
           fieldname = trim(decomp_cascade_con%decomp_pool_name_history(k))//'N_DEP'
           longname =  trim(decomp_cascade_con%decomp_pool_name_long(k))//' N hillslope redeposition'
           call hist_addfld1d (fname=fieldname, units='gN/m^2/s',  &
                avgflag='A', long_name=longname, &
-               ptr_col=data1dptr, default='inactive')
+               ptr_col=data1dptr, default='active')
 
           data1dptr => this%decomp_npools_yield(:,k)
           fieldname = trim(decomp_cascade_con%decomp_pool_name_history(k))//'N_YLD'
           longname =  trim(decomp_cascade_con%decomp_pool_name_long(k))//' N erosional loss to inland waters'
           call hist_addfld1d (fname=fieldname, units='gN/m^2/s',  &
                avgflag='A', long_name=longname, &
-               ptr_col=data1dptr, default='inactive')
+               ptr_col=data1dptr, default='active')
        endif
     end do
 
@@ -8792,168 +8948,168 @@ contains
        this%pot_f_nit_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='POT_F_NIT'//trim(vr_suffix), units='gN/m^3/s', type2d='levdcmp', &
              avgflag='A', long_name='potential nitrification flux', &
-              ptr_col=this%pot_f_nit_vr, default='inactive')
+              ptr_col=this%pot_f_nit_vr, default='active')
     end if
 
     if (nlevdecomp_full > 1 ) then
        this%pot_f_denit_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='POT_F_DENIT'//trim(vr_suffix), units='gN/m^3/s', type2d='levdcmp', &
              avgflag='A', long_name='potential denitrification flux', &
-              ptr_col=this%pot_f_denit_vr, default='inactive')
+              ptr_col=this%pot_f_denit_vr, default='active')
     end if
 
     if ((nlevdecomp_full > 1) .or. (use_pflotran .and. pf_cmode)) then
        this%smin_no3_leached_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='SMIN_NO3_LEACHED'//trim(vr_suffix), units='gN/m^3/s', type2d='levdcmp', &
              avgflag='A', long_name='soil NO3 pool loss to leaching', &
-              ptr_col=this%smin_no3_leached_vr, default='inactive')
+              ptr_col=this%smin_no3_leached_vr, default='active')
     end if
 
     if ((nlevdecomp_full > 1) .or. (use_pflotran .and. pf_cmode)) then
        this%smin_no3_runoff_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='SMIN_NO3_RUNOFF'//trim(vr_suffix), units='gN/m^3/s', type2d='levdcmp', &
              avgflag='A', long_name='soil NO3 pool loss to runoff', &
-              ptr_col=this%smin_no3_runoff_vr, default='inactive')
+              ptr_col=this%smin_no3_runoff_vr, default='active')
     endif
 
     this%n2_n2o_ratio_denit_vr(begc:endc,:) = spval
     call hist_addfld_decomp (fname='n2_n2o_ratio_denit', units='gN/gN', type2d='levdcmp', &
          avgflag='A', long_name='n2_n2o_ratio_denit', &
-         ptr_col=this%n2_n2o_ratio_denit_vr, default='inactive')
+         ptr_col=this%n2_n2o_ratio_denit_vr, default='active')
 
     if ((nlevdecomp_full > 1) .or. (use_pflotran .and. pf_cmode)) then
        this%actual_immob_no3_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='ACTUAL_IMMOB_NO3', units='gN/m^3/s', type2d='levdcmp', &
              avgflag='A', long_name='immobilization of NO3', &
-              ptr_col=this%actual_immob_no3_vr, default='inactive')
+              ptr_col=this%actual_immob_no3_vr, default='active')
     end if
 
     if ((nlevdecomp_full > 1) .or. (use_pflotran .and. pf_cmode)) then
        this%actual_immob_nh4_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='ACTUAL_IMMOB_NH4', units='gN/m^3/s', type2d='levdcmp', &
              avgflag='A', long_name='immobilization of NH4', &
-              ptr_col=this%actual_immob_nh4_vr, default='inactive')
+              ptr_col=this%actual_immob_nh4_vr, default='active')
     end if
 
     if ((nlevdecomp_full > 1) .or. (use_pflotran .and. pf_cmode)) then
        this%smin_no3_to_plant_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='SMIN_NO3_TO_PLANT', units='gN/m^3/s', type2d='levdcmp', &
              avgflag='A', long_name='plant uptake of NO3', &
-              ptr_col=this%smin_no3_to_plant_vr, default='inactive')
+              ptr_col=this%smin_no3_to_plant_vr, default='active')
     end if
 
     if ((nlevdecomp_full > 1) .or. (use_pflotran .and. pf_cmode)) then
        this%smin_nh4_to_plant_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='SMIN_NH4_TO_PLANT', units='gN/m^3/s', type2d='levdcmp', &
              avgflag='A', long_name='plant uptake of NH4', &
-              ptr_col=this%smin_nh4_to_plant_vr, default='inactive')
+              ptr_col=this%smin_nh4_to_plant_vr, default='active')
     end if
 
     this%smin_no3_massdens_vr(begc:endc,:) = spval
     call hist_addfld_decomp (fname='SMIN_NO3_MASSDENS', units='ugN/cm^3 soil', type2d='levdcmp', &
          avgflag='A', long_name='SMIN_NO3_MASSDENS', &
-         ptr_col=this%smin_no3_massdens_vr, default='inactive')
+         ptr_col=this%smin_no3_massdens_vr, default='active')
 
     this%k_nitr_t_vr(begc:endc,:) = spval
     call hist_addfld_decomp (fname='K_NITR_T', units='unitless', type2d='levdcmp', &
          avgflag='A', long_name='K_NITR_T', &
-         ptr_col=this%k_nitr_t_vr, default='inactive')
+         ptr_col=this%k_nitr_t_vr, default='active')
 
     this%k_nitr_ph_vr(begc:endc,:) = spval
     call hist_addfld_decomp (fname='K_NITR_PH', units='unitless', type2d='levdcmp', &
          avgflag='A', long_name='K_NITR_PH', &
-         ptr_col=this%k_nitr_ph_vr, default='inactive')
+         ptr_col=this%k_nitr_ph_vr, default='active')
 
     this%k_nitr_h2o_vr(begc:endc,:) = spval
     call hist_addfld_decomp (fname='K_NITR_H2O', units='unitless', type2d='levdcmp', &
          avgflag='A', long_name='K_NITR_H2O', &
-         ptr_col=this%k_nitr_h2o_vr, default='inactive')
+         ptr_col=this%k_nitr_h2o_vr, default='active')
 
     this%k_nitr_vr(begc:endc,:) = spval
     call hist_addfld_decomp (fname='K_NITR', units='1/s', type2d='levdcmp', &
          avgflag='A', long_name='K_NITR', &
-         ptr_col=this%k_nitr_vr, default='inactive')
+         ptr_col=this%k_nitr_vr, default='active')
 
     this%wfps_vr(begc:endc,:) = spval
     call hist_addfld_decomp (fname='WFPS', units='percent', type2d='levdcmp', &
          avgflag='A', long_name='WFPS', &
-         ptr_col=this%wfps_vr, default='inactive')
+         ptr_col=this%wfps_vr, default='active')
 
     this%fmax_denit_carbonsubstrate_vr(begc:endc,:) = spval
     call hist_addfld_decomp (fname='FMAX_DENIT_CARBONSUBSTRATE', units='gN/m^3/s', type2d='levdcmp', &
          avgflag='A', long_name='FMAX_DENIT_CARBONSUBSTRATE', &
-         ptr_col=this%fmax_denit_carbonsubstrate_vr, default='inactive')
+         ptr_col=this%fmax_denit_carbonsubstrate_vr, default='active')
 
     this%fmax_denit_nitrate_vr(begc:endc,:) = spval
     call hist_addfld_decomp (fname='FMAX_DENIT_NITRATE', units='gN/m^3/s', type2d='levdcmp', &
          avgflag='A', long_name='FMAX_DENIT_NITRATE', &
-         ptr_col=this%fmax_denit_nitrate_vr, default='inactive')
+         ptr_col=this%fmax_denit_nitrate_vr, default='active')
 
     this%f_denit_base_vr(begc:endc,:) = spval
     call hist_addfld_decomp (fname='F_DENIT_BASE', units='gN/m^3/s', type2d='levdcmp', &
          avgflag='A', long_name='F_DENIT_BASE', &
-         ptr_col=this%f_denit_base_vr, default='inactive')
+         ptr_col=this%f_denit_base_vr, default='active')
 
     this%diffus(begc:endc,:) = spval
     call hist_addfld_decomp (fname='diffus', units='m^2/s', type2d='levdcmp', &
          avgflag='A', long_name='diffusivity', &
-         ptr_col=this%diffus, default='inactive')
+         ptr_col=this%diffus, default='active')
 
     this%ratio_k1(begc:endc,:) = spval
     call hist_addfld_decomp (fname='ratio_k1', units='none', type2d='levdcmp', &
          avgflag='A', long_name='ratio_k1', &
-         ptr_col=this%ratio_k1, default='inactive')
+         ptr_col=this%ratio_k1, default='active')
 
     this%ratio_no3_co2(begc:endc,:) = spval
     call hist_addfld_decomp (fname='ratio_no3_co2', units='ratio', type2d='levdcmp', &
          avgflag='A', long_name='ratio_no3_co2', &
-         ptr_col=this%ratio_no3_co2, default='inactive')
+         ptr_col=this%ratio_no3_co2, default='active')
 
     this%soil_co2_prod(begc:endc,:) = spval
     call hist_addfld_decomp (fname='soil_co2_prod', units='ug C / g soil / day', type2d='levdcmp', &
          avgflag='A', long_name='soil_co2_prod', &
-         ptr_col=this%soil_co2_prod, default='inactive')
+         ptr_col=this%soil_co2_prod, default='active')
 
     this%fr_WFPS(begc:endc,:) = spval
     call hist_addfld_decomp (fname='fr_WFPS', units='fraction', type2d='levdcmp', &
          avgflag='A', long_name='fr_WFPS', &
-         ptr_col=this%fr_WFPS, default='inactive')
+         ptr_col=this%fr_WFPS, default='active')
 
     this%soil_bulkdensity(begc:endc,:) = spval
     call hist_addfld_decomp (fname='soil_bulkdensity', units='kg/m3', type2d='levdcmp', &
          avgflag='A', long_name='soil_bulkdensity', &
-         ptr_col=this%soil_bulkdensity, default='inactive')
+         ptr_col=this%soil_bulkdensity, default='active')
 
     this%anaerobic_frac(begc:endc,:) = spval
     call hist_addfld_decomp (fname='anaerobic_frac', units='m3/m3', type2d='levdcmp', &
          avgflag='A', long_name='anaerobic_frac', &
-         ptr_col=this%anaerobic_frac, default='inactive')
+         ptr_col=this%anaerobic_frac, default='active')
 
     this%r_psi(begc:endc,:) = spval
     call hist_addfld_decomp (fname='r_psi', units='m', type2d='levdcmp', &
          avgflag='A', long_name='r_psi', &
-         ptr_col=this%r_psi, default='inactive')
+         ptr_col=this%r_psi, default='active')
 
 
     if ((nlevdecomp_full > 1) .or. (use_pflotran .and. pf_cmode)) then
        this%potential_immob_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='POTENTIAL_IMMOB'//trim(vr_suffix), units='gN/m^3/s',  type2d='levdcmp', &
              avgflag='A', long_name='potential N immobilization', &
-              ptr_col=this%potential_immob_vr, default='inactive')
+              ptr_col=this%potential_immob_vr, default='active')
     end if
 
     if ((nlevdecomp_full > 1) .or. (use_pflotran .and. pf_cmode)) then
        this%actual_immob_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='ACTUAL_IMMOB'//trim(vr_suffix), units='gN/m^3/s',  type2d='levdcmp', &
              avgflag='A', long_name='actual N immobilization', &
-              ptr_col=this%actual_immob_vr, default='inactive')
+              ptr_col=this%actual_immob_vr, default='active')
     end if
 
     if ((nlevdecomp_full > 1) .or. (use_pflotran .and. pf_cmode)) then
        this%sminn_to_plant_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='SMINN_TO_PLANT'//trim(vr_suffix), units='gN/m^3/s',  type2d='levdcmp', &
              avgflag='A', long_name='plant uptake of soil mineral N', &
-              ptr_col=this%sminn_to_plant_vr, default='inactive')
+              ptr_col=this%sminn_to_plant_vr, default='active')
     end if
 
 
@@ -8961,21 +9117,21 @@ contains
        this%supplement_to_sminn_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='SUPPLEMENT_TO_SMINN'//trim(vr_suffix), units='gN/m^3/s',  type2d='levdcmp', &
              avgflag='A', long_name='supplemental N supply', &
-              ptr_col=this%supplement_to_sminn_vr, default='inactive')
+              ptr_col=this%supplement_to_sminn_vr, default='active')
     end if
 
     if ((nlevdecomp_full > 1) .or. (use_pflotran .and. pf_cmode)) then
        this%gross_nmin_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='GROSS_NMIN'//trim(vr_suffix), units='gN/m^3/s',  type2d='levdcmp', &
              avgflag='A', long_name='gross rate of N mineralization', &
-              ptr_col=this%gross_nmin_vr, default='inactive')
+              ptr_col=this%gross_nmin_vr, default='active')
     end if
 
     if ((nlevdecomp_full > 1) .or. (use_pflotran .and. pf_cmode)) then
        this%net_nmin_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='NET_NMIN'//trim(vr_suffix), units='gN/m^3/s',  type2d='levdcmp', &
              avgflag='A', long_name='net rate of N mineralization', &
-              ptr_col=this%net_nmin_vr, default='inactive')
+              ptr_col=this%net_nmin_vr, default='active')
     end if
 
     this%potential_immob(begc:endc) = spval
@@ -9021,12 +9177,12 @@ contains
     this%fire_nloss(begc:endc) = spval
      call hist_addfld1d (fname='COL_FIRE_NLOSS', units='gN/m^2/s', &
           avgflag='A', long_name='total column-level fire N loss', &
-           ptr_col=this%fire_nloss, default='inactive')
+           ptr_col=this%fire_nloss, default='active')
 
     this%fire_decomp_nloss(begc:endc) = spval
      call hist_addfld1d (fname='DECOMP_FIRE_NLOSS', units='gN/m^2/s', &
         avgflag='A', long_name='fire N loss from decomposable pools', &
-         ptr_col=this%fire_decomp_nloss, default='inactive')
+         ptr_col=this%fire_decomp_nloss, default='active')
 
     this%dwt_slash_nflux(begc:endc) = spval
      call hist_addfld1d (fname='DWT_SLASH_NFLUX', units='gN/m^2/s', &
@@ -9036,72 +9192,72 @@ contains
     this%dwt_conv_nflux(begc:endc) = spval
      call hist_addfld1d (fname='DWT_CONV_NFLUX', units='gN/m^2/s', &
           avgflag='A', long_name='conversion N flux (immediate loss to atm)', &
-           ptr_col=this%dwt_conv_nflux, default='inactive')
+           ptr_col=this%dwt_conv_nflux, default='active')
 
     this%dwt_crop_productn_gain(begc:endc) = spval
     call hist_addfld1d (fname='DWT_CROP_PRODUCTN_GAIN', units='gN/m^2/s', &
         avgflag='A', long_name='addition to crop product pool', &
-        ptr_col=this%dwt_crop_productn_gain, default='inactive')
+        ptr_col=this%dwt_crop_productn_gain, default='active')
 
     this%dwt_prod10n_gain(begc:endc) = spval
      call hist_addfld1d (fname='DWT_PROD10N_GAIN', units='gN/m^2/s', &
           avgflag='A', long_name='addition to 10-yr wood product pool', &
-           ptr_col=this%dwt_prod10n_gain, default='inactive')
+           ptr_col=this%dwt_prod10n_gain, default='active')
 
     this%prod10n_loss(begc:endc) = spval
      call hist_addfld1d (fname='PROD10N_LOSS', units='gN/m^2/s', &
           avgflag='A', long_name='loss from 10-yr wood product pool', &
-           ptr_col=this%prod10n_loss, default='inactive')
+           ptr_col=this%prod10n_loss, default='active')
 
     this%dwt_prod100n_gain(begc:endc) = spval
      call hist_addfld1d (fname='DWT_PROD100N_GAIN', units='gN/m^2/s', &
           avgflag='A', long_name='addition to 100-yr wood product pool', &
-           ptr_col=this%dwt_prod100n_gain, default='inactive')
+           ptr_col=this%dwt_prod100n_gain, default='active')
 
     this%prod100n_loss(begc:endc) = spval
      call hist_addfld1d (fname='PROD100N_LOSS', units='gN/m^2/s', &
           avgflag='A', long_name='loss from 100-yr wood product pool', &
-           ptr_col=this%prod100n_loss, default='inactive')
+           ptr_col=this%prod100n_loss, default='active')
 
     this%prod1n_loss(begc:endc) = spval
      call hist_addfld1d (fname='PROD1N_LOSS', units='gN/m^2/s', &
           avgflag='A', long_name='loss from 1-yr crop product pool', &
-           ptr_col=this%prod1n_loss, default='inactive')
+           ptr_col=this%prod1n_loss, default='active')
 
     this%product_nloss(begc:endc) = spval
      call hist_addfld1d (fname='PRODUCT_NLOSS', units='gN/m^2/s', &
           avgflag='A', long_name='total N loss from wood product pools', &
-           ptr_col=this%product_nloss, default='inactive')
+           ptr_col=this%product_nloss, default='active')
 
     this%dwt_frootn_to_litr_met_n(begc:endc,:) = spval
      call hist_addfld_decomp (fname='DWT_FROOTN_TO_LITR_MET_N', units='gN/m^2/s',  type2d='levdcmp', &
           avgflag='A', long_name='fine root to litter due to landcover change', &
-           ptr_col=this%dwt_frootn_to_litr_met_n, default='inactive')
+           ptr_col=this%dwt_frootn_to_litr_met_n, default='active')
 
     this%dwt_frootn_to_litr_cel_n(begc:endc,:) = spval
      call hist_addfld_decomp (fname='DWT_FROOTN_TO_LITR_CEL_N', units='gN/m^2/s',  type2d='levdcmp', &
           avgflag='A', long_name='fine root to litter due to landcover change', &
-           ptr_col=this%dwt_frootn_to_litr_cel_n, default='inactive')
+           ptr_col=this%dwt_frootn_to_litr_cel_n, default='active')
 
     this%dwt_frootn_to_litr_lig_n(begc:endc,:) = spval
      call hist_addfld_decomp (fname='DWT_FROOTN_TO_LITR_LIG_N', units='gN/m^2/s',  type2d='levdcmp', &
           avgflag='A', long_name='fine root to litter due to landcover change', &
-           ptr_col=this%dwt_frootn_to_litr_lig_n, default='inactive')
+           ptr_col=this%dwt_frootn_to_litr_lig_n, default='active')
 
     this%dwt_livecrootn_to_cwdn(begc:endc,:) = spval
      call hist_addfld_decomp (fname='DWT_LIVECROOTN_TO_CWDN', units='gN/m^2/s',  type2d='levdcmp', &
           avgflag='A', long_name='live coarse root to CWD due to landcover change', &
-           ptr_col=this%dwt_livecrootn_to_cwdn, default='inactive')
+           ptr_col=this%dwt_livecrootn_to_cwdn, default='active')
 
     this%dwt_deadcrootn_to_cwdn(begc:endc,:) = spval
      call hist_addfld_decomp (fname='DWT_DEADCROOTN_TO_CWDN', units='gN/m^2/s',  type2d='levdcmp', &
           avgflag='A', long_name='dead coarse root to CWD due to landcover change', &
-           ptr_col=this%dwt_deadcrootn_to_cwdn, default='inactive')
+           ptr_col=this%dwt_deadcrootn_to_cwdn, default='active')
 
     this%dwt_nloss(begc:endc) = spval
      call hist_addfld1d (fname='DWT_NLOSS', units='gN/m^2/s', &
           avgflag='A', long_name='total nitrogen loss from landcover conversion', &
-           ptr_col=this%dwt_nloss, default='inactive')
+           ptr_col=this%dwt_nloss, default='active')
 
     if (crop_prog) then
        this%fert_to_sminn(begc:endc) = spval
@@ -9126,17 +9282,17 @@ contains
        this%f_ngas_decomp(begc:endc) = spval
         call hist_addfld1d (fname='F_NGAS_DECOMP', units='gN/m^2/s',  &
               avgflag='A', long_name='N gas emission from excess mineral N pool due to mineralization', &
-               ptr_col=this%f_ngas_decomp, default='inactive')
+               ptr_col=this%f_ngas_decomp, default='active')
 
        this%f_ngas_nitri(begc:endc) = spval
         call hist_addfld1d (fname='F_NGAS_NITRI', units='gN/m^2/s',  &
               avgflag='A', long_name='N gas emission from nitrification', &
-               ptr_col=this%f_ngas_nitri, default='inactive')
+               ptr_col=this%f_ngas_nitri, default='active')
 
        this%f_ngas_denit(begc:endc) = spval
         call hist_addfld1d (fname='F_NGAS_DENIT', units='gN/m^2/s',  &
               avgflag='A', long_name='N gas emission from denitrification', &
-               ptr_col=this%f_ngas_denit, default='inactive')
+               ptr_col=this%f_ngas_denit, default='active')
 
        this%f_n2o_soil(begc:endc) = spval
         call hist_addfld1d (fname='F_N2O_SOIL', units='gN/m^2/s',  &
@@ -9151,27 +9307,27 @@ contains
        this%smin_nh4_to_plant(begc:endc) = spval
         call hist_addfld1d (fname='SMIN_NH4_TO_PLANT', units='gN/m^2/s', &
              avgflag='A', long_name='plant uptake of NH4', &
-              ptr_col=this%smin_nh4_to_plant, default='inactive')
+              ptr_col=this%smin_nh4_to_plant, default='active')
 
        this%smin_no3_to_plant(begc:endc) = spval
         call hist_addfld1d (fname='SMIN_NO3_TO_PLANT', units='gN/m^2/s', &
              avgflag='A', long_name='plant uptake of NO3', &
-              ptr_col=this%smin_no3_to_plant, default='inactive')
+              ptr_col=this%smin_no3_to_plant, default='active')
 
        this%f_ngas_decomp_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='F_NGAS_DECOMP'//trim(vr_suffix), units='gN/m^3/s',  type2d='levdcmp', &
            avgflag='A', long_name='n gas emission from excess mineral N pool due to mineralization', &
-            ptr_col=this%f_ngas_decomp_vr, default='inactive')
+            ptr_col=this%f_ngas_decomp_vr, default='active')
 
        this%f_ngas_nitri_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='F_NGAS_NITRI'//trim(vr_suffix), units='gN/m^3/s',  type2d='levdcmp', &
            avgflag='A', long_name='n gas emission in nitrification', &
-            ptr_col=this%f_ngas_nitri_vr, default='inactive')
+            ptr_col=this%f_ngas_nitri_vr, default='active')
 
        this%f_ngas_denit_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='F_NGAS_DENIT'//trim(vr_suffix), units='gN/m^3/s',  type2d='levdcmp', &
            avgflag='A', long_name='n gas emission in denitrification', &
-            ptr_col=this%f_ngas_denit_vr, default='inactive')
+            ptr_col=this%f_ngas_denit_vr, default='active')
 
        this%f_n2o_soil_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='F_N2O_SOIL'//trim(vr_suffix), units='gN/m^3/s', type2d='levdcmp', &
@@ -9186,139 +9342,139 @@ contains
        this%plant_ndemand_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='PLANT_NDEMAND'//trim(vr_suffix), units='gN/m^3/s', type2d='levdcmp', &
            avgflag='A', long_name='plant N demand distribution via roots', &
-            ptr_col=this%plant_ndemand_vr, default='inactive')
+            ptr_col=this%plant_ndemand_vr, default='active')
     end if ! if (use_pflotran.and.pf_cmode)
 
     if (use_fan) then
        this%manure_tan_appl(begc:endc) = spval
        call hist_addfld1d( fname='MAN_TAN_APP', units='gN/m^2/s', &
             avgflag='A', long_name='Manure TAN applied on soil', &
-            ptr_col=this%manure_tan_appl, default='inactive')
+            ptr_col=this%manure_tan_appl, default='active')
 
        this%manure_n_appl(begc:endc) = spval
        call hist_addfld1d( fname='MAN_N_APP', units='gN/m^2/s', &
             avgflag='A', long_name='Manure N applied on soil', &
-            ptr_col=this%manure_n_appl, default='inactive')
+            ptr_col=this%manure_n_appl, default='active')
 
        this%manure_n_grz(begc:endc) = spval
        call hist_addfld1d( fname='MAN_N_GRZ', units='gN/m^2/s', &
             avgflag='A', long_name='Manure N from grazing animals', &
-            ptr_col=this%manure_n_grz, default='inactive')
+            ptr_col=this%manure_n_grz, default='active')
 
        this%manure_n_mix(begc:endc) = spval
        call hist_addfld1d( fname='MAN_N_MIX', units='gN/m^2/s', &
             avgflag='A', long_name='Manure N in produced mixed systems', &
-            ptr_col=this%manure_n_mix, default='inactive')
+            ptr_col=this%manure_n_mix, default='active')
 
        this%manure_n_barns(begc:endc) = spval
         call hist_addfld1d( fname='MAN_N_BARNS', units='gN/m^2/s', &
              avgflag='A', long_name='Manure N in produced barns', &
-             ptr_col=this%manure_n_barns, default='inactive')
+             ptr_col=this%manure_n_barns, default='active')
 
        this%fert_n_appl(begc:endc) = spval
        call hist_addfld1d( fname='FERT_N_APP', units='gN/m^2/s', &
             avgflag='A', long_name='Fertilizer N applied on soil', &
-            ptr_col=this%fert_n_appl, default='inactive')
+            ptr_col=this%fert_n_appl, default='active')
 
        this%otherfert_n_appl(begc:endc) = spval
        call hist_addfld1d( fname='OTHERFERT_N_APP', units='gN/m^2/s', &
             avgflag='A', long_name='Non-urea fertilizer N applied on soil', &
-            ptr_col=this%otherfert_n_appl, default='inactive')
+            ptr_col=this%otherfert_n_appl, default='active')
 
        this%manure_n_transf(begc:endc) = spval
        call hist_addfld1d( fname='MAN_N_TRANSF', units='gN/m^2/s', &
             avgflag='A', long_name='Manure N moved from crop to natural column', &
-            ptr_col=this%manure_n_transf, default='inactive')
+            ptr_col=this%manure_n_transf, default='active')
 
        this%nh3_barns(begc:endc) = spval
        call hist_addfld1d( fname='NH3_BARNS', units='gN/m^2/s', &
             avgflag='A', long_name='NH3 emitted from animal housings', &
-            ptr_col=this%nh3_barns, default='inactive')
+            ptr_col=this%nh3_barns, default='active')
 
        this%nh3_stores(begc:endc) = spval
        call hist_addfld1d( fname='NH3_STORES', units='gN/m^2/s', &
             avgflag='A', long_name='NH3 emitted from stored manure', &
-            ptr_col=this%nh3_stores, default='inactive')
+            ptr_col=this%nh3_stores, default='active')
 
        this%nh3_grz(begc:endc) = spval
        call hist_addfld1d( fname='NH3_GRZ', units='gN/m^2/s', &
             avgflag='A', long_name='NH3 emitted from manure on pastures', &
-            ptr_col=this%nh3_grz, default='inactive')
+            ptr_col=this%nh3_grz, default='active')
 
        this%nh3_manure_app(begc:endc) = spval
        call hist_addfld1d( fname='NH3_MAN_APP', units='gN/m^2/s', &
             avgflag='A', long_name='NH3 emitted from manure applied on crops and grasslands', &
-            ptr_col=this%nh3_manure_app, default='inactive')
+            ptr_col=this%nh3_manure_app, default='active')
 
        this%nh3_fert(begc:endc) = spval
        call hist_addfld1d( fname='NH3_FERT', units='gN/m^2/s', &
             avgflag='A', long_name='NH3 emitted from fertilizer applied on crops', &
-            ptr_col=this%nh3_fert, default='inactive')
+            ptr_col=this%nh3_fert, default='active')
 
        this%nh3_otherfert(begc:endc) = spval
        call hist_addfld1d( fname='NH3_OTHERFERT', units='gN/m^2/s', &
             avgflag='A', long_name='NH3 emitted from fertilizers other than urea', &
-            ptr_col=this%nh3_otherfert, default='inactive')
+            ptr_col=this%nh3_otherfert, default='active')
 
        this%nh3_total(begc:endc) = spval
        call hist_addfld1d( fname='NH3_TOTAL', units='gN/m^2/s', &
             avgflag='A', long_name='Total NH3 emitted from fertilizers and manure', &
-            ptr_col=this%nh3_total, default='inactive')
+            ptr_col=this%nh3_total, default='active')
 
        this%manure_no3_to_soil(begc:endc) = spval
        call hist_addfld1d( fname='MANURE_NO3_PROD', units='gN/m^2/s', &
             avgflag='A', long_name='Manure nitrification flux', &
-            ptr_col=this%manure_no3_to_soil, default='inactive')
+            ptr_col=this%manure_no3_to_soil, default='active')
 
        this%fert_no3_to_soil(begc:endc) = spval
        call hist_addfld1d( fname='FERT_NO3_PROD', units='gN/m^2/s', &
             avgflag='A', long_name='Fertilizer nitrification flux', &
-            ptr_col=this%fert_no3_to_soil, default='inactive')
+            ptr_col=this%fert_no3_to_soil, default='active')
 
        this%fert_nh4_to_soil(begc:endc) = spval
        call hist_addfld1d( fname='FERT_NH4_TO_SOIL', units='gN/m^2/s', &
             avgflag='A', long_name='Flux of NH4 to soil mineral pools, fertilizer', &
-            ptr_col=this%fert_nh4_to_soil, default='inactive')
+            ptr_col=this%fert_nh4_to_soil, default='active')
 
        this%manure_nh4_to_soil(begc:endc) = spval
        call hist_addfld1d( fname='MANURE_NH3_TO_SOIL', units='gN/m^2/s', &
             avgflag='A', long_name='Flux of NH4 to soil mineral pools, manure', &
-            ptr_col=this%manure_nh4_to_soil, default='inactive')
+            ptr_col=this%manure_nh4_to_soil, default='active')
 
        this%manure_nh4_runoff(begc:endc) = spval
        call hist_addfld1d( fname='MANURE_RUNOFF', units='gN/m^2/s', &
             avgflag='A', long_name='NH4 in surface runoff, manure', &
-            ptr_col=this%manure_nh4_runoff, default='inactive')
+            ptr_col=this%manure_nh4_runoff, default='active')
 
        this%fert_nh4_runoff(begc:endc) = spval
        call hist_addfld1d( fname='FERT_RUNOFF', units='gN/m^2/s', &
             avgflag='A', long_name='NH4 in surface runoff, fertilizer', &
-            ptr_col=this%fert_nh4_runoff, default='inactive')
+            ptr_col=this%fert_nh4_runoff, default='active')
 
        this%synthfert_n_to_sminn(begc:endc) = spval
        call hist_addfld1d( fname='SYNTHFERT_N_TO_SMINN', units='gN/m^2/s', &
             avgflag='A', long_name='Fertilizer NH4, NO3 and urea-N from FAN to soil mineral pools', &
-            ptr_col=this%synthfert_n_to_sminn, default='inactive')
+            ptr_col=this%synthfert_n_to_sminn, default='active')
 
        this%manure_n_to_sminn(begc:endc) = spval
        call hist_addfld1d( fname='MANURE_N_TO_SMINN', units='gN/m^2/s', &
             avgflag='A', long_name='Manure NH4 and NO3 from FAN to soil mineral pools', &
-            ptr_col=this%manure_n_to_sminn, default='inactive')
+            ptr_col=this%manure_n_to_sminn, default='active')
 
        this%manure_n_total(begc:endc) = spval
        call hist_addfld1d( fname='MANURE_N_TOTAL', units='gN/m^2/s', &
             avgflag='A', long_name='Total manure N produced', &
-            ptr_col=this%manure_n_total, default='inactive')
+            ptr_col=this%manure_n_total, default='active')
 
        this%fan_totnin(begc:endc) = spval
        call hist_addfld1d(fname='FAN_TOTNIN', units='gN/m^2/s', &
             avgflag='A', long_name='Total N input into FAN', &
-            ptr_col=this%fan_totnin, default='inactive')
+            ptr_col=this%fan_totnin, default='active')
 
        this%fan_totnout(begc:endc) = spval
        call hist_addfld1d(fname='FAN_TOTNOUT', units='gN/m^2/s', &
             avgflag='A', long_name='Total N output from FAN', &
-            ptr_col=this%fan_totnout, default='inactive')
+            ptr_col=this%fan_totnout, default='active')
     end if
 
     !-----------------------------------------------------------------------
@@ -10385,7 +10541,7 @@ contains
           longname =  trim(decomp_cascade_con%decomp_pool_name_long(k))//' P fire loss'
            call hist_addfld1d (fname=fieldname, units='gP/m^2',  &
                 avgflag='A', long_name=longname, &
-                 ptr_col=data1dptr, default='inactive')
+                 ptr_col=data1dptr, default='active')
 
           if ( nlevdecomp_full > 1 ) then
              this%m_decomp_ppools_to_fire_vr(begc:endc,:,k) = spval
@@ -10394,7 +10550,7 @@ contains
              longname =  trim(decomp_cascade_con%decomp_pool_name_long(k))//' P fire loss'
               call hist_addfld_decomp (fname=fieldname, units='gP/m^3',  type2d='levdcmp', &
                    avgflag='A', long_name=longname, &
-                    ptr_col=data2dptr, default='inactive')
+                    ptr_col=data2dptr, default='active')
           endif
        endif
 
@@ -10410,7 +10566,7 @@ contains
              longname  = 'Biochemical mineralization of ppool'//aa
               call hist_addfld_decomp (fname=fieldname, units='gP/m^2/s',type2d='levdcmp', &
                    avgflag='A', long_name=longname, &
-                    ptr_col=data2dptr, default='inactive')
+                    ptr_col=data2dptr, default='active')
           endif
        endif
     end do
@@ -10474,7 +10630,7 @@ contains
              endif
               call hist_addfld_decomp (fname=fieldname, units='gP/m^3',  type2d='levdcmp', &
                    avgflag='A', long_name=longname, &
-                    ptr_col=data2dptr, default='inactive')
+                    ptr_col=data2dptr, default='active')
           endif
 
           !-- transfer fluxes (none from terminal pool, if present)
@@ -10489,7 +10645,7 @@ contains
                   ' P to '//trim(decomp_cascade_con%decomp_pool_name_long(decomp_cascade_con%cascade_receiver_pool(l)))//' P'
               call hist_addfld_decomp (fname=fieldname, units='gP/m^3',  type2d='levdcmp', &
                    avgflag='A', long_name=longname, &
-                    ptr_col=data2dptr, default='inactive')
+                    ptr_col=data2dptr, default='active')
           endif
 
        endif
@@ -10498,7 +10654,7 @@ contains
     this%som_p_leached(begc:endc) = spval
      call hist_addfld1d (fname='SOM_P_LEACHED', units='gP/m^2/s', &
           avgflag='A', long_name='total flux of P from SOM pools due to leaching', &
-           ptr_col=this%som_p_leached, default='inactive')
+           ptr_col=this%som_p_leached, default='active')
 
     do k = 1, ndecomp_pools
        if(trim(decomp_cascade_con%decomp_pool_name_history(k))=='')exit
@@ -10509,7 +10665,7 @@ contains
           longname =  trim(decomp_cascade_con%decomp_pool_name_long(k))//' P leaching loss'
            call hist_addfld1d (fname=fieldname, units='gP/m^2/s', &
                 avgflag='A', long_name=longname, &
-                 ptr_col=data1dptr, default='inactive')
+                 ptr_col=data1dptr, default='active')
 
           this%decomp_ppools_transport_tendency(begc:endc,:,k) = spval
           data2dptr => this%decomp_ppools_transport_tendency(:,:,k)
@@ -10524,17 +10680,17 @@ contains
     this%somp_erode(begc:endc) = spval
     call hist_addfld1d (fname='SOMP_ERO', units='gP/m^2/s', &
          avgflag='A', long_name='SOP detachment', &
-         ptr_col=this%somp_erode, default='inactive')
+         ptr_col=this%somp_erode, default='active')
 
     this%somp_deposit(begc:endc) = spval
     call hist_addfld1d (fname='SOMP_DEP', units='gP/m^2/s', &
          avgflag='A', long_name='SOP hillslope redeposition', &
-         ptr_col=this%somp_deposit, default='inactive')
+         ptr_col=this%somp_deposit, default='active')
 
     this%somp_yield(begc:endc) = spval
     call hist_addfld1d (fname='SOMP_YLD', units='gP/m^2/s', &
          avgflag='A', long_name='SOP erosional loss to inland waters', &
-         ptr_col=this%somp_yield, default='inactive')
+         ptr_col=this%somp_yield, default='active')
 
     this%decomp_ppools_erode(begc:endc,:) = spval
     this%decomp_ppools_deposit(begc:endc,:) = spval
@@ -10546,21 +10702,21 @@ contains
           longname =  trim(decomp_cascade_con%decomp_pool_name_long(k))//' P detachment'
           call hist_addfld1d (fname=fieldname, units='gP/m^2/s',  &
                avgflag='A', long_name=longname, &
-               ptr_col=data1dptr, default='inactive')
+               ptr_col=data1dptr, default='active')
 
           data1dptr => this%decomp_ppools_deposit(:,k)
           fieldname = trim(decomp_cascade_con%decomp_pool_name_history(k))//'P_DEP'
           longname =  trim(decomp_cascade_con%decomp_pool_name_long(k))//' P hillslope redeposition'
           call hist_addfld1d (fname=fieldname, units='gP/m^2/s',  &
                avgflag='A', long_name=longname, &
-               ptr_col=data1dptr, default='inactive')
+               ptr_col=data1dptr, default='active')
 
           data1dptr => this%decomp_ppools_yield(:,k)
           fieldname = trim(decomp_cascade_con%decomp_pool_name_history(k))//'P_YLD'
           longname =  trim(decomp_cascade_con%decomp_pool_name_long(k))//' P erosional loss to inland waters'
           call hist_addfld1d (fname=fieldname, units='gP/m^2/s',  &
                avgflag='A', long_name=longname, &
-               ptr_col=data1dptr, default='inactive')
+               ptr_col=data1dptr, default='active')
        endif
     end do
 
@@ -10573,7 +10729,7 @@ contains
        this%primp_to_labilep_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='PRIMP_TO_LABILEP'//trim(vr_suffix), units='gP/m^3/s',  type2d='levdcmp', &
              avgflag='A', long_name='PRIMARY MINERAL P TO LABILE P', &
-              ptr_col=this%primp_to_labilep_vr, default='inactive')
+              ptr_col=this%primp_to_labilep_vr, default='active')
     endif
 
     this%labilep_to_secondp(begc:endc) = spval
@@ -10585,7 +10741,7 @@ contains
        this%labilep_to_secondp_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='LABILEP_TO_SECONDP'//trim(vr_suffix), units='gP/m^3/s',  type2d='levdcmp', &
              avgflag='A', long_name='LABILE P TO SECONDARY MINERAL P', &
-              ptr_col=this%labilep_to_secondp_vr, default='inactive')
+              ptr_col=this%labilep_to_secondp_vr, default='active')
     endif
 
 
@@ -10598,7 +10754,7 @@ contains
        this%secondp_to_labilep_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='SECONDP_TO_LABILEP'//trim(vr_suffix), units='gP/m^3/s',  type2d='levdcmp', &
              avgflag='A', long_name='SECONDARY MINERAL P TO LABILE P', &
-              ptr_col=this%secondp_to_labilep_vr, default='inactive')
+              ptr_col=this%secondp_to_labilep_vr, default='active')
     endif
 
     this%secondp_to_occlp(begc:endc) = spval
@@ -10610,7 +10766,7 @@ contains
        this%secondp_to_occlp_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='SECONDP_TO_OCCLP'//trim(vr_suffix), units='gP/m^3/s',  type2d='levdcmp', &
              avgflag='A', long_name='SECONDARY MINERAL P TO OCCLUDED P', &
-              ptr_col=this%secondp_to_occlp_vr, default='inactive')
+              ptr_col=this%secondp_to_occlp_vr, default='active')
     endif
 
     this%sminp_leached(begc:endc) = spval
@@ -10622,95 +10778,95 @@ contains
        this%sminp_leached_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='SMINP_LEACHED'//trim(vr_suffix), units='gP/m^3/s',  type2d='levdcmp', &
              avgflag='A', long_name='soil mineral P pool loss to leaching', &
-              ptr_col=this%sminp_leached_vr, default='inactive')
+              ptr_col=this%sminp_leached_vr, default='active')
     endif
 
     this%labilep_erode(begc:endc) = spval
     call hist_addfld1d (fname='LABILEP_ERO', units='gP/m^2/s', &
          avgflag='A', long_name='labile mineral P detachment', &
-         ptr_col=this%labilep_erode, default='inactive')
+         ptr_col=this%labilep_erode, default='active')
 
     this%labilep_deposit(begc:endc) = spval
     call hist_addfld1d (fname='LABILEP_DEP', units='gP/m^2/s', &
          avgflag='A', long_name='labile mineral P hillslope redeposition', &
-         ptr_col=this%labilep_deposit, default='inactive')
+         ptr_col=this%labilep_deposit, default='active')
 
     this%labilep_yield(begc:endc) = spval
     call hist_addfld1d (fname='LABILEP_YLD', units='gP/m^2/s', &
          avgflag='A', long_name='labile mineral P erosional loss to inland waters', &
-         ptr_col=this%labilep_yield, default='inactive')
+         ptr_col=this%labilep_yield, default='active')
 
     if ( nlevdecomp_full > 1 ) then
        this%labilep_yield_vr(begc:endc,:) = spval
        call hist_addfld_decomp (fname='LABILEP_YLD'//trim(vr_suffix), units='gP/m^3/s',  type2d='levdcmp', &
             avgflag='A', long_name='labile mineral P pool erosional loss to inland waters', &
-            ptr_col=this%labilep_yield_vr, default='inactive')
+            ptr_col=this%labilep_yield_vr, default='active')
     endif
 
     this%secondp_erode(begc:endc) = spval
     call hist_addfld1d (fname='SECONDP_ERO', units='gP/m^2/s', &
          avgflag='A', long_name='secondary mineral P detachment', &
-         ptr_col=this%secondp_erode, default='inactive')
+         ptr_col=this%secondp_erode, default='active')
 
     this%secondp_deposit(begc:endc) = spval
     call hist_addfld1d (fname='SECONDP_DEP', units='gP/m^2/s', &
          avgflag='A', long_name='secondary mineral P hillslope redeposition', &
-         ptr_col=this%secondp_deposit, default='inactive')
+         ptr_col=this%secondp_deposit, default='active')
 
     this%secondp_yield(begc:endc) = spval
     call hist_addfld1d (fname='SECONDP_YLD', units='gP/m^2/s', &
          avgflag='A', long_name='secondary mineral P erosional loss to inland waters', &
-         ptr_col=this%secondp_yield, default='inactive')
+         ptr_col=this%secondp_yield, default='active')
 
     if ( nlevdecomp_full > 1 ) then
        this%secondp_yield_vr(begc:endc,:) = spval
        call hist_addfld_decomp (fname='SECONDP_YLD'//trim(vr_suffix), units='gP/m^3/s',  type2d='levdcmp', &
             avgflag='A', long_name='secondary mineral P pool erosional loss to inland waters', &
-            ptr_col=this%secondp_yield_vr, default='inactive')
+            ptr_col=this%secondp_yield_vr, default='active')
     endif
 
     this%occlp_erode(begc:endc) = spval
     call hist_addfld1d (fname='OCCLP_ERO', units='gP/m^2/s', &
          avgflag='A', long_name='occlued mineral P detachment', &
-         ptr_col=this%occlp_erode, default='inactive')
+         ptr_col=this%occlp_erode, default='active')
 
     this%occlp_deposit(begc:endc) = spval
     call hist_addfld1d (fname='OCCLP_DEP', units='gP/m^2/s', &
          avgflag='A', long_name='occluded mineral P hillslope redeposition', &
-         ptr_col=this%occlp_deposit, default='inactive')
+         ptr_col=this%occlp_deposit, default='active')
 
     this%occlp_yield(begc:endc) = spval
     call hist_addfld1d (fname='OCCLP_YLD', units='gP/m^2/s', &
          avgflag='A', long_name='occluded mineral P erosional loss to inland waters', &
-         ptr_col=this%occlp_yield, default='inactive')
+         ptr_col=this%occlp_yield, default='active')
 
     if ( nlevdecomp_full > 1 ) then
        this%occlp_yield_vr(begc:endc,:) = spval
        call hist_addfld_decomp (fname='OCCLP_YLD'//trim(vr_suffix), units='gP/m^3/s',  type2d='levdcmp', &
             avgflag='A', long_name='occluded mineral P pool erosional loss to inland waters', &
-            ptr_col=this%occlp_yield_vr, default='inactive')
+            ptr_col=this%occlp_yield_vr, default='active')
     endif
 
     this%primp_erode(begc:endc) = spval
     call hist_addfld1d (fname='PRIMP_ERO', units='gP/m^2/s', &
          avgflag='A', long_name='primary mineral P detachment', &
-         ptr_col=this%primp_erode, default='inactive')
+         ptr_col=this%primp_erode, default='active')
 
     this%primp_deposit(begc:endc) = spval
     call hist_addfld1d (fname='PRIMP_DEP', units='gP/m^2/s', &
          avgflag='A', long_name='primary mineral P hillslope redeposition', &
-         ptr_col=this%primp_deposit, default='inactive')
+         ptr_col=this%primp_deposit, default='active')
 
     this%primp_yield(begc:endc) = spval
     call hist_addfld1d (fname='PRIMP_YLD', units='gP/m^2/s', &
          avgflag='A', long_name='primary mineral P erosional loss to inland waters', &
-         ptr_col=this%primp_yield, default='inactive')
+         ptr_col=this%primp_yield, default='active')
 
     if ( nlevdecomp_full > 1 ) then
        this%primp_yield_vr(begc:endc,:) = spval
        call hist_addfld_decomp (fname='PRIMP_YLD'//trim(vr_suffix), units='gP/m^3/s',  type2d='levdcmp', &
             avgflag='A', long_name='primary mineral P pool erosional loss to inland waters', &
-            ptr_col=this%primp_yield_vr, default='inactive')
+            ptr_col=this%primp_yield_vr, default='active')
     endif
 
 
@@ -10718,49 +10874,49 @@ contains
        this%potential_immob_p_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='POTENTIAL_IMMOB_P'//trim(vr_suffix), units='gP/m^3/s',  type2d='levdcmp', &
              avgflag='A', long_name='potential P immobilization', &
-              ptr_col=this%potential_immob_p_vr, default='inactive')
+              ptr_col=this%potential_immob_p_vr, default='active')
     end if
 
     if ( nlevdecomp_full > 1 ) then
        this%actual_immob_p_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='ACTUAL_IMMOB_P'//trim(vr_suffix), units='gP/m^3/s',  type2d='levdcmp', &
              avgflag='A', long_name='actual P immobilization', &
-              ptr_col=this%actual_immob_p_vr, default='inactive')
+              ptr_col=this%actual_immob_p_vr, default='active')
     end if
 
     if ( nlevdecomp_full > 1 ) then
        this%sminp_to_plant_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='SMINP_TO_PLANT'//trim(vr_suffix), units='gP/m^3/s',  type2d='levdcmp', &
              avgflag='A', long_name='plant uptake of soil mineral P', &
-              ptr_col=this%sminp_to_plant_vr, default='inactive')
+              ptr_col=this%sminp_to_plant_vr, default='active')
     end if
 
     if ( nlevdecomp_full > 1 ) then
        this%supplement_to_sminp_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='SUPPLEMENT_TO_SMINP'//trim(vr_suffix), units='gP/m^3/s',  type2d='levdcmp', &
              avgflag='A', long_name='supplemental P supply', &
-              ptr_col=this%supplement_to_sminp_vr, default='inactive')
+              ptr_col=this%supplement_to_sminp_vr, default='active')
     end if
 
     if ( nlevdecomp_full > 1 ) then
        this%gross_pmin_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='GROSS_PMIN'//trim(vr_suffix), units='gP/m^3/s',  type2d='levdcmp', &
              avgflag='A', long_name='gross rate of P mineralization', &
-              ptr_col=this%gross_pmin_vr, default='inactive')
+              ptr_col=this%gross_pmin_vr, default='active')
     end if
 
     if ( nlevdecomp_full > 1 ) then
        this%net_pmin_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='NET_PMIN'//trim(vr_suffix), units='gP/m^3/s',  type2d='levdcmp', &
              avgflag='A', long_name='net rate of P mineralization', &
-              ptr_col=this%net_pmin_vr, default='inactive')
+              ptr_col=this%net_pmin_vr, default='active')
     end if
 
     if ( nlevdecomp_full > 1 ) then
        this%biochem_pmin_vr(begc:endc,:) = spval
         call hist_addfld_decomp (fname='BIOCHEM_PMIN'//trim(vr_suffix), units='gP/m^3/s',  type2d='levdcmp', &
              avgflag='A', long_name='biochemical rate of P mineralization', &
-              ptr_col=this%biochem_pmin_vr, default='inactive')
+              ptr_col=this%biochem_pmin_vr, default='active')
     end if
 
     this%potential_immob_p(begc:endc) = spval
@@ -10807,12 +10963,12 @@ contains
     this%fire_ploss(begc:endc) = spval
      call hist_addfld1d (fname='COL_FIRE_PLOSS', units='gP/m^2/s', &
           avgflag='A', long_name='total column-level fire P loss', &
-           ptr_col=this%fire_ploss, default='inactive')
+           ptr_col=this%fire_ploss, default='active')
 
     this%fire_decomp_ploss(begc:endc) = spval
      call hist_addfld1d (fname='DECOMP_FIRE_PLOSS', units='gP/m^2/s', &
           avgflag='A', long_name='fire P loss of decomposable pools', &
-           ptr_col=this%fire_decomp_ploss, default='inactive')
+           ptr_col=this%fire_decomp_ploss, default='active')
 
     this%dwt_slash_pflux(begc:endc) = spval
      call hist_addfld1d (fname='DWT_SLASH_PFLUX', units='gP/m^2/s', &
@@ -10822,32 +10978,32 @@ contains
     this%dwt_conv_pflux(begc:endc) = spval
      call hist_addfld1d (fname='DWT_CONV_PFLUX', units='gP/m^2/s', &
           avgflag='A', long_name='conversion P flux (immediate loss to atm)', &
-           ptr_col=this%dwt_conv_pflux, default='inactive')
+           ptr_col=this%dwt_conv_pflux, default='active')
 
     this%dwt_crop_productp_gain(begc:endc) = spval
     call hist_addfld1d (fname='DWT_CROP_PRODUCTP_GAIN', units='gP/m^2/s', &
         avgflag='A', long_name='addition to crop product pool', &
-        ptr_col=this%dwt_crop_productp_gain, default='inactive')
+        ptr_col=this%dwt_crop_productp_gain, default='active')
 
     this%dwt_prod10p_gain(begc:endc) = spval
      call hist_addfld1d (fname='DWT_PROD10P_GAIN', units='gP/m^2/s', &
           avgflag='A', long_name='addition to 10-yr wood product pool', &
-           ptr_col=this%dwt_prod10p_gain, default='inactive')
+           ptr_col=this%dwt_prod10p_gain, default='active')
 
     this%prod10p_loss(begc:endc) = spval
      call hist_addfld1d (fname='PROD10P_LOSS', units='gP/m^2/s', &
           avgflag='A', long_name='loss from 10-yr wood product pool', &
-           ptr_col=this%prod10p_loss, default='inactive')
+           ptr_col=this%prod10p_loss, default='active')
 
     this%dwt_prod100p_gain(begc:endc) = spval
      call hist_addfld1d (fname='DWT_PROD100P_GAIN', units='gP/m^2/s', &
           avgflag='A', long_name='addition to 100-yr wood product pool', &
-           ptr_col=this%dwt_prod100p_gain, default='inactive')
+           ptr_col=this%dwt_prod100p_gain, default='active')
 
     this%prod100p_loss(begc:endc) = spval
      call hist_addfld1d (fname='PROD100P_LOSS', units='gP/m^2/s', &
           avgflag='A', long_name='loss from 100-yr wood product pool', &
-           ptr_col=this%prod100p_loss, default='inactive')
+           ptr_col=this%prod100p_loss, default='active')
 
     this%prod1p_loss(begc:endc) = spval
      call hist_addfld1d (fname='PROD1P_LOSS', units='gP/m^2/s', &
@@ -10857,37 +11013,37 @@ contains
     this%product_ploss(begc:endc) = spval
      call hist_addfld1d (fname='PRODUCT_PLOSS', units='gP/m^2/s', &
           avgflag='A', long_name='total P loss from wood product pools', &
-           ptr_col=this%product_ploss, default='inactive')
+           ptr_col=this%product_ploss, default='active')
 
     this%dwt_frootp_to_litr_met_p(begc:endc,:) = spval
      call hist_addfld_decomp (fname='DWT_FROOTP_TO_LITR_MET_P', units='gP/m^2/s',  type2d='levdcmp', &
           avgflag='A', long_name='fine root to litter due to landcover change', &
-           ptr_col=this%dwt_frootp_to_litr_met_p, default='inactive')
+           ptr_col=this%dwt_frootp_to_litr_met_p, default='active')
 
     this%dwt_frootp_to_litr_cel_p(begc:endc,:) = spval
      call hist_addfld_decomp (fname='DWT_FROOTP_TO_LITR_CEL_P', units='gP/m^2/s',  type2d='levdcmp', &
           avgflag='A', long_name='fine root to litter due to landcover change', &
-           ptr_col=this%dwt_frootp_to_litr_cel_p, default='inactive')
+           ptr_col=this%dwt_frootp_to_litr_cel_p, default='active')
 
     this%dwt_frootp_to_litr_lig_p(begc:endc,:) = spval
      call hist_addfld_decomp (fname='DWT_FROOTP_TO_LITR_LIG_P', units='gP/m^2/s',  type2d='levdcmp', &
           avgflag='A', long_name='fine root to litter due to landcover change', &
-           ptr_col=this%dwt_frootp_to_litr_lig_p, default='inactive')
+           ptr_col=this%dwt_frootp_to_litr_lig_p, default='active')
 
     this%dwt_livecrootp_to_cwdp(begc:endc,:) = spval
      call hist_addfld_decomp (fname='DWT_LIVECROOTP_TO_CWDP', units='gP/m^2/s',  type2d='levdcmp', &
           avgflag='A', long_name='live coarse root to CWD due to landcover change', &
-           ptr_col=this%dwt_livecrootp_to_cwdp, default='inactive')
+           ptr_col=this%dwt_livecrootp_to_cwdp, default='active')
 
     this%dwt_deadcrootp_to_cwdp(begc:endc,:) = spval
      call hist_addfld_decomp (fname='DWT_DEADCROOTP_TO_CWDP', units='gP/m^2/s',  type2d='levdcmp', &
           avgflag='A', long_name='dead coarse root to CWD due to landcover change', &
-           ptr_col=this%dwt_deadcrootp_to_cwdp, default='inactive')
+           ptr_col=this%dwt_deadcrootp_to_cwdp, default='active')
 
     this%dwt_ploss(begc:endc) = spval
      call hist_addfld1d (fname='DWT_PLOSS', units='gP/m^2/s', &
           avgflag='A', long_name='total phosphorus loss from landcover conversion', &
-           ptr_col=this%dwt_ploss, default='inactive')
+           ptr_col=this%dwt_ploss, default='active')
 
     if (crop_prog) then
        this%fert_p_to_sminp(begc:endc) = spval

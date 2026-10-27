@@ -425,7 +425,8 @@ contains
           i_0                  =>    soilhydrology_vars%i_0_col              , & ! Input:  [real(r8) (:)   ]  column average soil moisture in top VIC layers (mm)
           h2osfcflag           =>    soilhydrology_vars%h2osfcflag           , & ! Input:  logical
           pc_grid              =>    soilhydrology_vars%pc                   , & ! Input:  [real(r8) (:)   ]  threshold for outflow from surface water storage
-          icefrac              =>    soilhydrology_vars%icefrac_col            & ! Output: [real(r8) (:,:) ]  fraction of ice
+          icefrac              =>    soilhydrology_vars%icefrac_col          , & ! Output: [real(r8) (:,:) ]  fraction of ice
+          h2osfc_p             =>    col_ws%h2osfc_p                           & ! Input:  [real(r8) (:,:) ]  h2osfc from previous timestep
               )
 
 
@@ -447,6 +448,9 @@ contains
           l = col_pp%landunit(c)
           pc = pc_grid(g)
           
+         ! before doing anything, preserve h2osfc:
+          h2osfc_p(c) = h2osfc(c)
+
           ! partition moisture fluxes between soil and h2osfc
           if (col_pp%is_soil(c) .or. col_pp%is_crop(c)) then
 
@@ -579,7 +583,7 @@ contains
              if (lun_pp%ispolygon(col_pp%landunit(c))) then
                 vdep = (2_r8*iwp_exclvol(c) - iwp_microrel(c)) * (iwp_ddep(c)/iwp_microrel(c))**3_r8 &
                        + (2_r8*iwp_microrel(c) - 3_r8*iwp_exclvol(c)) * (iwp_ddep(c)/iwp_microrel(c))**2_r8
-                phi_eff = min(iwp_subsidence(c), 0.4_r8)  !fix this variable when available to pull from alt calculations
+                phi_eff = min(iwp_subsidence(c), 0.4_r8)
                 swc = h2osfc(c)/1000_r8 ! convert to m
                 
                 if (swc >= vdep) then
