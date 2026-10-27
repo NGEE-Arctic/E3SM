@@ -118,6 +118,16 @@ public:
 
   bool is_read_only () const { return m_is_read_only; }
 
+  // Returns a read-only field with layout tgt, sharing the data of this field, such that
+  // the dims of tgt not present in this field's layout are "broadcasted" (i.e., the
+  // strided views of the result have stride 0 along those dims).
+  // The tags/extents of this field's layout must be an ordered subset of those of tgt.
+  // NOTE: the result can only be accessed via get_strided_view (not get_view).
+  Field broadcast_to (const FieldLayout& tgt) const;
+
+  // Shortcut of the above, so you don't need to grab the tgt layout
+  Field broadcast_like (const Field& tgt) const;
+
   // Creates a new field with a pristine header (no providers/customers).
   // Clone behavior is controlled by flags: by default (CloneFlags::None),
   // timestamp, packing, and data are not copied.
@@ -227,6 +237,10 @@ public:
   // valid (mask!=0) or invalid/garbage (mask==0).
   // When this mask is present, certain users of this field may decide to
   // perform masked manipulations.
+  // The default mask name, <field name>_valid_mask, says the mask is this field's
+  // own. Any other name says where a condition holds, and masks with the same
+  // name must hold the same values: e.g., IO gives one avg count to the diags
+  // whose masks share a name, and the horizontal remapper remaps such masks once.
 
   enum class MaskInit { Valid, Invalid, None };
 

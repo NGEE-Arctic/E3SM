@@ -41,6 +41,7 @@ module controlMod
   use elm_varcon              , only: h2osno_max
   use FanMod                  , only: nh4_ads_coef
   use AllocationMod           , only: nu_com_phosphatase,nu_com_nfix
+  use elm_varctl              , only: use_lake_wat_storage, lake_evap_cap_method
   use seq_drydep_mod          , only: drydep_method, DD_XLND, n_drydep
   use elm_varctl              , only: forest_fert_exp
   use elm_varctl              , only: ECA_Pconst_RGspin
@@ -76,13 +77,11 @@ module controlMod
                         subgridflag, irrigate, tw_irr, extra_gw_irr, &
                         firrig_data, all_active, mpi_sync_nstep_freq, &
                         use_c13, use_c14, fates_paramfile, use_fates, &
-                        use_betr, use_lai_streams, metdata_type, metdata_bypass, &
+                        use_lai_streams, metdata_type, metdata_bypass, &
                         metdata_biases, co2_file, aero_file, &
                         use_elm_interface, use_elm_bgc, use_pflotran, &
-                        use_vsfm, vsfm_satfunc_type, vsfm_use_dynamic_linesearch, &
-                        vsfm_lateral_model_type, vsfm_include_seepage_bc, &
-                        use_hydrstress, lateral_connectivity, domain_decomp_type, &
-                        use_IM2_hillslope_hydrology, use_petsc_thermal_model, &
+                        use_hydrstress, domain_decomp_type, &
+                        use_IM2_hillslope_hydrology, &
                         do_budgets, budget_inst, budget_daily, budget_month, &
                         budget_ann, budget_ltann, budget_ltend, &
                         use_lnd_rof_two_way, use_ocn_lnd_one_way, &
@@ -178,7 +177,6 @@ contains
     use fileutils                 , only : getavu, relavu
     use shr_string_mod            , only : shr_string_getParentDir
     use elm_interface_pflotranMod , only : elm_pf_readnl
-    use ELMBeTRNLMod              , only : betr_readNL
     
     implicit none
     
@@ -348,8 +346,6 @@ contains
           fates_lu_transition_logic,                    &
           fates_history_dimlevel
 
-    namelist /elm_inparm / use_betr
-
     namelist /elm_inparm / use_lai_streams
 
     namelist /elm_inparm/  &
@@ -378,24 +374,16 @@ contains
 
     namelist /elm_inparm/ use_dynroot
 
-    namelist /elm_inparm/ use_var_soil_thick, use_lake_wat_storage
+    namelist /elm_inparm/ use_var_soil_thick, use_lake_wat_storage, lake_evap_cap_method
 
     namelist /elm_inparm/ squareomfrac
 
-    namelist /elm_inparm/ &
-         use_vsfm, vsfm_satfunc_type, vsfm_use_dynamic_linesearch, &
-         vsfm_lateral_model_type, vsfm_include_seepage_bc
-
     namelist /elm_inparm/ use_hydrstress
 
-    namelist /elm_inparm/ &
-       lateral_connectivity, domain_decomp_type
+    namelist /elm_inparm/ domain_decomp_type
 
     namelist /elm_inparm/ &
          use_IM2_hillslope_hydrology
-
-    namelist /elm_inparm/ &
-         use_petsc_thermal_model
 
     namelist /elm_inparm/ &
          do_budgets, budget_inst, budget_daily, budget_month, &
@@ -641,11 +629,6 @@ contains
           end if
        end if
 
-       if (use_betr .and. use_var_soil_thick ) then
-          call endrun(msg=' ERROR: use_var_soil_thick and use_betr cannot both be set to true.'//&
-                   errMsg(__FILE__, __LINE__))
-       end if
-
        if (use_lnd_rof_two_way) then
           if (lnd_rof_coupling_nstep < 1) then
           call endrun(msg=' ERROR: lnd_rof_coupling_nstep cannot be smaller than 1.'//&
@@ -707,10 +690,6 @@ contains
        call elm_pf_readnl(NLFilename)
     end if
 
-    if (use_betr) then
-       call betr_readNL( NLFilename, use_c13, use_c14, nsoilorder)
-    endif
-
     ! ----------------------------------------------------------------------
     ! consistency checks
     ! ----------------------------------------------------------------------
@@ -757,45 +736,6 @@ contains
        end if
     end if
 
-    ! Consistency settings for vsfm settings
-    if (use_vsfm .and. use_var_soil_thick) then
-       call endrun(msg=' ERROR:: use_vsfm and use_var_soil_thick cannot both be set to true.'//&
-            errMsg(__FILE__, __LINE__))
-    end if
-
-    if (vsfm_satfunc_type /= 'brooks_corey'             .and. &
-        vsfm_satfunc_type /= 'smooth_brooks_corey_bz2'  .and. &
-        vsfm_satfunc_type /= 'smooth_brooks_corey_bz3'  .and. &
-        vsfm_satfunc_type /= 'van_genuchten') then
-       write(iulog,*)'vsfm_satfunc_type = ',vsfm_satfunc_type,' is not supported'
-       call endrun(msg=' ERROR:: choices are brooks_corey, smooth_brooks_corey_bz2, '//&
-            'smooth_brooks_corey_bz3 or van_genuchten'//&
-            errMsg(__FILE__, __LINE__))
-    end if
-
-    if (vsfm_lateral_model_type /= 'none'        .and. &
-        vsfm_lateral_model_type /= 'source_sink' .and. &
-        vsfm_lateral_model_type /= 'three_dimensional' ) then
-       write(iulog,*)'vsfm_lateral_model_type = ',trim(vsfm_lateral_model_type), ' is not supported'
-       call endrun(msg=' ERROR:: choices are source_sink or three_dimensional ' // &
-            errMsg(__FILE__, __LINE__))
-    endif
-
-    ! Lateral connectivity
-    if (.not.lateral_connectivity) then
-
-       if (vsfm_lateral_model_type /= 'none') then
-          call endrun(msg=' ERROR:: Lateral flow in VSFM requires lateral_connectivity to be true '// &
-               errMsg(__FILE__, __LINE__))
-       endif
-
-       if (trim(domain_decomp_type) == 'graph_partitioning') then
-          call endrun(msg=' ERROR: domain_decomp_type = graph_partitioning requires ' // &
-               'lateral_connectivity to be true.'                                     // &
-               errMsg(__FILE__, __LINE__))
-       endif
-    endif
-
     ! Fan settings
     if (fan_mode /= 'none'           .and. &
         fan_mode /= 'fan_offline'    .and. &
@@ -804,6 +744,15 @@ contains
         fan_mode /= 'fan_full' ) then
        write(iulog,*)'fan_mode = ',trim(fan_mode), ' is not supported'
        call endrun(msg=' ERROR:: choices are none fan_offline, fan_soil, fan_atm, or fan_full ' // &
+            errMsg(__FILE__, __LINE__))
+    endif
+
+    ! Lake evaporation cap method
+    if (trim(lake_evap_cap_method) /= 'none' .and. &
+        trim(lake_evap_cap_method) /= 'rain_snow' .and. &
+        trim(lake_evap_cap_method) /= 'rain_snow_h2osno' ) then
+       write(iulog,*)'lake_evap_cap_method = ',trim(lake_evap_cap_method), ' is not supported'
+       call endrun(msg=' ERROR:: choices are none, rain_snow, or rain_snow_h2osno' // &
             errMsg(__FILE__, __LINE__))
     endif
 
@@ -967,13 +916,13 @@ contains
     call mpi_bcast (fates_history_dimlevel, 2, MPI_INTEGER, 0, mpicom, ier)
     call mpi_bcast (fates_lu_transition_logic, 1, MPI_INTEGER, 0, mpicom, ier)
     
-    call mpi_bcast (use_betr, 1, MPI_LOGICAL, 0, mpicom, ier)
-
     call mpi_bcast (use_lai_streams, 1, MPI_LOGICAL, 0, mpicom, ier)
 
     call mpi_bcast (use_dynroot, 1, MPI_LOGICAL, 0, mpicom, ier)
 
     call mpi_bcast (use_lake_wat_storage, 1, MPI_LOGICAL, 0, mpicom, ier)
+
+    call mpi_bcast (lake_evap_cap_method, len(lake_evap_cap_method), MPI_CHARACTER, 0, mpicom, ier)
 
     if ((use_cn .or. use_fates) .and. use_vertsoilc) then
        ! vertical soil mixing variables
@@ -1074,8 +1023,7 @@ contains
 
     call mpi_bcast (clump_pproc, 1, MPI_INTEGER, 0, mpicom, ier)
 
-    ! lateral connectivity
-    call mpi_bcast (lateral_connectivity, 1, MPI_LOGICAL, 0, mpicom, ier)
+    ! domain decomposition
     call mpi_bcast (domain_decomp_type, len(domain_decomp_type), MPI_CHARACTER, 0, mpicom, ier)
 
     ! hillslope connectivity via topounits
@@ -1098,18 +1046,6 @@ contains
 
     ! plant hydraulics
     call mpi_bcast (use_hydrstress, 1, MPI_LOGICAL, 0, mpicom, ier)
-
-    ! VSFM variable
-
-    call mpi_bcast (use_vsfm                   , 1, MPI_LOGICAL, 0, mpicom, ier)
-    call mpi_bcast (vsfm_use_dynamic_linesearch, 1, MPI_LOGICAL, 0, mpicom, ier)
-    call mpi_bcast (vsfm_include_seepage_bc    , 1, MPI_LOGICAL, 0, mpicom, ier)
-
-    call mpi_bcast (vsfm_satfunc_type      , len(vsfm_satfunc_type)      , MPI_CHARACTER, 0, mpicom, ier)
-    call mpi_bcast (vsfm_lateral_model_type, len(vsfm_lateral_model_type), MPI_CHARACTER, 0, mpicom, ier)
-
-    ! PETSc-based thermal model
-    call mpi_bcast (use_petsc_thermal_model, 1, MPI_LOGICAL, 0, mpicom, ier)
     
     ! Downscaling of atmospheric forcing to topounits
     call mpi_bcast (use_atm_downscaling_to_topunit, 1, MPI_LOGICAL, 0, mpicom, ier)
@@ -1183,6 +1119,7 @@ contains
     write(iulog,*) '    use_var_soil_thick = ', use_var_soil_thick
     write(iulog,*) '    squareomfrac = ', squareomfrac
     write(iulog,*) '    use_lake_wat_storage = ', use_lake_wat_storage
+    write(iulog,*) '    lake_evap_cap_method = ', lake_evap_cap_method
     write(iulog,*) '    use_extralakelayers = ', use_extralakelayers
     write(iulog,*) '    use_extrasnowlayers = ', use_extrasnowlayers
     write(iulog,*) '    use_firn_percolation_and_compaction = ', use_firn_percolation_and_compaction
@@ -1201,7 +1138,6 @@ contains
     write(iulog,*) '    use_vancouver = ', use_vancouver
     write(iulog,*) '    use_mexicocity = ', use_mexicocity
     write(iulog,*) '    use_noio = ', use_noio
-    write(iulog,*) '    use_betr = ', use_betr
     write(iulog,*) '    use_IM2_hillslope_hydrology = ', use_IM2_hillslope_hydrology
     write(iulog,*) '    use_atm_downscaling_to_topunit = ', use_atm_downscaling_to_topunit
     write(iulog,*) '    precip_downscaling_method = ', precip_downscaling_method
@@ -1435,15 +1371,6 @@ contains
        write(iulog, *) '    fates_seeddisp_cadence: 0, 1, 2, 3 => off, daily, monthly, or yearly dispersal'
        write(iulog, *) '    fates_lu_transition_logic = ', fates_lu_transition_logic
     end if
-
-    ! VSFM
-    if (use_vsfm) then
-       write(iulog,*)
-       write(iulog,*) 'VSFM Namelists:'
-       write(iulog, *) '  vsfm_satfunc_type                                      : ', vsfm_satfunc_type
-       write(iulog, *) '  vsfm_use_dynamic_linesearch                            : ', vsfm_use_dynamic_linesearch
-       write(iulog,*) '  vsfm_lateral_model_type                                 : ', vsfm_lateral_model_type
-    endif
 
     ! land river two way coupling
     write(iulog,*) '    use_lnd_rof_two_way    = ', use_lnd_rof_two_way

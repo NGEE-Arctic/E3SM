@@ -488,10 +488,11 @@ contains
          ! outputs: pressureAdjustedSSH, gradSSH
          if (landIcePressureOn) then
             call ocn_diagnostic_solve_ssh(forcingPool, ssh, seaIcePressure, &
-                   pressureAdjustedSSH, gradSSH, landIceDraftForSsh=landIceDraftForSsh )
+                   atmosphericPressure, pressureAdjustedSSH, gradSSH, &
+                   landIceDraftForSsh=landIceDraftForSsh )
         else
             call ocn_diagnostic_solve_ssh(forcingPool, ssh, seaIcePressure, &
-                   pressureAdjustedSSH, gradSSH)
+                   atmosphericPressure, pressureAdjustedSSH, gradSSH)
          end if
 
       end if ! full_compute
@@ -857,9 +858,10 @@ contains
       !-----------------------------------------------------------------
 
       real (kind=RKIND), dimension(:,:), intent(in) :: &
-         normalVelocity,  &!< [in] transport
          layerThickness,  &!< [in] layer thickness at cell center
          restingThickness  !< [in] initial layer thickness at cell center
+      real (kind=RKIND), dimension(:,:), intent(inout) :: &
+         normalVelocity    !< [in] transport
       real (kind=RKIND), dimension(:), intent(in) :: &
          ssh               !< [in] sea surface height at cell center
 
@@ -887,54 +889,55 @@ contains
       ! Begin code
 
       ! Compute mean layer thickness at edge
+      if ( config_use_subgrid_wetting_drying ) then
 #ifdef MPAS_OPENACC
-      !$acc parallel loop &
-      !$acc    present(layerThickness, layerThickEdgeMean, &
-      !$acc            minLevelEdgeBot, maxLevelEdgeTop, cellsOnEdge) &
-      !$acc    private(k, kmin, kmax, cell1, cell2)
+         !$acc update host(ssh)
+#endif
+
+         call ocn_subgrid_layerThickEdgeFlux_center(ssh, layerThickEdgeMean)
+
+#ifdef MPAS_OPENACC
+         !$acc update device(layerThickEdgeMean)
+#endif
+
+      else
+#ifdef MPAS_OPENACC
+         !$acc parallel loop &
+         !$acc    present(layerThickness, layerThickEdgeMean, &
+         !$acc            minLevelEdgeBot, maxLevelEdgeTop, cellsOnEdge) &
+         !$acc    private(k, kmin, kmax, cell1, cell2)
 #else
-      !$omp parallel
-      !$omp do schedule(runtime) private(k, kmin, kmax, cell1, cell2)
+         !$omp parallel
+         !$omp do schedule(runtime) private(k, kmin, kmax, cell1, cell2)
 #endif
-      do iEdge = 1, nEdgesAll
-         kmin = minLevelEdgeBot(iEdge)
-         kmax = maxLevelEdgeTop(iEdge)
-         cell1 = cellsOnEdge(1,iEdge)
-         cell2 = cellsOnEdge(2,iEdge)
-         do k = 1,nVertLevels
-            ! initialize layerThicknessEdgeMean to avoid divide by
-            ! zero and NaN problems.
-            layerThickEdgeMean(k,iEdge) = -1.0e34_RKIND
+         do iEdge = 1, nEdgesAll
+            kmin = minLevelEdgeBot(iEdge)
+            kmax = maxLevelEdgeTop(iEdge)
+            cell1 = cellsOnEdge(1,iEdge)
+            cell2 = cellsOnEdge(2,iEdge)
+            do k = 1,nVertLevels
+               ! initialize layerThicknessEdgeMean to avoid divide by
+               ! zero and NaN problems.
+               layerThickEdgeMean(k,iEdge) = -1.0e34_RKIND
+            end do
+            do k = kmin,kmax
+               ! central differenced
+               layerThickEdgeMean(k,iEdge) = 0.5_RKIND * &
+                                            (layerThickness(k,cell1) + &
+                                             layerThickness(k,cell2))
+            end do
          end do
-         do k = kmin,kmax
-            ! central differenced
-            layerThickEdgeMean(k,iEdge) = 0.5_RKIND * &
-                                         (layerThickness(k,cell1) + &
-                                          layerThickness(k,cell2))
-         end do
-      end do
 #ifndef MPAS_OPENACC
-      !$omp end do
-      !$omp end parallel
+         !$omp end do
+         !$omp end parallel
 #endif
+      endif
 
       ! Compute edge flux based on option set on init
       select case (thickEdgeFluxChoice)
 
       case (thickEdgeFluxCenter)
          ! Use centered (mean) thickness as flux value
-
-         if ( config_use_subgrid_wetting_drying ) then
-#ifdef MPAS_OPENACC
-         !$acc update host(ssh)
-#endif
-
-            call ocn_subgrid_layerThickEdgeFlux_center(ssh, layerThickEdgeFlux)
-
-#ifdef MPAS_OPENACC
-         !$acc update device(layerThickEdgeFlux)
-#endif
-         else
 
 #ifdef MPAS_OPENACC
             !$acc parallel loop collapse(2) &
@@ -954,7 +957,6 @@ contains
             !$omp end parallel
 #endif
 
-         end if  
 
       case (thickEdgeFluxUpwind)
          ! Use upwind thickness as the edge flux value
@@ -1086,6 +1088,26 @@ contains
                              MPAS_LOG_CRIT)
 
       end select
+
+      if (config_use_wetting_drying) then
+#ifdef MPAS_OPENACC
+         !$acc parallel loop collapse(2) &
+         !$acc    present(layerThickEdgeMean)
+#else
+         !$omp parallel
+         !$omp do schedule(runtime) private(k)
+#endif
+         do iEdge = 1, nEdgesAll
+            do k = 1,nVertLevels
+               layerThickEdgeMean(k,iEdge) = &
+               max(layerThickEdgeMean(k,iEdge), config_drying_min_cell_height)
+            end do
+         end do
+#ifndef MPAS_OPENACC
+        !$omp end do
+        !$omp end parallel
+#endif
+      end if
 
       ! Compute edge flux based on option set on init
       select case (thickEdgeDragChoice)
@@ -2758,6 +2780,7 @@ contains
       !$omp parallel
       !$omp do schedule(runtime) private(k)
 #endif
+
       do iCell = 1, nCells
 
          ! Compute zMid, the z-coordinate of the middle of the layer.
@@ -2780,6 +2803,7 @@ contains
          ssh(iCell) = zTop(minLevelCell(iCell),iCell)
 
       end do
+
 #ifndef MPAS_OPENACC
       !$omp end do
       !$omp end parallel
@@ -2961,7 +2985,8 @@ contains
 !
 !-----------------------------------------------------------------------
    subroutine ocn_diagnostic_solve_ssh(forcingPool, ssh, seaIcePressure, &
-                pressureAdjustedSSH, gradSSH, landIceDraftForSsh)!{{{
+                atmosphericPressure, pressureAdjustedSSH, gradSSH, &
+                landIceDraftForSsh)!{{{
 
       implicit none
 
@@ -2976,6 +3001,8 @@ contains
          ssh
       real (kind=RKIND), dimension(:), intent(in) :: &
          seaIcePressure
+      real (kind=RKIND), dimension(:), intent(in) :: &
+         atmosphericPressure
       real (kind=RKIND), dimension(:), optional, intent(in) :: &
          landIceDraftForSsh
 
@@ -3002,13 +3029,17 @@ contains
 
       nCells = nCellsHalo( 1 )
 #ifdef MPAS_OPENACC
-      !$acc parallel loop present(seaIcePressure, pressureAdjustedSSH, ssh)
+      !$acc parallel loop present(seaIcePressure, atmosphericPressure, &
+      !$acc                       pressureAdjustedSSH, ssh)
 #else
       !$omp parallel
       !$omp do schedule(runtime)
 #endif
       do iCell = 1, nCells
-         pressureAdjustedSSH(iCell) = ssh(iCell) + ( seaIcePressure(iCell) / ( gravity * rho_sw ) )
+         pressureAdjustedSSH(iCell) = ssh(iCell) + ( &
+            (seaIcePressure(iCell) + atmosphericPressure(iCell)) / &
+            ( gravity * rho_sw ) &
+         )
       end do
 #ifndef MPAS_OPENACC
       !$omp end do

@@ -436,9 +436,11 @@ contains
        !       rcode = pio_def_dim(cpl_io_file(lfile_ind),trim(dname)//'_nx',1,dimid(1))
        !       rcode = pio_def_var(cpl_io_file(lfile_ind),trim(dname),PIO_INT,dimid,varid)
        rcode = pio_def_var(cpl_io_file(lfile_ind),trim(dname),PIO_INT,varid)
-       rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"units",trim(cunit))
+       if (len_trim(cunit) > 0) &
+          rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"units",trim(cunit))
        rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"long_name",trim(lname))
-       rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"standard_name",trim(sname))
+       if (len_trim(sname) > 0) &
+          rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"standard_name",trim(sname))
        if (lwdata) call seq_io_enddef(filename, file_ind=lfile_ind)
     endif
 
@@ -513,9 +515,11 @@ contains
        lnx = size(idata)
        rcode = pio_def_dim(cpl_io_file(lfile_ind),trim(dname)//'_nx',lnx,dimid(1))
        rcode = pio_def_var(cpl_io_file(lfile_ind),trim(dname),PIO_INT,dimid,varid)
-       rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"units",trim(cunit))
+       if (len_trim(cunit) > 0) &
+          rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"units",trim(cunit))
        rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"long_name",trim(lname))
-       rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"standard_name",trim(sname))
+       if (len_trim(sname) > 0) &
+          rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"standard_name",trim(sname))
        if (lwdata) call seq_io_enddef(filename, file_ind=lfile_ind)
     endif
 
@@ -591,9 +595,11 @@ contains
 
        rcode = pio_def_var(cpl_io_file(lfile_ind),trim(dname),PIO_DOUBLE,varid)
        if(rcode==PIO_NOERR) then
-          rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"units",trim(cunit))
+          if (len_trim(cunit) > 0) &
+             rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"units",trim(cunit))
           rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"long_name",trim(lname))
-          rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"standard_name",trim(sname))
+          if (len_trim(sname) > 0) &
+             rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"standard_name",trim(sname))
           if (lwdata) call seq_io_enddef(filename, file_ind=lfile_ind)
        end if
     endif
@@ -667,9 +673,11 @@ contains
        lnx = size(rdata)
        rcode = pio_def_dim(cpl_io_file(lfile_ind),trim(dname)//'_nx',lnx,dimid(1))
        rcode = pio_def_var(cpl_io_file(lfile_ind),trim(dname),PIO_DOUBLE,dimid,varid)
-       rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"units",trim(cunit))
+       if (len_trim(cunit) > 0) &
+          rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"units",trim(cunit))
        rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"long_name",trim(lname))
-       rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"standard_name",trim(sname))
+       if (len_trim(sname) > 0) &
+          rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"standard_name",trim(sname))
        if (lwdata) call seq_io_enddef(filename, file_ind=lfile_ind)
     endif
 
@@ -744,9 +752,11 @@ contains
        lnx = len(charvar)
        rcode = pio_def_dim(cpl_io_file(lfile_ind),trim(dname)//'_len',lnx,dimid(1))
        rcode = pio_def_var(cpl_io_file(lfile_ind),trim(dname),PIO_CHAR,dimid,varid)
-       rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"units",trim(cunit))
+       if (len_trim(cunit) > 0) &
+          rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"units",trim(cunit))
        rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"long_name",trim(lname))
-       rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"standard_name",trim(sname))
+       if (len_trim(sname) > 0) &
+          rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"standard_name",trim(sname))
        if (lwdata) call seq_io_enddef(filename, file_ind=lfile_ind)
     endif
 
@@ -1057,9 +1067,11 @@ contains
                 rcode = pio_def_var(cpl_io_file(lfile_ind),trim(name1),PIO_DOUBLE,dimid,varid)
                 rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"_FillValue",lfillvalue)
              end if
-             rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"units",trim(cunit))
+             if (len_trim(cunit) > 0) &
+                rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"units",trim(cunit))
              rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"long_name",trim(lname))
-             rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"standard_name",trim(sname))
+             if (len_trim(sname) > 0) &
+                rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"standard_name",trim(sname))
              rcode = pio_put_att(cpl_io_file(lfile_ind),varid,"internal_dname",trim(dname))
              !-------tcraig
           endif
@@ -1074,10 +1086,9 @@ contains
        allocate(dof_reorder(ns))
        allocate(indx(ns))
 
-       ! note: size of dof is ns
-       if (ns > 0) then
-          tagname = 'GLOBAL_ID'//C_NULL_CHAR
-          ierr = iMOAB_GetIntTagStorage ( mbxid, tagname, ns , ent_type, dof)
+        ! note: size of dof is ns
+        if (ns > 0) then
+           ierr = iMOAB_GetIntTagStorage ( mbxid, 'GLOBAL_ID'//C_NULL_CHAR, ns , ent_type, dof)
           if (ierr .ne. 0) then
             write(logunit,*) subname,' ERROR: cannot get dofs '
             call shr_sys_abort(subname//'cannot get dofs ')
@@ -1113,9 +1124,9 @@ contains
                  data1(ix) = matrix(ix, index_list) !
                enddo
              else
-               tagname = trim(field)//C_NULL_CHAR
+               tagname = trim(field)
                if (ns > 0 ) then
-                  ierr = iMOAB_GetDoubleTagStorage (mbxid, tagname, ns, ent_type, data1)
+                  ierr = iMOAB_GetDoubleTagStorage (mbxid, trim(tagname)//C_NULL_CHAR, ns, ent_type, data1)
                   if (ierr .ne. 0) then
                      write(logunit,*) subname,' ERROR: cannot get tag data ', trim(tagname)
                      call shr_sys_abort(subname//'cannot get tag data ')
@@ -1575,9 +1586,8 @@ contains
     allocate(dof_reorder(ns))
 
    ! note: size of dof is ns
-    tagname = 'GLOBAL_ID'//C_NULL_CHAR
     if (ns > 0 ) then
-       ierr = iMOAB_GetIntTagStorage ( mbxid, tagname, ns , ent_type, dof)
+       ierr = iMOAB_GetIntTagStorage ( mbxid, 'GLOBAL_ID'//C_NULL_CHAR, ns , ent_type, dof)
        if (ierr .ne. 0) then
           write(logunit,*) subname,' ERROR: cannot get dofs '
           call shr_sys_abort(subname//'cannot get dofs ')
@@ -1631,9 +1641,9 @@ contains
                matrix(ix, index_list)  = data_reorder(ix) !
             enddo
           else
-            tagname = trim(field)//C_NULL_CHAR
-            if (ns > 0) then
-               ierr = iMOAB_SetDoubleTagStorage (mbxid, tagname, ns , ent_type, data_reorder)
+             tagname = trim(field)
+             if (ns > 0) then
+                ierr = iMOAB_SetDoubleTagStorage (mbxid, trim(tagname)//C_NULL_CHAR, ns , ent_type, data_reorder)
                if (ierr .ne. 0) then
                   write(logunit,*) subname,' ERROR: cannot set tag data ', trim(tagname)
                   call shr_sys_abort(subname//'cannot set tag data ')
@@ -1659,10 +1669,10 @@ contains
             do ix = 1,ns
                matrix(ix, index_list)  = data_reorder(ix) !
             enddo
-         else
-            tagname = trim(field)//C_NULL_CHAR
-            if ( ns > 0 ) then
-               ierr = iMOAB_SetDoubleTagStorage (mbxid, tagname, ns , ent_type, data_reorder)
+          else
+             tagname = trim(field)
+             if ( ns > 0 ) then
+                ierr = iMOAB_SetDoubleTagStorage (mbxid, trim(tagname)//C_NULL_CHAR, ns , ent_type, data_reorder)
                if (ierr .ne. 0) then
                   write(logunit,*) subname,' ERROR: cannot set tag data ', trim(tagname)
                   call shr_sys_abort(subname//'cannot set tag data ')

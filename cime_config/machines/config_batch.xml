@@ -239,9 +239,9 @@
     <depend_separator>:</depend_separator>
     <walltime_format>%Mm</walltime_format>
     <submit_args>
-      <arg flag="--time" name="60m"/>
-      <arg flag="--queue" name="$JOB_QUEUE"/>
-      <arg flag="--bank" name="$PROJECT"/>
+      <arg flag="--time-limit" name="$JOB_WALLCLOCK_TIME"/>
+      <arg flag="-q" name="$JOB_QUEUE"/>
+      <arg flag="-B" name="$PROJECT"/>
     </submit_args>
     <directives>
       <directive> --job-name={{ job_id }}</directive>
@@ -615,6 +615,27 @@
       <queue walltimemax="00:30:00" nodemax="256" strict="true">shared</queue>
       <queue walltimemax="00:30:00" nodemax="256" strict="true">overrun</queue>
       <queue walltimemax="00:30:00" nodemax="8" strict="true">debug</queue>
+    </queues>
+  </batch_system>
+
+  <batch_system MACH="vista-gh" type="slurm">
+    <directives>
+      <directive>-n {{ total_tasks }}</directive>
+      <directive>--partition=gh</directive>
+    </directives>
+    <queues>
+      <queue walltimemax="00:30:00" nodemax="8" default="true">gh-dev</queue>
+      <queue walltimemax="00:30:00" nodemax="64" strict="true">gh</queue>
+    </queues>
+  </batch_system>
+
+  <batch_system MACH="vista-gg" type="slurm">
+    <directives>
+      <directive>-n {{ total_tasks }}</directive>
+      <directive>--partition=gg</directive>
+    </directives>
+    <queues>
+      <queue walltimemax="00:30:00" nodemax="32" strict="true">gg</queue>
     </queues>
   </batch_system>
 

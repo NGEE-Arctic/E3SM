@@ -14,7 +14,6 @@ namespace zm {
 template<typename S, typename D>
 void Functions<S,D>::zm_opts_init()
 {
-  s_zm_opts.use_fortran_bridge  = false;
   s_zm_opts.apply_detr_tend     = true;
   s_zm_opts.upper_limit_pref    = 40e2;
   s_zm_opts.plenest             = static_cast<Int>(ZMC::tmax-ZMC::tmin) + 3;
@@ -34,6 +33,8 @@ void Functions<S,D>::zm_opts_init()
   s_zm_opts.trig_ull            = true;
   s_zm_opts.clos_dyn_adj        = true;
   s_zm_opts.no_deep_pbl         = false;
+  s_zm_opts.cape_threshold      = ZMC::cape_threshold;
+  s_zm_opts.dcape_threshold     = ZMC::dcape_threshold;
   // ZM micro parameters
   s_zm_opts.zm_microp           = false;
   s_zm_opts.old_snow            = true;
@@ -56,6 +57,15 @@ void Functions<S,D>::zm_opts_init()
   Kokkos::parallel_for("zm_calculate_estbl", Kokkos::RangePolicy<typename KT::ExeSpace>(0, plenest), KOKKOS_LAMBDA(const int i) {
     estbl(i) = svp_trans(ZMC::tmin + i);
   });
+
+  // FIXME: Intel compiler bug workaround. We need to reallocate view metadata for this static inline member. 
+  // We can remove this line once we update C++20 (and classic intel compiler is no longer supported). 
+  EKAT_ASSERT_MSG(s_zm_opts.estbl.use_count() == 0,
+                  "Internal error: estbl still has a live allocation. "
+                  "Ensure zm_finalize_cxx() is called at the end of each C++ ZM unit test "
+                  "to release estbl allocation before the next unit test is called.");
+  new (&s_zm_opts.estbl) view_1d<Real>();
+
   s_zm_opts.estbl = estbl;
 }
 

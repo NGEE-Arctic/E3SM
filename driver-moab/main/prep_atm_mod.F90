@@ -222,12 +222,13 @@ contains
       if (trim(atm_gnam) /= trim(ocn_gnam)) samegrid_ao = .false.
 
       ! TODO: make these namelists
-      wgtIdSo2a = 'scalar_o2a'//C_NULL_CHAR
-      wgtIdFo2a = 'flux_o2a'//C_NULL_CHAR
-      wgtIdSi2a = 'scalar_i2a'//C_NULL_CHAR
-      wgtIdFi2a = 'flux_i2a'//C_NULL_CHAR
-      wgtIdSl2a = 'scalar_l2a'//C_NULL_CHAR
-      wgtIdFl2a = 'flux_l2a'//C_NULL_CHAR
+      ! C_NULL_CHAR is added at each iMOAB C API call site; keep variables clean for diagnostics.
+      wgtIdSo2a = 'scalar_o2a'
+      wgtIdFo2a = 'flux_o2a'
+      wgtIdSi2a = 'scalar_i2a'
+      wgtIdFi2a = 'flux_i2a'
+      wgtIdSl2a = 'scalar_l2a'
+      wgtIdFl2a = 'flux_l2a'
       compute_maps_online_o2a = cpl_compute_maps_online ! read from disk or compute online
       compute_maps_online_i2a = cpl_compute_maps_online ! read from disk or compute online
       compute_maps_online_l2a = cpl_compute_maps_online ! read from disk or compute online
@@ -261,10 +262,10 @@ contains
               write(logunit,*) ' '
               write(logunit,F00) 'Initializing MOAB mapper_So2a'
             endif
-            appname = "OCN_ATM_COU"//C_NULL_CHAR
+            appname = "OCN_ATM_COU"
             ! idintx is a unique number of MOAB app that takes care of intx between atm and ocn mesh
             idintx = 100*ocn(1)%cplcompid + atm(1)%cplcompid ! something different, to differentiate it
-            ierr = iMOAB_RegisterApplication(trim(appname), mpicom_CPLID, idintx, mbintxoa)
+            ierr = iMOAB_RegisterApplication(trim(appname)//C_NULL_CHAR, mpicom_CPLID, idintx, mbintxoa)
             if (ierr .ne. 0) then
               write(logunit,*) subname,' error in registering ATM-OCN intersection application'
               call shr_sys_abort(subname//' ERROR in registering ATM-OCN intersection application')
@@ -346,7 +347,7 @@ contains
                                                    noConserve, validate, &
                                                    trim(dofnameS), trim(dofnameT)
                   endif
-                  ierr = iMOAB_ComputeScalarProjectionWeights ( mbintxoa, wgtIdSo2a, &
+                  ierr = iMOAB_ComputeScalarProjectionWeights ( mbintxoa, trim(wgtIdSo2a)//C_NULL_CHAR, &
                                                    trim(dm1), orderS, trim(dm2), orderT, ''//C_NULL_CHAR, &
                                                    fNoBubble, monotonicity, volumetric, fInverseDistanceMap, &
                                                    noConserve, validate, &
@@ -491,14 +492,16 @@ contains
             ! OCN for the intersection of OCN-ATM context (coverage)
             call seq_comm_getinfo(CPLID ,mpigrp=mpigrp_CPLID)
 
-            ! we identified the app mbofxid with !id_join = id_join + 1000! kind of random
-            ! line 1267 in cplcomp_exchange_mod.F90
-            context_id = ocn(1)%cplcompid + 1000
-            mapper_Sof2a%src_mbid = mbofxid
+            ! mbofxid is now an ALIAS of mboxid (same MOAB app / mesh; see cplcomp_moab_init_ocn).
+            ! The xao->atm second hop therefore REUSES mboxid's o2x->atm comm graph exactly like
+            ! mapper_Fo2a does (same src_mbid, src_context and intx_context as mapper_So2a). No
+            ! separate app id, context offset (formerly ocn%cplcompid+1000), or ComputeCommGraph
+            ! is needed -- the (mboxid -> mbintxoa) graph under (ocn%cplcompid, idintx) already exists.
+            mapper_Sof2a%src_mbid = mboxid
             mapper_Sof2a%tgt_mbid = mbaxid
             mapper_Sof2a%intx_mbid = mbintxoa
-            mapper_Sof2a%src_context = context_id
-            mapper_Sof2a%intx_context = mapper_So2a%intx_context ! basically will use the same intx as ocean on coupler
+            mapper_Sof2a%src_context = mapper_So2a%src_context ! ocn(1)%cplcompid
+            mapper_Sof2a%intx_context = mapper_So2a%intx_context ! same intx as ocean on coupler
             mapper_Sof2a%weight_identifier = wgtIdSo2a
             mapper_Sof2a%mbname = 'mapper_Sof2a'
 
@@ -507,45 +510,14 @@ contains
               write(logunit,F00) 'Initializing MOAB mapper_Fof2a with copy of mapper_Sof2a'
             endif
             ! now take care of the mapper
-            mapper_Fof2a%src_mbid = mbofxid
+            mapper_Fof2a%src_mbid = mboxid
             mapper_Fof2a%tgt_mbid = mbaxid
             mapper_Fof2a%intx_mbid = mbintxoa
-            mapper_Fof2a%src_context = mapper_Sof2a%src_context ! we use the same source 1000 + ?
-            mapper_Fof2a%intx_context = mapper_Sof2a%intx_context ! depends on samegrid_ao
+            mapper_Fof2a%src_context = mapper_So2a%src_context ! ocn(1)%cplcompid
+            mapper_Fof2a%intx_context = mapper_So2a%intx_context
             mapper_Fof2a%weight_identifier = wgtIdFo2a
             mapper_Fof2a%mbname = 'mapper_Fof2a'
-
-            type1 = 3; !  fv for ocean and atm;
-            if (.not. samegrid_ao) then
-               ! Coverage/intersection mesh always has FV cells with GLOBAL_IDs,
-               ! so type2 must be 3 (element-based matching), regardless of
-               ! atm_pg_active. Using type2=2 (vertex matching) here would cause
-               ! MOAB to match against vertex GLOBAL_IDs of mbintxoa instead of
-               ! element GLOBAL_IDs, leading to an incorrect comm graph and
-               ! heap corruption in iMOAB_ReceiveElementTag.
-               ierr = iMOAB_ComputeCommGraph( mbofxid, mbintxoa, mpicom_CPLID, mpigrp_CPLID, mpigrp_CPLID, type1, 3, &
-                                          context_id, idintx)
-               if (ierr .ne. 0) then
-                  write(logunit,*) subname,' error in computing comm graph for Sof2a, mbofxid-mbintxoa'
-                  call shr_sys_abort(subname//' ERROR in computing comm graph for Sof2a, mbofxid-mbintxoa')
-               endif
-            else
-               ! samegrid: comm graph to ATM mesh directly
-               ! type2 depends on ATM discretization (PC for spectral, FV for PG2)
-               if (atm_pg_active .or. dead_comps) then
-                  type2 = 3
-               else
-                  type2 = 2 ! PC cloud
-               endif
-               ! this is a case appearing in the data ocean case --res ne4pg2_ne4pg2 --compset FAQP
-               ! also in spectral case, monogrid --res ne4_ne4 --compset F2010-SCREAMv1 ( type2 is 2, point cloud )
-               ierr = iMOAB_ComputeCommGraph( mbofxid, mbaxid, mpicom_CPLID, mpigrp_CPLID, mpigrp_CPLID, type1, type2, &
-                                      context_id, atm(1)%cplcompid )
-               if (ierr .ne. 0) then
-                  write(logunit,*) subname,' error in computing communication graph for second hop, ATM-OCN'
-                  call shr_sys_abort(subname//' ERROR in computing communication graph for second hop, ATM-OCN')
-               endif
-            endif
+            ! comm graph reused from mapper_So2a/Fo2a (aliased mbofxid == mboxid); nothing to compute
          endif
 
       endif ! endif (ocn_present) then
@@ -584,10 +556,10 @@ contains
               write(logunit,*) ' '
               write(logunit,F00) 'Initializing ice atm coupler'
             endif
-            appname = "ICE_ATM_COU"//C_NULL_CHAR
+            appname = "ICE_ATM_COU"
             ! idintx is a unique number of MOAB app that takes care of intx between ice and atm mesh
             idintx = 100*ice(1)%cplcompid + atm(1)%cplcompid ! something different, to differentiate it
-            ierr = iMOAB_RegisterApplication(trim(appname), mpicom_CPLID, idintx, mbintxia)
+            ierr = iMOAB_RegisterApplication(trim(appname)//C_NULL_CHAR, mpicom_CPLID, idintx, mbintxia)
             if (ierr .ne. 0) then
               write(logunit,*) subname,' error in registering ICE-ATM intersection'
               call shr_sys_abort(subname//' ERROR in registering ICE-ATM intersection')
@@ -672,7 +644,7 @@ contains
                                               noConserve, validate, &
                                               trim(dofnameS), trim(dofnameT)
                endif
-               ierr = iMOAB_ComputeScalarProjectionWeights ( mbintxia, wgtIdSi2a, &
+               ierr = iMOAB_ComputeScalarProjectionWeights ( mbintxia, trim(wgtIdSi2a)//C_NULL_CHAR, &
                                                 trim(dm1), orderS, trim(dm2), orderT, ''//C_NULL_CHAR, &
                                                 fNoBubble, monotonicity, volumetric, fInverseDistanceMap, &
                                                 noConserve, validate, &
@@ -826,10 +798,10 @@ contains
               write(logunit,F00) 'Initializing MOAB mapper_Fl2a'
             endif
 
-            appname = "LND_ATM_COU"//C_NULL_CHAR
+            appname = "LND_ATM_COU"
             ! idintx is a unique number of MOAB app that takes care of intx between lnd and atm mesh
             idintx = 100*lnd(1)%cplcompid + atm(1)%cplcompid ! something different, to differentiate it
-            ierr = iMOAB_RegisterApplication(trim(appname), mpicom_CPLID, idintx, mbintxla)
+            ierr = iMOAB_RegisterApplication(trim(appname)//C_NULL_CHAR, mpicom_CPLID, idintx, mbintxla)
             if (ierr .ne. 0) then
               write(logunit,*) subname,' error in registering lnd atm intx '
               call shr_sys_abort(subname//' ERROR in registering lnd atm intx ')
@@ -903,7 +875,7 @@ contains
                                                    noConserve, validate, &
                                                    trim(dofnameS), trim(dofnameT)
                   endif
-                  ierr = iMOAB_ComputeScalarProjectionWeights ( mbintxla, wgtIdFl2a, &
+                  ierr = iMOAB_ComputeScalarProjectionWeights ( mbintxla, trim(wgtIdFl2a)//C_NULL_CHAR, &
                                                    trim(dm1), orderS, trim(dm2), orderT, ''//C_NULL_CHAR, &
                                                    fNoBubble, monotonicity, volumetric, fInverseDistanceMap, &
                                                    noConserve, validate, &

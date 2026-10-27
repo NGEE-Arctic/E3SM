@@ -19,9 +19,19 @@ if (NOT SCREAM_ONLY_GENERATE_BASELINES)
     SOURCES field_at_pressure_level_tests.cpp
   )
 
+  # Test the bracket-index diagnostic used by field_at_pressure_level
+  CreateDiagTest(pressure_level_index
+    SOURCES pressure_level_index_tests.cpp
+  )
+
   # Test interpolating a field at a specific height
   CreateDiagTest(field_at_height
     SOURCES field_at_height_tests.cpp
+  )
+
+  # Test the bracket-index diagnostic used by field_at_height
+  CreateDiagTest(height_level_index
+    SOURCES height_level_index_tests.cpp
   )
 
   # Test potential temperature diagnostic
@@ -122,6 +132,11 @@ if (NOT SCREAM_ONLY_GENERATE_BASELINES)
   # Test field_prev
   CreateDiagTest(field_prev
     SOURCES field_prev_test.cpp
+  )
+
+  # Test field_broadcast
+  CreateDiagTest(field_broadcast
+    SOURCES field_broadcast_test.cpp
   )
 
   # Test field_over_dt

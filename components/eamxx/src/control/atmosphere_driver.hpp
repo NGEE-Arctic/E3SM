@@ -105,6 +105,9 @@ public:
   // tms' surface drag coefficient.
   void setup_shoc_tms_links();
 
+  // Propagate HOMME's parsed 3D turbulence flag to SHOC's internal runtime option.
+  void setup_shoc_3d_turbulence_link();
+
   // Add column data to all pre/postcondition property checks
   // for use in output.
   void add_additional_column_data_to_property_checks ();
@@ -168,12 +171,9 @@ public:
 
   const std::shared_ptr<AtmosphereProcessGroup>& get_atm_processes () const { return m_atm_process_group; }
 
-#ifndef KOKKOS_ENABLE_CUDA
-  // Cuda requires methods enclosing __device__ lambda's to be public
 protected:
-#endif
-  void initialize_constant_field(const FieldIdentifier& fid, const ekat::ParameterList& ic_pl);
-protected:
+
+  void initialize_constant_field(const FieldIdentifier& fid, const ekat::ParameterList& constants_pl);
 
   void report_res_dep_memory_footprint () const;
 
@@ -181,7 +181,8 @@ protected:
   void set_initial_conditions ();
   void restart_model ();
 
-  void register_groups ();
+  void initialize_time_stamps ();
+  void set_initialization_groups (const Field& f);
 
   template<typename T>
   using strmap_t = std::map<std::string,T>;
@@ -251,7 +252,7 @@ protected:
   // Current simulation casename
   std::string m_casename;
   // maps grid name to a vector of its initialized fields
-  strmap_t<strvec_t> m_fields_inited;
+  strmap_t<std::set<std::string>> m_fields_inited;
 };
 
 }  // namespace control

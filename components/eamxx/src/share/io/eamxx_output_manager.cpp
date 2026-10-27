@@ -144,16 +144,8 @@ setup (const std::shared_ptr<fm_type>& field_mgr,
       for (const auto& fn : grid->get_geometry_data_names()) {
         const auto& f = grid->get_geometry_data(fn);
 
-        if (f.rank()==0) {
-          // Right now, this only happens for `dx_short`, a single scalar
-          // coming from iop. Since that scalar is easily recomputed
-          // upon restart, we can skip this
-          // NOTE: without this, the code crash while attempting to get a
-          //       pio decomp for this var, since there are no dimensions.
-          //       Perhaps you can explore setting the var as a global att
-          continue;
-        } else if (f.get_header().has_extra_data("save_as_geo_data") and
-                   not f.get_header().get_extra_data<bool>("save_as_geo_data")) {
+        if (f.get_header().has_extra_data("save_as_geo_data") and
+            not f.get_header().get_extra_data<bool>("save_as_geo_data")) {
           // This field is NOT to be saved as geo data
           continue;
         }
@@ -676,11 +668,11 @@ setup_internals (const std::shared_ptr<fm_type>& field_mgr,
       vos_t fnames;
       // There may be no RESTART group on this grid
       if (field_mgr->has_group("RESTART", gname)) {
-        auto restart_group = field_mgr->get_group_info("RESTART", gname);
+        auto restart_group = field_mgr->get_field_group("RESTART", gname);
         EKAT_REQUIRE_MSG (not fields_pl.isParameter(gname),
           "Error! For restart output, don't specify the fields names. We will create this info internally.\n");
-        for (const auto& n : restart_group.m_fields_names) {
-          fnames.push_back(n);
+        for (const auto& it : restart_group.individual_fields()) {
+          fnames.push_back(it.first);
         }
       }
       fields_pl.sublist(gname).set("field_names",fnames);
@@ -860,7 +852,6 @@ setup_file (      IOFileSpecs& filespecs,
       const auto& c = pc_dict.at(n);
       scorpio::define_var (filename, n, c.units.to_string(), {},
                            "real", "real", false);
-      scorpio::write_var (filename, n, &c.value);
     }
   }
 
@@ -877,6 +868,10 @@ setup_file (      IOFileSpecs& filespecs,
     // we can immediately check whether we should output it or not.
     // Note: m_grid_name_to_geo_data is reset to empty after this loop, so the loop runs ONCE,
     //       which means geo streams are lazy-inited on the first setup_file call
+
+    // We keep track of what was added, since diff grids may STILL have the same geo data,
+    // and we can't add it twice (e.g., dyn and phys grids have same vertical coord geo data)
+    std::set<std::string> added_fids;
     for (auto& kv : m_grid_name_to_geo_data) {
       auto& geo_data = kv.second;
       auto& fields = geo_data.fields;
@@ -888,6 +883,35 @@ setup_file (      IOFileSpecs& filespecs,
             it = fields.erase(it);
             continue;
           }
+        }
+        if (it->get_header().has_extra_data("io_output_if_any_dim_exists")) {
+          // If NONE of the required dim is in the output file, this field is not needed
+          auto req_dims = it->get_header().get_extra_data<std::vector<std::string>>("io_output_if_any_dim_exists");
+          bool any_there = false;
+          for (auto dim : req_dims)
+            any_there |= scorpio::has_dim(filename, dim);
+
+          if (not any_there) {
+            it = fields.erase(it);
+            continue;
+          }
+        }
+
+        auto fid = it->get_header().get_identifier().clone();
+        auto fl = fid.get_layout().clone();
+        for (int i=0; i<fl.rank(); ++i) {
+          auto t = fl.tags()[i];
+          auto dimname = fl.names()[i];
+          if (geo_data.grid->has_special_tag_name(t))
+            dimname = geo_data.grid->get_special_tag_name(t);
+
+          dimname += (dimname=="dim" or dimname=="bin") ? std::to_string(fl.dims()[i]) : "";
+          fl.rename_dim(i,dimname);
+        }
+        fid.reset_layout(fl);
+        if (added_fids.count(fid.get_id_string())>0) {
+          it = fields.erase(it);
+          continue;
         }
         ++it;
       }
@@ -909,6 +933,16 @@ setup_file (      IOFileSpecs& filespecs,
 
   scorpio::enddef (filename);
 
+  // Write the constants to the output file
+  if (!m_resume_output_file) {
+    const auto& pc_names = m_params.get<std::vector<std::string>>("constants",{});
+    const auto& pc_dict = physics::Constants<Real>::dictionary();
+    for (const auto& n: pc_names) {
+      const auto& c = pc_dict.at(n);
+      scorpio::write_var (filename, n, &c.value);
+    }
+  }
+
   if (m_save_grid_data and not filespecs.is_restart_file() and not m_resume_output_file) {
     // Immediately run the geo data streams
     for (const auto& it : m_geo_data_streams) {
@@ -919,7 +953,9 @@ setup_file (      IOFileSpecs& filespecs,
 
   filespecs.is_open = true;
   if (filespecs.storage.type!=NumSnaps) {
-    filespecs.storage.set_time_idx(control.next_write_ts);
+    // We want the next write timestamp for instant, but the last write timestamp for average/min/max,
+    // since the latter is the start of the averaging window, and its control hasn't progressed yet
+    filespecs.storage.set_time_idx(m_avg_type==OutputAvgType::Instant ? control.next_write_ts : control.last_write_ts);
   }
 
   m_resume_output_file = false;
@@ -950,7 +986,9 @@ void OutputManager::set_file_header(const IOFileSpecs& file_specs)
   set_str_att("atm_initial_conditions_file",p.get<std::string>("initial_conditions_file","NONE"));
   set_str_att("topography_file",p.get<std::string>("topography_file","NONE"));
   set_str_att("contact","e3sm-data-support@llnl.gov");
+  set_str_att("license","http://spdx.org/licenses/CC-BY-4.0 (CC-BY-4.0)");
   set_str_att("institution_id","E3SM-Project");
+  set_str_att("institution","LLNL (Lawrence Livermore National Laboratory); ANL (Argonne National Laboratory); BNL (Brookhaven National Laboratory); LANL (Los Alamos National Laboratory); LBNL (Lawrence Berkeley National Laboratory); ORNL (Oak Ridge National Laboratory); PNNL (Pacific Northwest National Laboratory); SNL (Sandia National Laboratories). Mailing address: LLNL Climate Program, c/o Peter M. Caldwell, Principal Investigator, L-103, 7000 East Avenue, Livermore, CA 94550, USA");
   set_str_att("realm","atmos");
   set_str_att("history",ts_str);
   set_str_att("Conventions","CF-1.8");

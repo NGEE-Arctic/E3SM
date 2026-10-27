@@ -7,6 +7,34 @@
 
 namespace scream {
 
+#ifdef MAM4XX_EVAL_DIAGNOSTICS
+namespace detail {
+
+static constexpr Real max_exact_ndrop_nsubmix_aggregate = 16777216;
+
+KOKKOS_INLINE_FUNCTION
+void accumulate_ndrop_nsubmix(const int nsubmix, const bool reset,
+                              Real &latest, Real &sum, Real &maximum) {
+  const Real count = static_cast<Real>(nsubmix);
+  EKAT_KERNEL_REQUIRE_MSG(
+      nsubmix > 0 &&
+          nsubmix <= static_cast<int>(max_exact_ndrop_nsubmix_aggregate) &&
+          (reset || (sum >= 0 &&
+                     sum <= max_exact_ndrop_nsubmix_aggregate - count)),
+      "ndrop nsubmix is invalid or exceeds the exact integer output range");
+  latest = count;
+  if(reset) {
+    sum     = count;
+    maximum = count;
+  } else {
+    sum += count;
+    maximum = count > maximum ? count : maximum;
+  }
+}
+
+}  // namespace detail
+#endif
+
 namespace {
 
 void compute_w0_and_rho(const int ncol,
@@ -155,7 +183,7 @@ void compute_nucleate_ice_tendencies(
         // grab views from the buffer to store tendencies, not used as all
         // values are store in diags above.
         const mam4::Tendencies tends(nlev);  // not used
-        const mam4::AeroConfig aero_config;
+        const mam4::AeroConfig aero_config(nucleate_ice.aero_species);
         const Real t = 0;  // not used
         nucleate_ice.compute_tendencies(aero_config, team, t, dt, atm,
                                         surf, progs, diags, tends);
@@ -204,6 +232,12 @@ void call_function_dropmixnuc(
     MAMAci::view_3d coltend_cw, MAMAci::view_2d qcld,
     MAMAci::view_2d ndropcol, MAMAci::view_2d ndropmix, MAMAci::view_2d nsource,
     MAMAci::view_2d wtke, MAMAci::view_3d ccn,
+#ifdef MAM4XX_EVAL_DIAGNOSTICS
+    mam_coupling::view_1d ndrop_nsubmix,
+    mam_coupling::view_1d ndrop_sum_nsubmix,
+    mam_coupling::view_1d ndrop_max_nsubmix,
+    const bool reset_ndrop_nsubmix_accumulators,
+#endif
 
     // ## outputs to be used by other processes ##
     // qqcw_fld_work should be directly assigned to the cloud borne aerosols
@@ -271,28 +305,13 @@ void call_function_dropmixnuc(
   //---------------------------------------------------------------------------
   // ## Initialize the ndrop class.
   //---------------------------------------------------------------------------
-  const int ntot_amode        = mam_coupling::num_aero_modes();
-  const int maxd_aspectype    = mam4::ndrop::maxd_aspectype;
-  const int nspec_max         = mam4::ndrop::nspec_max;
-  int nspec_amode[ntot_amode] = {};
-  int lspectype_amode[maxd_aspectype][ntot_amode] = {};
-  int lmassptr_amode[maxd_aspectype][ntot_amode]  = {};
-  int numptr_amode[ntot_amode]                    = {};
-  int mam_idx[ntot_amode][nspec_max]              = {};
-  int mam_cnst_idx[ntot_amode][nspec_max]         = {};
-
-  Real specdens_amode[maxd_aspectype] = {};
-  Real spechygro[maxd_aspectype]      = {};
+  const int ntot_amode = mam_coupling::num_aero_modes();
   Real exp45logsig[ntot_amode] = {}, alogsig[ntot_amode] = {},
        num2vol_ratio_min_nmodes[ntot_amode] = {},
        num2vol_ratio_max_nmodes[ntot_amode] = {};
-  Real aten                                 = 0;
-  mam4::ndrop::get_e3sm_parameters(nspec_amode, lspectype_amode, lmassptr_amode,
-                                   numptr_amode, specdens_amode, spechygro,
-                                   mam_idx, mam_cnst_idx);
+  Real aten = 0;
   mam4::ndrop::ndrop_init(exp45logsig, alogsig, aten, num2vol_ratio_min_nmodes,
                           num2vol_ratio_max_nmodes);
-  //---------------------------------------------------------------------------
   //---------------------------------------------------------------------------
   const bool local_enable_aero_vertical_mix = enable_aero_vertical_mix;
   Kokkos::parallel_for(
@@ -365,6 +384,9 @@ void call_function_dropmixnuc(
               }
             });
         team.team_barrier();
+#ifdef MAM4XX_EVAL_DIAGNOSTICS
+        int nsubmix = 0;
+#endif
         mam4::ndrop::dropmixnuc(
             team, dt, ekat::subview(T_mid, icol), ekat::subview(p_mid, icol),
             ekat::subview(p_int, icol), ekat::subview(pdel, icol),
@@ -372,10 +394,8 @@ void call_function_dropmixnuc(
             // in zm[kk] - zm[kk+1], for pver zm[kk-1] - zm[kk]
             ekat::subview(zm, icol), ekat::subview(state_q_work_loc, icol),
             ekat::subview(nc, icol), ekat::subview(kvh_int, icol),  // kvh[kk+1]
-            ekat::subview(cloud_frac, icol), lspectype_amode, specdens_amode,
-            spechygro, lmassptr_amode, num2vol_ratio_min_nmodes,
-            num2vol_ratio_max_nmodes, numptr_amode, nspec_amode, exp45logsig,
-            alogsig, aten, mam_idx, mam_cnst_idx,
+            ekat::subview(cloud_frac, icol), num2vol_ratio_min_nmodes,
+            num2vol_ratio_max_nmodes, exp45logsig, alogsig, aten,
             local_enable_aero_vertical_mix, ekat::subview(qcld, icol),  // out
             ekat::subview(wsub, icol),                                  // in
             ekat::subview(cloud_frac_prev, icol),                       // in
@@ -383,8 +403,11 @@ void call_function_dropmixnuc(
             ptend_q_view, ekat::subview(tendnd, icol),
             ekat::subview(factnum, icol), ekat::subview(ndropcol, icol),
             ekat::subview(ndropmix, icol), ekat::subview(nsource, icol),
-            ekat::subview(wtke, icol), ekat::subview(ccn, icol), coltend_view,
-            coltend_cw_view, top_lev,
+#ifdef MAM4XX_EVAL_DIAGNOSTICS
+            nsubmix,
+#endif
+            ekat::subview(wtke, icol), ekat::subview(ccn, icol),
+            coltend_view, coltend_cw_view, top_lev,
             // work arrays
             raercol_cw_view, raercol_view, ekat::subview(nact, icol),
             ekat::subview(mact, icol), ekat::subview(eddy_diff, icol),
@@ -395,6 +418,15 @@ void call_function_dropmixnuc(
             ekat::subview(srcn, icol), ekat::subview(source, icol),
             ekat::subview(dz, icol), ekat::subview(csbot_cscen, icol),
             ekat::subview(raertend, icol), ekat::subview(qqcwtend, icol));
+
+#ifdef MAM4XX_EVAL_DIAGNOSTICS
+        Kokkos::single(Kokkos::PerTeam(team), [&]() {
+          detail::accumulate_ndrop_nsubmix(
+              nsubmix, reset_ndrop_nsubmix_accumulators,
+              ndrop_nsubmix(icol), ndrop_sum_nsubmix(icol),
+              ndrop_max_nsubmix(icol));
+        });
+#endif
       });
 }
 
@@ -526,9 +558,8 @@ void call_hetfrz_compute_tendencies(
         // grab views from the buffer to store tendencies, not used as all
         // values are store in diags above.
         const mam4::Tendencies tends(nlev);
-        const mam4::AeroConfig aero_config;
         const Real t = 0;  // not used
-        hetfrz.compute_tendencies(aero_config, team, t, dt, atm, surf,
+        hetfrz.compute_tendencies(hetfrz.aero_config, team, t, dt, atm, surf,
                                   progs, diags, tends);
       });
 }

@@ -1,5 +1,7 @@
 #include "share/io/eamxx_io_utils.hpp"
 
+#include "share/io/eamxx_dexpr_diags.hpp"
+
 #include "share/scorpio_interface/eamxx_scorpio_interface.hpp"
 #include "share/util/eamxx_utils.hpp"
 #include "share/core/eamxx_config.hpp"
@@ -120,13 +122,19 @@ create_diagnostic (const std::string& diag_field_name,
     std::regex bt (generic_field + "_atm_backtend$");
     if (std::regex_search(diag_field_name, alias_matches, bt)) {
       const auto f = alias_matches[1].str();
-      return create_diagnostic(f + "_minus_" + f + "_prev_over_dt", grid);
+      auto diag = create_diagnostic(f + "_minus_" + f + "_prev_over_dt", grid);
+      // The expansion names its field after the canonical form, but the
+      // customer asked for the alias, and looks it up by that.
+      diag->get_params().set<std::string>("output_field_name",diag_field_name);
+      return diag;
     }
     // More built-in aliases may be added here.
   }
   std::regex field_at_l (R"()" + generic_field + R"(_at_(lev_(\d+)|model_(top|bot))$)");
   std::regex field_at_p (R"()" + generic_field + R"(_at_(\d+(\.\d+)?)(hPa|mb|Pa)$)");
   std::regex field_at_h (R"()" + generic_field + R"(_at_(\d+(\.\d+)?)(m)_above_(sealevel|surface)$)");
+  std::regex lev_idx_p (R"(lev_at_(\d+(\.\d+)?)(hPa|mb|Pa)_(mid|int)$)");
+  std::regex lev_idx_h (R"(lev_at_(\d+(\.\d+)?)(m)_above_(sealevel|surface)_(mid|int)$)");
   std::regex surf_mass_flux ("precip_(liq|ice|total)_surf_mass_flux$");
   std::regex water_path ("(Ice|Liq|Rain|Rime|Vap)WaterPath$");
   std::regex number_path ("(Ice|Liq|Rain)NumberPath$");
@@ -166,6 +174,19 @@ create_diagnostic (const std::string& diag_field_name,
     params.set("height_units",matches[4].str());
     params.set("surface_reference", matches[5].str());
     diag_name = "FieldAtHeight";
+  } else if (std::regex_search(diag_field_name,matches,lev_idx_p)) {
+    params.set("grid_name",grid->name());
+    params.set("pressure_value",matches[1].str());
+    params.set("pressure_units", matches[3].str());
+    params.set("vertical_layer", matches[4].str());
+    diag_name = "PressureLevelIndex";
+  } else if (std::regex_search(diag_field_name,matches,lev_idx_h)) {
+    params.set("grid_name",grid->name());
+    params.set("height_value",matches[1].str());
+    params.set("height_units",matches[3].str());
+    params.set("surface_reference", matches[4].str());
+    params.set("vertical_layer", matches[5].str());
+    diag_name = "HeightLevelIndex";
   } else if (std::regex_search(diag_field_name,matches,surf_mass_flux)) {
     diag_name = "precip_surf_mass_flux";
     params.set<std::string>("precip_type",matches[1].str());
@@ -262,7 +283,12 @@ create_diagnostic (const std::string& diag_field_name,
   }
   else
   {
-    // No existing special regex matches, so we assume that the diag field name IS the diag name.
+    // No pattern claimed this name. Try reading it as an expression before
+    // assuming it IS a diag class name. A plain identifier comes back nullptr,
+    // so we fall through to the factory exactly as before.
+    if (auto diag = dexpr_create_diagnostic(diag_field_name,grid)) {
+      return diag;
+    }
     diag_name = diag_field_name;
   }
 

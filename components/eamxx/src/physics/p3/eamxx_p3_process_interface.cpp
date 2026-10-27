@@ -182,8 +182,13 @@ size_t P3Microphysics::requested_buffer_size_in_bytes() const
   // Number of Reals needed by the WorkspaceManager passed to p3_main
   const auto policy        = TPF::get_default_team_policy(m_num_cols, nk_pack);
   const size_t wsm_request = WSM::get_total_bytes_needed(nk_pack_p1, 52, policy);
+#ifdef SCREAM_P3_SMALL_KERNELS
+  const size_t bool_request = 2 * ((m_num_cols*sizeof(bool) + sizeof(Pack) - 1) / sizeof(Pack)) * sizeof(Pack);
+#else
+  const size_t bool_request = 0;
+#endif
 
-  return interface_request + wsm_request;
+  return interface_request + wsm_request + bool_request;
 }
 
 // =========================================================================================
@@ -257,6 +262,16 @@ void P3Microphysics::init_buffers(const ATMBufferManager &buffer_manager)
   const int wsm_size = WSM::get_total_bytes_needed(nk_pack_p1, 52, policy)/sizeof(Pack);
   s_mem += wsm_size;
 
+#ifdef SCREAM_P3_SMALL_KERNELS
+  const size_t bool_size = (m_num_cols*sizeof(bool) + sizeof(Pack) - 1) / sizeof(Pack);
+  m_buffer.nucleationPossible = decltype(m_buffer.nucleationPossible)(
+    reinterpret_cast<bool*>(s_mem), m_num_cols);
+  s_mem += bool_size;
+  m_buffer.hydrometeorsPresent = decltype(m_buffer.hydrometeorsPresent)(
+    reinterpret_cast<bool*>(s_mem), m_num_cols);
+  s_mem += bool_size;
+#endif
+
   size_t used_mem = (reinterpret_cast<Real*>(s_mem) - buffer_manager.get_memory())*sizeof(Real);
   EKAT_REQUIRE_MSG(used_mem==requested_buffer_size_in_bytes(), "Error! Used memory != requested memory for P3Microphysics.");
 }
@@ -286,9 +301,12 @@ void P3Microphysics::initialize_impl (const RunType /* run_type */)
   add_postcondition_check<FieldWithinIntervalCheck>(get_field_out("eff_radius_qi"),m_grid,0.0,5.0e3,false);
   add_postcondition_check<FieldWithinIntervalCheck>(get_field_out("eff_radius_qr"),m_grid,0.0,5.0e3,false);
 
-  // Initialize p3
+  // Initialize p3. Pass our comm so that only the root rank reads the
+  // lookup table files from disk, broadcasting the data to the other
+  // ranks, rather than having every rank hit the (often shared/parallel)
+  // filesystem independently (see E3SM issue #6654 / #6833).
   lookup_tables = P3F::p3_init(/* write_tables = */ false,
-                               this->get_comm().am_i_root());
+                               &this->get_comm());
 
   // Initialize all of the structures that are passed to p3_main in run_impl.
   // Note: Some variables in the structures are not stored in the field manager.  For these
@@ -494,6 +512,8 @@ void P3Microphysics::initialize_impl (const RunType /* run_type */)
   temporaries.flux_qit                = m_buffer.flux_qit;
   temporaries.v_qr                    = m_buffer.v_qr;
   temporaries.v_nr                    = m_buffer.v_nr;
+  temporaries.nucleationPossible      = m_buffer.nucleationPossible;
+  temporaries.hydrometeorsPresent     = m_buffer.hydrometeorsPresent;
 #endif
 
   // -- Set values for the post-amble structure
