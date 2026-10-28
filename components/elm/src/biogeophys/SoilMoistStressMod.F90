@@ -110,7 +110,7 @@ contains
        do fc = 1, numf
           c = filter(fc)
           !compute the volumetric ice content
-          vol_ice=min(watsat(c,j), h2osoi_ice(c,j)/(denice*col_pp%dz(c,j)))
+          vol_ice=min(watsat(c,j), h2osoi_ice(c,j)/(denice*col_pp%dz_ref(c,j)))
           !compute the maximum soil space to fill liquid water and air
           eff_por(c,j) = watsat(c,j) - vol_ice
        enddo
@@ -205,7 +205,7 @@ contains
           c = filter(fc)
           if(j>=jtop(c))then
              !volume of liquid is no greater than effective void space
-             vol_liq(c,j) = min(eff_porosity(c,j), h2osoi_liq(c,j)/(col_pp%dz(c,j)*denh2o))
+             vol_liq(c,j) = min(eff_porosity(c,j), h2osoi_liq(c,j)/(col_pp%dz_ref(c,j)*denh2o))
           endif
        enddo
     enddo

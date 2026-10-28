@@ -330,7 +330,7 @@ contains
             soil_hr_vr(c,j) = phr_vr(c,j)
 
             ! CENTURY papers give denitrification in units of per gram soil; need to convert from volumetric to mass-based units here
-            soil_bulkdensity(c,j) = bd(c,j) + h2osoi_liq(c,j)/col_pp%dz(c,j)
+            soil_bulkdensity(c,j) = bd(c,j) + h2osoi_liq(c,j)/col_pp%dz_ref(c,j)
 
             g_per_m3__to__ug_per_gsoil = 1.e3_r8 / soil_bulkdensity(c,j)
 

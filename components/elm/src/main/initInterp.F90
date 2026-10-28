@@ -1163,13 +1163,6 @@ contains
           zsoii(1:5) = (/ -5._r8, -4._r8, -3._r8, -2._r8, 0._r8 /)
           zsoio(1:5) = (/ -5._r8, -4._r8, -3._r8, -2._r8, 0._r8 /)
        else
-          !!! general case: interpolate between any pair of soil layer
-          !!! structures (10SL_3.5m, 20SL_8.5m, 49SL_10m, 4SL_2m or a
-          !!! user-defined grid). Node depths are read from each file's zsoi
-          !!! variable; for a levtot grid the leading snow layers are given
-          !!! dummy monotonic coordinates below the surface. The two special
-          !!! cases above are retained verbatim so the legacy 10SL_3.5m ->
-          !!! 23SL_3.5m interpolation stays bit-for-bit.
           allocate(zsoii(nlevi), zsoio(nlevo))
           call get_levinterp_coord(ncidi, lev_dimname, nlevi, zsoii)
           call get_levinterp_coord(ncido, lev_dimname, nlevo, zsoio)

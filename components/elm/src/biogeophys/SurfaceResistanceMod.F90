@@ -142,7 +142,7 @@ contains
           if (lun_pp%itype(l)/=istwet .AND. lun_pp%itype(l)/=istice  &
                .AND. lun_pp%itype(l)/=istice_mec) then
              if (col_pp%is_soil(c) .or. col_pp%is_crop(c)) then
-                wx   = (h2osoi_liq(c,1)/denh2o+h2osoi_ice(c,1)/denice)/col_pp%dz(c,1)
+                wx   = (h2osoi_liq(c,1)/denh2o+h2osoi_ice(c,1)/denice)/col_pp%dz_ref(c,1)
                 fac  = min(1._r8, wx/watsat(c,1))
                 fac  = max( fac, 0.01_r8 )
                 !! Lee and Pielke 1992 beta, added by K.Sakaguchi
@@ -165,7 +165,7 @@ contains
                 if (.not. use_vsfm) then
                    soilbeta(c) = 0._r8
                 else
-                   wx   = (h2osoi_liq(c,1)/denh2o+h2osoi_ice(c,1)/denice)/col_pp%dz(c,1)
+                   wx   = (h2osoi_liq(c,1)/denh2o+h2osoi_ice(c,1)/denice)/col_pp%dz_ref(c,1)
                    fac  = min(1._r8, wx/watsat(c,1))
                    fac  = max( fac, 0.01_r8 )
                    if (wx < watfc(c,1) ) then  !when water content of ths top layer is less than that at F.C.

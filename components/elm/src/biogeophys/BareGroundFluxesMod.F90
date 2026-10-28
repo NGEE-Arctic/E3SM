@@ -123,7 +123,7 @@ contains
 
     associate(                                                          &
          snl              =>    col_pp%snl                            , & ! Input:  [integer  (:)   ]  number of snow layers
-         dz               =>    col_pp%dz                             , & ! Input:  [real(r8) (:,:) ]  layer depth (m)
+         dz               =>    col_pp%dz_ref                         , & ! Input:  [real(r8) (:,:) ]  reference layer thickness (m)
          zii              =>    col_pp%zii                            , & ! Input:  [real(r8) (:)   ]  convective boundary height [m]
          forc_u           =>    top_as%ubot                           , & ! Input:  [real(r8) (:)   ]  atmospheric wind speed in east direction (m/s)
          forc_v           =>    top_as%vbot                           , & ! Input:  [real(r8) (:)   ]  atmospheric wind speed in north direction (m/s)

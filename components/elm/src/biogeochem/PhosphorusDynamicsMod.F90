@@ -362,12 +362,12 @@ contains
             else
                disp_conc = 0._r8
                if (h2osoi_liq(c,j) > 0._r8) then
-                  disp_conc = (solutionp_vr(c,j) * col_pp%dz(c,j))/(h2osoi_liq(c,j) )
+                  disp_conc = (solutionp_vr(c,j) * col_pp%dz_ref(c,j))/(h2osoi_liq(c,j) )
                end if
 
                ! calculate the P leaching flux as a function of the dissolved
                ! concentration and the sub-surface drainage flux
-               sminp_leached_vr(c,j) = disp_conc * qflx_drain(c) *h2osoi_liq(c,j) / ( tot_water(fc) * col_pp%dz(c,j) )
+               sminp_leached_vr(c,j) = disp_conc * qflx_drain(c) *h2osoi_liq(c,j) / ( tot_water(fc) * col_pp%dz_ref(c,j) )
 
             end if
             ! limit the flux based on current sminp state
@@ -696,7 +696,7 @@ contains
                         !biochem_pmin_to_plant_patch(p) = 0._r8
                         do j = 1,nlevdecomp
                             biochem_pmin_to_plant_patch(p) = biochem_pmin_to_plant_patch(p) + &
-                                 biochem_pmin_to_plant_vr_patch(p,j) * col_pp%dz(c,j)
+                                 biochem_pmin_to_plant_vr_patch(p,j) * col_pp%dz_ref(c,j)
                          end do
                          biochem_pmin_to_plant(c) = biochem_pmin_to_plant(c) + &
                               biochem_pmin_to_plant_patch(p)*veg_pp%wtcol(p)

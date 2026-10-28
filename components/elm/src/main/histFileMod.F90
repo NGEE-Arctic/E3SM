@@ -2229,8 +2229,8 @@ contains
              do c = bounds%begc,bounds%endc
                 l = col_pp%landunit(c)
                    ! Field indices MUST match varnames array order above!
-                   if (ifld ==1) histi(c,lev) = col_pp%z(c,lev)
-                   if (ifld ==2) histi(c,lev) = col_pp%dz(c,lev)
+                   if (ifld ==1) histi(c,lev) = col_pp%z_ref(c,lev)
+                   if (ifld ==2) histi(c,lev) = col_pp%dz_ref(c,lev)
                    if (ifld ==3) histi(c,lev) = watsat_col(c,lev)
                    if (ifld ==4) histi(c,lev) = sucsat_col(c,lev)
                    if (ifld ==5) histi(c,lev) = bsw_col(c,lev)

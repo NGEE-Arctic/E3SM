@@ -236,9 +236,8 @@ contains
 
     associate(                                                                   &
          snl                     => col_pp%snl                                 , & ! Input:  [integer  (:)   ]  number of snow layers
-         zi                      => col_pp%zi                                  , & ! Input:  [real(r8) (:,:) ]  interface level below a "z" level (m)
-         dz                      => col_pp%dz                                  , & ! Input:  [real(r8) (:,:) ]  layer depth (m)
-         z                       => col_pp%z                                   , & ! Input:  [real(r8) (:,:) ]  layer thickness (m)
+         zi_thermal                      => col_pp%zi                                  , & ! Input:  [real(r8) (:,:) ]  interface level below a "z" level (m)
+         z_thermal                       => col_pp%z                                   , & ! Input:  [real(r8) (:,:) ]  layer thickness (m)
 
          t_building_max          => urbanparams_vars%t_building_max         , & ! Input:  [real(r8) (:)   ]  maximum internal building temperature (K)
          t_building_min          => urbanparams_vars%t_building_min         , & ! Input:  [real(r8) (:)   ]  minimum internal building temperature (K)
@@ -577,21 +576,21 @@ contains
                  .or. col_pp%itype(c) == icol_roof) .and. j <= nlevurb) then
                if (j >= snl(c)+1) then
                   if (j <= nlevurb-1) then
-                     fn1(c,j) = tk(c,j)*(t_soisno(c,j+1)-t_soisno(c,j))/(z(c,j+1)-z(c,j))
+                     fn1(c,j) = tk(c,j)*(t_soisno(c,j+1)-t_soisno(c,j))/(z_thermal(c,j+1)-z_thermal(c,j))
                   else if (j == nlevurb) then
                      ! For urban sunwall, shadewall, and roof columns, there is a non-zero heat flux across
                      ! the bottom "soil" layer and the equations are derived assuming a prescribed internal
                      ! building temperature. (See Oleson urban notes of 6/18/03).
                      ! Note new formulation for fn, this will be used below in net energey flux computations
-                     fn1(c,j) = tk(c,j) * (t_building(l) - t_soisno(c,j))/(zi(c,j) - z(c,j))
-                     fn(c,j)  = tk(c,j) * (t_building(l) - tssbef(c,j))/(zi(c,j) - z(c,j))
+                     fn1(c,j) = tk(c,j) * (t_building(l) - t_soisno(c,j))/(zi_thermal(c,j) - z_thermal(c,j))
+                     fn(c,j)  = tk(c,j) * (t_building(l) - tssbef(c,j))/(zi_thermal(c,j) - z_thermal(c,j))
                   end if
                end if
             else if (col_pp%itype(c) /= icol_sunwall .and. col_pp%itype(c) /= icol_shadewall &
                  .and. col_pp%itype(c) /= icol_roof) then
                if (j >= snl(c)+1) then
                   if (j <= nlevgrnd-1) then
-                     fn1(c,j) = tk(c,j)*(t_soisno(c,j+1)-t_soisno(c,j))/(z(c,j+1)-z(c,j))
+                     fn1(c,j) = tk(c,j)*(t_soisno(c,j+1)-t_soisno(c,j))/(z_thermal(c,j+1)-z_thermal(c,j))
                   else if (j == nlevgrnd) then
                      fn1(c,j) = 0._r8
                   end if
@@ -864,7 +863,6 @@ contains
     real(r8) :: om_adj                    ! organic matter fraction for current layer relative to total solid volume
     real(r8) :: organic_max               ! organic matter (kg/m3) threshold
     real(r8) :: f_exice                   ! fraction of layer that is excess ice
-    real(r8) :: dz_soil                   ! depth of layer subject to soil tk scheme
     character(len=64) :: event
     
     real(r8), parameter :: rho_ice     = 917._r8
@@ -885,9 +883,10 @@ contains
 
     associate(                                                 &
          snl          =>    col_pp%snl                       , & ! Input:  [integer  (:)   ]  number of snow layers
-         dz           =>    col_pp%dz                        , & ! Input:  [real(r8) (:,:) ]  layer depth (m)
-         zi           =>    col_pp%zi                        , & ! Input:  [real(r8) (:,:) ]  interface level below a "z" level (m)
-         z            =>    col_pp%z                         , & ! Input:  [real(r8) (:,:) ]  layer thickness (m)
+         dz_thermal           =>    col_pp%dz                        , & ! Input:  [real(r8) (:,:) ]  layer thickness, deforming (m)
+         zi_thermal           =>    col_pp%zi                        , & ! Input:  [real(r8) (:,:) ]  interface level below a "z" level (m)
+         z_thermal            =>    col_pp%z                         , & ! Input:  [real(r8) (:,:) ]  layer node depth (m)
+         dz_ref       =>    col_pp%dz_ref                    , & ! Input:  [real(r8) (:,:) ]  reference (mineral soil) layer thickness (m)
          nlev2bed     =>    col_pp%nlevbed                      , & ! Input:  [integer  (:)   ]  number of layers to bedrock
 
          nlev_improad =>    urbanparams_vars%nlev_improad    , & ! Input:  [integer  (:)   ]  number of impervious road layers
@@ -942,20 +941,22 @@ contains
                else if (lun_pp%itype(l) /= istwet .AND. lun_pp%itype(l) /= istice .AND. lun_pp%itype(l) /= istice_mec &
                     .AND. col_pp%itype(c) /= icol_sunwall .AND. col_pp%itype(c) /= icol_shadewall .AND. &
                     col_pp%itype(c) /= icol_roof) then
+                  ! f_exice is still needed for the conductivity blend at the
+                  ! geometric-mean step below, but the layer thickness the soil
+                  ! tk scheme acts on is just dz_ref
                   if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
                      if (excess_ice(c,j) .gt. 0._r8) then
-                        f_exice = excess_ice(c,j)/(denice*dz(c,j))
+                        f_exice = excess_ice(c,j)/(denice*dz_thermal(c,j))
                         f_exice = min(1._r8, max(0._r8, f_exice))
-                        dz_soil = dz(c,j) * (1._r8 - f_exice)
                      else
-                        dz_soil = dz(c,j)
                         f_exice = 0._r8
                      endif
                   else
-                     dz_soil = dz(c,j)
                      f_exice = 0._r8
                   endif
-                  satw = (h2osoi_liq(c,j)/denh2o + h2osoi_ice(c,j)/denice)/(dz_soil*watsat(c,j))
+                  ! Pore saturation is a reference-volume quantity: watsat is
+                  ! built on the fixed grid
+                  satw = (h2osoi_liq(c,j)/denh2o + h2osoi_ice(c,j)/denice)/(dz_ref(c,j)*watsat(c,j))
                   satw = min(1._r8, satw)
 
                   if (trim(soil_thermal_conductivity_model) == 'farouki') then
@@ -965,15 +966,15 @@ contains
                         else                               ! Frozen soil
                            dke = satw
                         end if
-                        fl = (h2osoi_liq(c,j)/(denh2o*dz(c,j))) / (h2osoi_liq(c,j)/(denh2o*dz(c,j)) + &
-                           h2osoi_ice(c,j)/(denice*dz(c,j)))
+                        fl = (h2osoi_liq(c,j)/(denh2o*dz_thermal(c,j))) / (h2osoi_liq(c,j)/(denh2o*dz_thermal(c,j)) + &
+                           h2osoi_ice(c,j)/(denice*dz_thermal(c,j)))
 
                         ! Update liquid fraction for polygonal tundra to include excess ice
                         if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
-                           fl = (h2osoi_liq(c,j)/(denh2o*dz(c,j))) / &
-                             (h2osoi_liq(c,j)/(denh2o*dz(c,j)) + &
-                              h2osoi_ice(c,j)/(denice*dz(c,j)) + &
-                              excess_ice(c,j)/(denice*dz(c,j)))
+                           fl = (h2osoi_liq(c,j)/(denh2o*dz_thermal(c,j))) / &
+                             (h2osoi_liq(c,j)/(denh2o*dz_thermal(c,j)) + &
+                              h2osoi_ice(c,j)/(denice*dz_thermal(c,j)) + &
+                              excess_ice(c,j)/(denice*dz_thermal(c,j)))
                         end if
                         dksat = tkmg(c,j)*tkwat**(fl*watsat(c,j))*tkice**((1._r8-fl)*watsat(c,j))
                         thk(c,j) = dke*dksat + (1._r8-dke)*tkdry(c,j)
@@ -1012,15 +1013,15 @@ contains
                      else ! if frozen or partially frozen
                         ! Equation 18, Balland and Arp 2005
                         dke = satw**(1.0_r8+om_adj)
-                        fl = (h2osoi_liq(c,j)/(denh2o*dz(c,j))) / (h2osoi_liq(c,j)/(denh2o*dz(c,j)) + &
-                           h2osoi_ice(c,j)/(denice*dz(c,j)))
+                        fl = (h2osoi_liq(c,j)/(denh2o*dz_thermal(c,j))) / (h2osoi_liq(c,j)/(denh2o*dz_thermal(c,j)) + &
+                           h2osoi_ice(c,j)/(denice*dz_thermal(c,j)))
 
                         ! Update liquid fraction for polygonal tundra to include excess ice
                         if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
-                           fl = (h2osoi_liq(c,j)/(denh2o*dz(c,j))) / &
-                             (h2osoi_liq(c,j)/(denh2o*dz(c,j)) + &
-                              h2osoi_ice(c,j)/(denice*dz(c,j)) + &
-                              excess_ice(c,j)/(denice*dz(c,j)))
+                           fl = (h2osoi_liq(c,j)/(denh2o*dz_thermal(c,j))) / &
+                             (h2osoi_liq(c,j)/(denh2o*dz_thermal(c,j)) + &
+                              h2osoi_ice(c,j)/(denice*dz_thermal(c,j)) + &
+                              excess_ice(c,j)/(denice*dz_thermal(c,j)))
                         end if
 
                         ! Equation 13, Balland and Arp 2005
@@ -1056,7 +1057,7 @@ contains
             
             if (use_T_rho_dependent_snowthk) then ! choose which snow thermal conductivity to use 
                if (snl(c)+1 < 1 .AND. (j >= snl(c)+1) .AND. (j <= 0)) then
-                    bw(c,j) = (h2osoi_ice(c,j) + h2osoi_liq(c,j)) / (frac_sno(c) * dz(c,j))
+                    bw(c,j) = (h2osoi_ice(c,j) + h2osoi_liq(c,j)) / (frac_sno(c) * dz_thermal(c,j))
 
                        do i = 1, 5
                             k_snw_vals(i) = k_snw_coe1(i) * (bw(c,j) / rho_ice)**2 - k_snw_coe2(i) * (bw(c,j) / rho_ice) + k_snw_coe3(i)
@@ -1082,7 +1083,7 @@ contains
                     ! Thermal conductivity of snow, which from Jordan (1991) pp. 18
                     ! Only examine levels from snl(c)+1 -> 0 where snl(c) < 1
                     if (snl(c) + 1 < 1 .AND. (j >= snl(c) + 1) .AND. (j <= 0)) then
-                       bw(c,j) = (h2osoi_ice(c,j) + h2osoi_liq(c,j)) / (frac_sno(c) * dz(c,j))
+                       bw(c,j) = (h2osoi_ice(c,j) + h2osoi_liq(c,j)) / (frac_sno(c) * dz_thermal(c,j))
                        thk(c,j) = tkair + (7.75e-5_r8 * bw(c,j) + 1.105e-6_r8 * bw(c,j) * bw(c,j)) * (tkice - tkair)
                     end if
             endif
@@ -1097,8 +1098,8 @@ contains
             if ((col_pp%itype(c) == icol_sunwall .or. col_pp%itype(c) == icol_shadewall &
                  .or. col_pp%itype(c) == icol_roof) .and. j <= nlevurb) then
                if (j >= snl(c)+1 .AND. j <= nlevurb-1) then
-                  tk(c,j) = thk(c,j)*thk(c,j+1)*(z(c,j+1)-z(c,j)) &
-                       /(thk(c,j)*(z(c,j+1)-zi(c,j))+thk(c,j+1)*(zi(c,j)-z(c,j)))
+                  tk(c,j) = thk(c,j)*thk(c,j+1)*(z_thermal(c,j+1)-z_thermal(c,j)) &
+                       /(thk(c,j)*(z_thermal(c,j+1)-zi_thermal(c,j))+thk(c,j+1)*(zi_thermal(c,j)-z_thermal(c,j)))
                else if (j == nlevurb) then
 
                   ! For urban sunwall, shadewall, and roof columns, there is a non-zero heat flux across
@@ -1109,8 +1110,8 @@ contains
             else if (col_pp%itype(c) /= icol_sunwall .and. col_pp%itype(c) /= icol_shadewall &
                  .and. col_pp%itype(c) /= icol_roof) then
                if (j >= snl(c)+1 .AND. j <= nlevgrnd-1) then
-                  tk(c,j) = thk(c,j)*thk(c,j+1)*(z(c,j+1)-z(c,j)) &
-                       /(thk(c,j)*(z(c,j+1)-zi(c,j))+thk(c,j+1)*(zi(c,j)-z(c,j)))
+                  tk(c,j) = thk(c,j)*thk(c,j+1)*(z_thermal(c,j+1)-z_thermal(c,j)) &
+                       /(thk(c,j)*(z_thermal(c,j+1)-zi_thermal(c,j))+thk(c,j+1)*(zi_thermal(c,j)-z_thermal(c,j)))
                else if (j == nlevgrnd) then
                   tk(c,j) = 0._r8
                end if
@@ -1122,8 +1123,8 @@ contains
       do fc = 1, num_nolakec
          c = filter_nolakec(fc)
          zh2osfc=1.0e-3*(0.5*h2osfc(c)) !convert to [m] from [mm]
-         tk_h2osfc(c)= tkwat*thk(c,1)*(z(c,1)+zh2osfc) &
-              /(tkwat*z(c,1)+thk(c,1)*zh2osfc)
+         tk_h2osfc(c)= tkwat*thk(c,1)*(z_thermal(c,1)+zh2osfc) &
+              /(tkwat*z_thermal(c,1)+thk(c,1)*zh2osfc)
       enddo
 
       ! Save surface water thermal conductivity for history output
@@ -1143,23 +1144,23 @@ contains
             l = col_pp%landunit(c)
             nlevbed = nlev2bed(c)
             if ((col_pp%itype(c) == icol_sunwall .OR. col_pp%itype(c) == icol_shadewall) .and. j <= nlevurb) then
-               cv(c,j) = cv_wall(l,j) * dz(c,j)
+               cv(c,j) = cv_wall(l,j) * dz_thermal(c,j)
             else if (col_pp%itype(c) == icol_roof .and. j <= nlevurb) then
-               cv(c,j) = cv_roof(l,j) * dz(c,j)
+               cv(c,j) = cv_roof(l,j) * dz_thermal(c,j)
             else if (col_pp%itype(c) == icol_road_imperv .and. j >= 1 .and. j <= nlev_improad(l)) then
-               cv(c,j) = cv_improad(l,j) * dz(c,j)
+               cv(c,j) = cv_improad(l,j) * dz_thermal(c,j)
             else if (lun_pp%itype(l) /= istwet .AND. lun_pp%itype(l) /= istice .AND. lun_pp%itype(l) /= istice_mec &
                  .AND. col_pp%itype(c) /= icol_sunwall .AND. col_pp%itype(c) /= icol_shadewall .AND. &
                  col_pp%itype(c) /= icol_roof) then
-               cv(c,j) = csol(c,j)*(1._r8-watsat(c,j))*dz(c,j) + (h2osoi_ice(c,j)*cpice + h2osoi_liq(c,j)*cpliq)
-               
+               cv(c,j) = csol(c,j)*(1._r8-watsat(c,j))*dz_ref(c,j) + (h2osoi_ice(c,j)*cpice + h2osoi_liq(c,j)*cpliq)
+
                ! Add excess ice heat capacity for soil layers in polygonal tundra
                if (use_polygonal_tundra .and. lun_pp%ispolygon(l)) then
                   cv(c,j) = cv(c,j) + excess_ice(c,j)*cpice
                end if
             else if (lun_pp%itype(l) == istwet) then
                cv(c,j) = (h2osoi_ice(c,j)*cpice + h2osoi_liq(c,j)*cpliq)
-               if (j > nlevbed) cv(c,j) = csol(c,j)*dz(c,j)
+               if (j > nlevbed) cv(c,j) = csol(c,j)*dz_thermal(c,j)
             else if (lun_pp%itype(l) == istice .OR. lun_pp%itype(l) == istice_mec) then
                cv(c,j) = (h2osoi_ice(c,j)*cpice + h2osoi_liq(c,j)*cpliq)
             endif
@@ -1230,7 +1231,6 @@ contains
 
     associate(                                                                   &
          snl                       =>    col_pp%snl                               , & ! Input:  [integer  (:)   ] number of snow layers
-         dz                        =>    col_pp%dz                                , & ! Input:  [real(r8) (:,:) ] layer thickness (m)
 
          frac_sno                  =>    col_ws%frac_sno_eff      , & ! Input:  [real(r8) (:)   ] fraction of ground covered by snow (0 to 1)
          frac_h2osfc               =>    col_ws%frac_h2osfc       , & ! Input:  [real(r8) (:)   ] fraction of ground covered by surface water (0 to 1)
@@ -1457,7 +1457,6 @@ contains
 
     associate(                                                        &
          snl              =>    col_pp%snl                             , & ! Input:  [integer  (:)   ] number of snow layers
-         dz               =>    col_pp%dz                              , & ! Input:  [real(r8) (:,:) ] layer thickness (m)
 
          bsw              =>    soilstate_vars%bsw_col              , & ! Input:  [real(r8) (:,:) ] Clapp and Hornberger "b"
          sucsat           =>    soilstate_vars%sucsat_col           , & ! Input:  [real(r8) (:,:) ] minimum soil suction (mm)
@@ -1613,7 +1612,7 @@ contains
                   if(t_soisno(c,j) < tfrz) then
                      smp_i(c,j) = hfus*(tfrz-t_soisno(c,j))/(grav*t_soisno(c,j)) * 1000._r8  !(mm)
                      supercool(c,j) = watsat(c,j)*(smp_i(c,j)/sucsat(c,j))**(-1._r8/bsw(c,j))
-                     supercool(c,j) = supercool(c,j)*dz(c,j)*1000._r8       ! (mm)
+                     supercool(c,j) = supercool(c,j)*col_pp%dz_ref(c,j)*1000._r8  ! (mm)
                   endif
                endif
 
@@ -1925,7 +1924,7 @@ contains
                ! Sum across all layers for energy flux
                do j = 1, nlevgrnd
                   eflx_exice_melt(c) = eflx_exice_melt(c) + qflx_exice_melt_lyr(c,j) * hfus
-                  
+
                   ! Update cumulative subsidence since 1989
                   ! (volume change = mass / density)
                   if (year >= 1989 .and. wexice0(c,j) > excess_ice(c,j)) then
@@ -1933,6 +1932,11 @@ contains
                                          (wexice0(c,j) - excess_ice(c,j)) / denice
                   end if
                end do
+
+               ! Cap cumulative subsidence at the upper end of the range the
+               ! polygonal-tundra parameterizations were fit over. 0.4 m is a 
+               ! calibration endpoint, not a physical subsidence limit.
+               iwp_subsidence(c) = min(iwp_subsidence(c), 0.4_r8)
             end if
          end if
       end do
@@ -2018,7 +2022,6 @@ contains
 
     associate(                                                                &
          snl                     => col_pp%snl                              , & ! Input:  [integer (:)    ]  number of snow layers
-         z                       => col_pp%z                                , & ! Input:  [real(r8) (:,:) ]  layer thickness (m)
 
          forc_lwrad              => top_af%lwrad                            , & ! Input:  [real(r8) (:)   ]  downward infrared (longwave) radiation (W/m**2)
 
@@ -2258,9 +2261,9 @@ contains
     ! Enforce expected array sizes
 
     associate(&
-         zi         => col_pp%zi                          , & ! Input: [real(r8) (:,:) ] interface level below a "z" level (m)
-         dz         => col_pp%dz                          , & ! Input: [real(r8) (:,:) ] layer depth (m)
-         z          => col_pp%z                           , & ! Input: [real(r8) (:,:) ] layer thickness (m)
+         zi_thermal         => col_pp%zi                          , & ! Input: [real(r8) (:,:) ] interface level below a "z" level (m)
+         dz_thermal         => col_pp%dz                          , & ! Input: [real(r8) (:,:) ] layer depth (m)
+         z_thermal          => col_pp%z                           , & ! Input: [real(r8) (:,:) ] layer thickness (m)
          t_building => lun_es%t_building , & ! Input: [real(r8) (:)   ] internal building temperature (K)
          t_soisno   => col_es%t_soisno   , & ! Input: [real(r8) (:,:) ] soil temperature (Kelvin)
          eflx_bot   => col_ef%eflx_bot      & ! Input: [real(r8) (:)   ] heat flux from beneath column (W/m**2) [+ = upward]
@@ -2279,29 +2282,29 @@ contains
                if (j >= col_pp%snl(c)+1) then
                   if (j == col_pp%snl(c)+1) then
                      fact(c,j) = dtime/cv(c,j)
-                     fn(c,j) = tk(c,j)*(t_soisno(c,j+1)-t_soisno(c,j))/(z(c,j+1)-z(c,j))
+                     fn(c,j) = tk(c,j)*(t_soisno(c,j+1)-t_soisno(c,j))/(z_thermal(c,j+1)-z_thermal(c,j))
                   else if (j <= nlevurb-1) then
                      fact(c,j) = dtime/cv(c,j)
-                     fn(c,j) = tk(c,j)*(t_soisno(c,j+1)-t_soisno(c,j))/(z(c,j+1)-z(c,j))
-                     dzm     = (z(c,j)-z(c,j-1))
+                     fn(c,j) = tk(c,j)*(t_soisno(c,j+1)-t_soisno(c,j))/(z_thermal(c,j+1)-z_thermal(c,j))
+                     dzm     = (z_thermal(c,j)-z_thermal(c,j-1))
                   else if (j == nlevurb) then
                      fact(c,j) = dtime/cv(c,j)
                      ! For urban sunwall, shadewall, and roof columns, there is a non-zero heat flux across
                      ! the bottom "soil" layer and the equations are derived assuming a prescribed internal
                      ! building temperature. (See Oleson urban notes of 6/18/03).
-                     fn(c,j) = tk(c,j) * (t_building(l) - cnfac*t_soisno(c,j))/(zi(c,j) - z(c,j))
+                     fn(c,j) = tk(c,j) * (t_building(l) - cnfac*t_soisno(c,j))/(zi_thermal(c,j) - z_thermal(c,j))
                   end if
                end if
             else if (col_pp%itype(c) /= icol_sunwall .and. col_pp%itype(c) /= icol_shadewall &
                  .and. col_pp%itype(c) /= icol_roof) then
                if (j >= col_pp%snl(c)+1) then
                   if (j == col_pp%snl(c)+1) then
-                     fact(c,j) = dtime/cv(c,j) * dz(c,j) / (0.5_r8*(z(c,j)-zi(c,j-1)+capr*(z(c,j+1)-zi(c,j-1))))
-                     fn(c,j) = tk(c,j)*(t_soisno(c,j+1)-t_soisno(c,j))/(z(c,j+1)-z(c,j))
+                     fact(c,j) = dtime/cv(c,j) * dz_thermal(c,j) / (0.5_r8*(z_thermal(c,j)-zi_thermal(c,j-1)+capr*(z_thermal(c,j+1)-zi_thermal(c,j-1))))
+                     fn(c,j) = tk(c,j)*(t_soisno(c,j+1)-t_soisno(c,j))/(z_thermal(c,j+1)-z_thermal(c,j))
                   else if (j <= nlevgrnd-1) then
                      fact(c,j) = dtime/cv(c,j)
-                     fn(c,j) = tk(c,j)*(t_soisno(c,j+1)-t_soisno(c,j))/(z(c,j+1)-z(c,j))
-                     dzm     = (z(c,j)-z(c,j-1))
+                     fn(c,j) = tk(c,j)*(t_soisno(c,j+1)-t_soisno(c,j))/(z_thermal(c,j+1)-z_thermal(c,j))
+                     dzm     = (z_thermal(c,j)-z_thermal(c,j-1))
                   else if (j == nlevgrnd) then
                      fact(c,j) = dtime/cv(c,j)
                      fn(c,j) = eflx_bot(c)
@@ -2613,7 +2616,7 @@ contains
     ! Enforce expected array sizes
 
     associate(        &
-         z => col_pp%z   & ! Input: [real(r8) (:,:) ]  layer thickness (m)
+         z_thermal => col_pp%z   & ! Input: [real(r8) (:,:) ]  layer thickness (m)
          )
 
       !
@@ -2628,12 +2631,12 @@ contains
                     .or. col_pp%itype(c) == icol_roof)) then
                   if (j >= col_pp%snl(c)+1) then
                      if (j == col_pp%snl(c)+1) then
-                        dzp     = z(c,j+1)-z(c,j)
+                        dzp     = z_thermal(c,j+1)-z_thermal(c,j)
                         ! changed hs to hs_top
                         rt(c,j-1) = t_soisno(c,j) +  fact(c,j)*( hs_top(c) - dhsdT(c)*t_soisno(c,j) + cnfac*fn(c,j) )
                      else
-                        dzm     = (z(c,j)-z(c,j-1))
-                        dzp     = (z(c,j+1)-z(c,j))
+                        dzm     = (z_thermal(c,j)-z_thermal(c,j-1))
+                        dzp     = (z_thermal(c,j+1)-z_thermal(c,j))
                         rt(c,j-1) = t_soisno(c,j) + cnfac*fact(c,j)*( fn(c,j) - fn(c,j-1) )
                         rt(c,j-1) = rt(c,j-1) + (fact(c,j)*sabg_lyr_col(c,j))
                      end if
@@ -2689,7 +2692,7 @@ contains
     ! Enforce expected array sizes
 
     associate(         &
-         z  => col_pp%z   & ! Input: [real(r8) (:,:) ]  layer thickness (m)
+         z_thermal  => col_pp%z   & ! Input: [real(r8) (:,:) ]  layer thickness (m)
          )
 
       !
@@ -2703,12 +2706,12 @@ contains
                if (col_pp%itype(c) == icol_road_imperv .or. col_pp%itype(c) == icol_road_perv) then
                   if (j >= col_pp%snl(c)+1) then
                      if (j == col_pp%snl(c)+1) then
-                        dzp     = z(c,j+1)-z(c,j)
+                        dzp     = z_thermal(c,j+1)-z_thermal(c,j)
                         rt(c,j-1) = t_soisno(c,j) +  fact(c,j)*( hs_top_snow(c) &
                              - dhsdT(c)*t_soisno(c,j) + cnfac*fn(c,j) )
                      else
-                        dzm     = (z(c,j)-z(c,j-1))
-                        dzp     = (z(c,j+1)-z(c,j))
+                        dzm     = (z_thermal(c,j)-z_thermal(c,j-1))
+                        dzp     = (z_thermal(c,j+1)-z_thermal(c,j))
 
                         rt(c,j-1) = t_soisno(c,j) + cnfac*fact(c,j)*( fn(c,j) - fn(c,j-1) )
                         rt(c,j-1) = rt(c,j-1) + fact(c,j)*sabg_lyr_col(c,j)
@@ -2763,7 +2766,7 @@ contains
     ! Enforce expected array sizes
 
     associate(       &
-         z => col_pp%z  & ! Input: [real(r8) (:,:) ]  layer thickness (m)
+         z_thermal => col_pp%z  & ! Input: [real(r8) (:,:) ]  layer thickness (m)
          )
 
       !
@@ -2776,13 +2779,13 @@ contains
             if (.not. lun_pp%urbpoi(l)) then
                if (j >= col_pp%snl(c)+1) then
                   if (j == col_pp%snl(c)+1) then
-                     dzp     = z(c,j+1)-z(c,j)
+                     dzp     = z_thermal(c,j+1)-z_thermal(c,j)
                      rt(c,j-1) = t_soisno(c,j) +  fact(c,j)*( hs_top_snow(c) &
                           - dhsdT(c)*t_soisno(c,j) + cnfac*fn(c,j) )
 
                   else
-                     dzm     = (z(c,j)-z(c,j-1))
-                     dzp     = (z(c,j+1)-z(c,j))
+                     dzm     = (z_thermal(c,j)-z_thermal(c,j-1))
+                     dzp     = (z_thermal(c,j+1)-z_thermal(c,j))
 
                      rt(c,j-1) = t_soisno(c,j) + cnfac*fact(c,j)*( fn(c,j) - fn(c,j-1) )
                      rt(c,j-1) = rt(c,j-1) + fact(c,j)*sabg_lyr_col(c,j)
@@ -3062,7 +3065,7 @@ contains
     ! Enforce expected array sizes
 
     associate(                                      &
-         z        => col_pp%z                          & ! Input: [real(r8) (:,:) ]  layer thickness (m)
+         z_thermal        => col_pp%z                          & ! Input: [real(r8) (:,:) ]  layer thickness (m)
          )
 
       !
@@ -3146,7 +3149,7 @@ contains
     ! Enforce expected array sizes
 
     associate(                                              &
-         z            => col_pp%z                              & ! Input: [real(r8) (:,:) ]  layer thickness (m)
+         z_thermal            => col_pp%z                              & ! Input: [real(r8) (:,:) ]  layer thickness (m)
          )
 
       !
@@ -3224,7 +3227,7 @@ contains
     ! Enforce expected array sizes
 
     associate(       &
-         z  => col_pp%z & ! Input:  [real(r8) (:,:)]  layer thickness (m)
+         z_thermal  => col_pp%z & ! Input:  [real(r8) (:,:)]  layer thickness (m)
          )
 
       !
@@ -3375,7 +3378,6 @@ contains
     ! Enforce expected array sizes
 
     associate(                                              &
-         z            => col_pp%z                            , & ! Input: [real(r8) (:,:) ]  layer thickness (m)
          frac_h2osfc  => col_ws%frac_h2osfc  , & ! Input: [real(r8) (:)   ]  fraction of ground covered by surface water (0 to 1)
          frac_sno_eff => col_ws%frac_sno_eff , & ! Input: [real(r8) (:)   ]  fraction of ground covered by snow (0 to 1)
          begc         => bounds%begc                      , & ! Input: [integer        ] beginning column index
@@ -3706,7 +3708,7 @@ contains
     ! Enforce expected array sizes
 
     associate(&
-         z  => col_pp%z  & ! Input:  [real(r8) (:,:)]  layer thickness (m)
+         z_thermal  => col_pp%z  & ! Input:  [real(r8) (:,:)]  layer thickness (m)
          )
 
       !
@@ -3721,15 +3723,15 @@ contains
                     .or. col_pp%itype(c) == icol_roof)) then
                   if (j >= col_pp%snl(c)+1) then
                      if (j == col_pp%snl(c)+1) then
-                        dzp     = z(c,j+1)-z(c,j)
+                        dzp     = z_thermal(c,j+1)-z_thermal(c,j)
                         bmatrix_snow(c,4,j-1) = 0._r8
                         bmatrix_snow(c,3,j-1) = 1._r8+(1._r8-cnfac)*fact(c,j)*tk(c,j)/dzp-fact(c,j)*dhsdT(c)
                         if ( j /= 0) then
                            bmatrix_snow(c,2,j-1) =  -(1._r8-cnfac)*fact(c,j)*tk(c,j)/dzp
                         end if
                      else if (j <= nlevurb-1) then
-                        dzm     = (z(c,j)-z(c,j-1))
-                        dzp     = (z(c,j+1)-z(c,j))
+                        dzm     = (z_thermal(c,j)-z_thermal(c,j-1))
+                        dzp     = (z_thermal(c,j+1)-z_thermal(c,j))
                         bmatrix_snow(c,4,j-1) =   - (1._r8-cnfac)*fact(c,j)* tk(c,j-1)/dzm
                         bmatrix_snow(c,3,j-1) = 1._r8+ (1._r8-cnfac)*fact(c,j)*(tk(c,j)/dzp + tk(c,j-1)/dzm)
                         if (j /= 0) then
@@ -3782,7 +3784,7 @@ contains
     ! Enforce expected array sizes
 
     associate(&
-         z => col_pp%z & ! Input:  [real(r8) (:,:)]  layer thickness (m)
+         z_thermal => col_pp%z & ! Input:  [real(r8) (:,:)]  layer thickness (m)
          )
 
       !
@@ -3796,15 +3798,15 @@ contains
                if (col_pp%itype(c) == icol_road_imperv .or. col_pp%itype(c) == icol_road_perv) then
                   if (j >= col_pp%snl(c)+1) then
                      if (j == col_pp%snl(c)+1) then
-                        dzp     = z(c,j+1)-z(c,j)
+                        dzp     = z_thermal(c,j+1)-z_thermal(c,j)
                         bmatrix_snow(c,4,j-1) = 0._r8
                         bmatrix_snow(c,3,j-1) = 1._r8+(1._r8-cnfac)*fact(c,j)*tk(c,j)/dzp-fact(c,j)*dhsdT(c)
                         if ( j /= 0) then
                            bmatrix_snow(c,2,j-1) =  -(1._r8-cnfac)*fact(c,j)*tk(c,j)/dzp
                         end if
                      else if (j <= nlevgrnd-1) then
-                        dzm     = (z(c,j)-z(c,j-1))
-                        dzp     = (z(c,j+1)-z(c,j))
+                        dzm     = (z_thermal(c,j)-z_thermal(c,j-1))
+                        dzp     = (z_thermal(c,j+1)-z_thermal(c,j))
                         bmatrix_snow(c,4,j-1) =   - (1._r8-cnfac)*fact(c,j)* tk(c,j-1)/dzm
                         bmatrix_snow(c,3,j-1) = 1._r8+ (1._r8-cnfac)*fact(c,j)*(tk(c,j)/dzp + tk(c,j-1)/dzm)
                         if ( j /= 0) then
@@ -3856,7 +3858,7 @@ contains
     ! Enforce expected array sizes
 
     associate(&
-         z => col_pp%z  & ! Input:  [real(r8) (:,:)]  layer thickness (m)
+         z_thermal => col_pp%z  & ! Input:  [real(r8) (:,:)]  layer thickness (m)
          )
 
       !
@@ -3869,15 +3871,15 @@ contains
             if (.not. lun_pp%urbpoi(l)) then
                if (j >= col_pp%snl(c)+1) then
                   if (j == col_pp%snl(c)+1) then
-                     dzp     = z(c,j+1)-z(c,j)
+                     dzp     = z_thermal(c,j+1)-z_thermal(c,j)
                      bmatrix_snow(c,4,j-1) = 0._r8
                      bmatrix_snow(c,3,j-1) = 1._r8+(1._r8-cnfac)*fact(c,j)*tk(c,j)/dzp-fact(c,j)*dhsdT(c)
                      if ( j /= 0) then
                         bmatrix_snow(c,2,j-1) =  -(1._r8-cnfac)*fact(c,j)*tk(c,j)/dzp
                      end if
                   else if (j <= nlevgrnd-1) then
-                     dzm     = (z(c,j)-z(c,j-1))
-                     dzp     = (z(c,j+1)-z(c,j))
+                     dzm     = (z_thermal(c,j)-z_thermal(c,j-1))
+                     dzp     = (z_thermal(c,j+1)-z_thermal(c,j))
                      bmatrix_snow(c,4,j-1) =   - (1._r8-cnfac)*fact(c,j)* tk(c,j-1)/dzm
                      bmatrix_snow(c,3,j-1) = 1._r8+ (1._r8-cnfac)*fact(c,j)*(tk(c,j)/dzp + tk(c,j-1)/dzm)
                      if ( j /= 0) then
@@ -4023,7 +4025,7 @@ contains
     ! Enforce expected array sizes
 
     associate(&
-         z  => col_pp%z  & ! Input:  [real(r8) (:,:)]  layer thickness (m)
+         z_thermal  => col_pp%z  & ! Input:  [real(r8) (:,:)]  layer thickness (m)
          )
       !
       ! urban non-road columns ---------------------------------------------------------
@@ -4037,11 +4039,11 @@ contains
                     .or. col_pp%itype(c) == icol_roof)) then
                   if (j >= col_pp%snl(c)+1) then
                      if (j == col_pp%snl(c)+1) then
-                        dzp     = z(c,j+1)-z(c,j)
+                        dzp     = z_thermal(c,j+1)-z_thermal(c,j)
                         bmatrix_snow_soil(c,1,j-1) =  -(1._r8-cnfac)*fact(c,j)*tk(c,j)/dzp
                      else if (j <= nlevurb-1) then
-                        dzm     = (z(c,j)-z(c,j-1))
-                        dzp     = (z(c,j+1)-z(c,j))
+                        dzm     = (z_thermal(c,j)-z_thermal(c,j-1))
+                        dzp     = (z_thermal(c,j+1)-z_thermal(c,j))
                         bmatrix_snow_soil(c,1,j-1) =   - (1._r8-cnfac)*fact(c,j)* tk(c,j)/dzp
                      end if
                   end if
@@ -4088,7 +4090,7 @@ contains
     ! Enforce expected array sizes
 
     associate(&
-         z  => col_pp%z  & ! Input:  [real(r8) (:,:)]  layer thickness (m)
+         z_thermal  => col_pp%z  & ! Input:  [real(r8) (:,:)]  layer thickness (m)
          )
 
       !
@@ -4102,11 +4104,11 @@ contains
                if (col_pp%itype(c) == icol_road_imperv .or. col_pp%itype(c) == icol_road_perv) then
                   if (j >= col_pp%snl(c)+1) then
                      if (j == col_pp%snl(c)+1) then
-                        dzp     = z(c,j+1)-z(c,j)
+                        dzp     = z_thermal(c,j+1)-z_thermal(c,j)
                         bmatrix_snow_soil(c,1,j-1) =  -(1._r8-cnfac)*fact(c,j)*tk(c,j)/dzp
                      else if (j <= nlevgrnd-1) then
-                        dzm     = (z(c,j)-z(c,j-1))
-                        dzp     = (z(c,j+1)-z(c,j))
+                        dzm     = (z_thermal(c,j)-z_thermal(c,j-1))
+                        dzp     = (z_thermal(c,j+1)-z_thermal(c,j))
                         bmatrix_snow_soil(c,1,j-1) =   - (1._r8-cnfac)*fact(c,j)* tk(c,j)/dzp
                      end if
                   end if
@@ -4153,7 +4155,7 @@ contains
     ! Enforce expected array sizes
 
     associate(&
-         z => col_pp%z & ! Input:  [real(r8) (:,:)]  layer thickness (m)
+         z_thermal => col_pp%z & ! Input:  [real(r8) (:,:)]  layer thickness (m)
          )
 
       !
@@ -4166,11 +4168,11 @@ contains
             if (.not. lun_pp%urbpoi(l)) then
                if (j >= col_pp%snl(c)+1) then
                   if (j == col_pp%snl(c)+1) then
-                     dzp     = z(c,j+1)-z(c,j)
+                     dzp     = z_thermal(c,j+1)-z_thermal(c,j)
                      bmatrix_snow_soil(c,1,j-1) =  -(1._r8-cnfac)*fact(c,j)*tk(c,j)/dzp
                   else if (j <= nlevgrnd-1) then
-                     dzm     = (z(c,j)-z(c,j-1))
-                     dzp     = (z(c,j+1)-z(c,j))
+                     dzm     = (z_thermal(c,j)-z_thermal(c,j-1))
+                     dzp     = (z_thermal(c,j+1)-z_thermal(c,j))
                      bmatrix_snow_soil(c,1,j-1) =   - (1._r8-cnfac)*fact(c,j)* tk(c,j)/dzp
                   end if
                end if
@@ -4365,8 +4367,8 @@ contains
     ! Enforce expected array sizes
 
     associate(               &
-         zi   =>    col_pp%zi , & ! Input:  [real(r8) (:,:)]  interface level below a "z" level (m)
-         z    =>    col_pp%z    & ! Input:  [real(r8) (:,:)]  layer thickness (m)
+         zi_thermal   =>    col_pp%zi , & ! Input:  [real(r8) (:,:)]  interface level below a "z" level (m)
+         z_thermal    =>    col_pp%z    & ! Input:  [real(r8) (:,:)]  layer thickness (m)
          )
 
       !
@@ -4381,15 +4383,15 @@ contains
                     .or. col_pp%itype(c) == icol_roof)) then
                   if (j >= col_pp%snl(c)+1) then
                      if (j == col_pp%snl(c)+1) then
-                        dzp     = z(c,j+1)-z(c,j)
+                        dzp     = z_thermal(c,j+1)-z_thermal(c,j)
                         if (j /= 1) then
                            bmatrix_soil(c,4,j) = 0._r8
                         end if
                         bmatrix_soil(c,3,j) = 1._r8+(1._r8-cnfac)*fact(c,j)*tk(c,j)/dzp-fact(c,j)*dhsdT(c)
                         bmatrix_soil(c,2,j) =  -(1._r8-cnfac)*fact(c,j)*tk(c,j)/dzp
                      else if (j <= nlevurb-1) then
-                        dzm     = (z(c,j)-z(c,j-1))
-                        dzp     = (z(c,j+1)-z(c,j))
+                        dzm     = (z_thermal(c,j)-z_thermal(c,j-1))
+                        dzp     = (z_thermal(c,j+1)-z_thermal(c,j))
                         if (j /= 1) then
                            bmatrix_soil(c,4,j) =   - (1._r8-cnfac)*fact(c,j)* tk(c,j-1)/dzm
                         end if
@@ -4399,8 +4401,8 @@ contains
                         ! For urban sunwall, shadewall, and roof columns, there is a non-zero heat flux across
                         ! the bottom "soil" layer and the equations are derived assuming a prescribed internal
                         ! building temperature. (See Oleson urban notes of 6/18/03).
-                        dzm     = ( z(c,j)-z(c,j-1))
-                        dzp     = (zi(c,j)-z(c,j))
+                        dzm     = ( z_thermal(c,j)-z_thermal(c,j-1))
+                        dzp     = (zi_thermal(c,j)-z_thermal(c,j))
                         bmatrix_soil(c,4,j) =   - (1._r8-cnfac)*fact(c,j)*(tk(c,j-1)/dzm)
                         bmatrix_soil(c,3,j) = 1._r8+ (1._r8-cnfac)*fact(c,j)*(tk(c,j-1)/dzm + tk(c,j)/dzp)
                         bmatrix_soil(c,2,j) = 0._r8
@@ -4453,7 +4455,7 @@ contains
     ! Enforce expected array sizes
 
     associate(       &
-         z => col_pp%z  & ! Input:  [real(r8) (:,:)]  layer thickness (m)
+         z_thermal => col_pp%z  & ! Input:  [real(r8) (:,:)]  layer thickness (m)
          )
 
       !
@@ -4467,7 +4469,7 @@ contains
                if (col_pp%itype(c) == icol_road_imperv .or. col_pp%itype(c) == icol_road_perv) then
                   if (j >= col_pp%snl(c)+1) then
                      if (j == col_pp%snl(c)+1) then
-                        dzp     = z(c,j+1)-z(c,j)
+                        dzp     = z_thermal(c,j+1)-z_thermal(c,j)
                         if (j /= 1) then
                            bmatrix_soil(c,4,j) = 0._r8
                         end if
@@ -4475,8 +4477,8 @@ contains
                         bmatrix_soil(c,2,j) =  -(1._r8-cnfac)*fact(c,j)*tk(c,j)/dzp
                      else if (j == 1) then
                         ! this is the snow/soil interface layer
-                        dzm     = (z(c,j)-z(c,j-1))
-                        dzp     = (z(c,j+1)-z(c,j))
+                        dzm     = (z_thermal(c,j)-z_thermal(c,j-1))
+                        dzp     = (z_thermal(c,j+1)-z_thermal(c,j))
                         if (j /= 1) then
                            bmatrix_soil(c,4,j) =   - frac_sno_eff(c) * (1._r8-cnfac) * fact(c,j) &
                                 * tk(c,j-1)/dzm
@@ -4486,13 +4488,13 @@ contains
                              - (1._r8 - frac_sno_eff(c))*fact(c,j)*dhsdT(c)
                         bmatrix_soil(c,2,j) = - (1._r8-cnfac)*fact(c,j)*tk(c,j)/dzp
                      else if (j <= nlevgrnd-1) then
-                        dzm     = (z(c,j)-z(c,j-1))
-                        dzp     = (z(c,j+1)-z(c,j))
+                        dzm     = (z_thermal(c,j)-z_thermal(c,j-1))
+                        dzp     = (z_thermal(c,j+1)-z_thermal(c,j))
                         bmatrix_soil(c,4,j) =   - (1._r8-cnfac)*fact(c,j)* tk(c,j-1)/dzm
                         bmatrix_soil(c,3,j) = 1._r8+ (1._r8-cnfac)*fact(c,j)*(tk(c,j)/dzp + tk(c,j-1)/dzm)
                         bmatrix_soil(c,2,j) =   - (1._r8-cnfac)*fact(c,j)* tk(c,j)/dzp
                      else if (j == nlevgrnd) then
-                        dzm     = (z(c,j)-z(c,j-1))
+                        dzm     = (z_thermal(c,j)-z_thermal(c,j-1))
                         bmatrix_soil(c,4,j) =   - (1._r8-cnfac)*fact(c,j)*tk(c,j-1)/dzm
                         bmatrix_soil(c,3,j) = 1._r8+ (1._r8-cnfac)*fact(c,j)*tk(c,j-1)/dzm
                         bmatrix_soil(c,2,j) = 0._r8
@@ -4544,7 +4546,7 @@ contains
     ! Enforce expected array sizes
 
     associate(       &
-         z  => col_pp%z & ! Input:  [real(r8) (:,:)]  layer thickness (m)
+         z_thermal  => col_pp%z & ! Input:  [real(r8) (:,:)]  layer thickness (m)
          )
 
       !
@@ -4557,7 +4559,7 @@ contains
             if (.not. lun_pp%urbpoi(l)) then
                if (j >= col_pp%snl(c)+1) then
                   if (j == col_pp%snl(c)+1) then
-                     dzp     = z(c,j+1)-z(c,j)
+                     dzp     = z_thermal(c,j+1)-z_thermal(c,j)
                      if (j /= 1) then
                         bmatrix_soil(c,4,j) = 0._r8
                      end if
@@ -4565,8 +4567,8 @@ contains
                      bmatrix_soil(c,2,j) =  -(1._r8-cnfac)*fact(c,j)*tk(c,j)/dzp
                   else if (j == 1) then
                      ! this is the snow/soil interface layer
-                     dzm     = (z(c,j)-z(c,j-1))
-                     dzp     = (z(c,j+1)-z(c,j))
+                     dzm     = (z_thermal(c,j)-z_thermal(c,j-1))
+                     dzp     = (z_thermal(c,j+1)-z_thermal(c,j))
                      if (j /= 1) then
                         bmatrix_soil(c,4,j) =   - frac_sno_eff(c) * (1._r8-cnfac) * fact(c,j) &
                              * tk(c,j-1)/dzm
@@ -4576,13 +4578,13 @@ contains
                           - (1._r8 - frac_sno_eff(c))*fact(c,j)*dhsdT(c)
                      bmatrix_soil(c,2,j) = - (1._r8-cnfac)*fact(c,j)*tk(c,j)/dzp
                   else if (j <= nlevgrnd-1) then
-                     dzm     = (z(c,j)-z(c,j-1))
-                     dzp     = (z(c,j+1)-z(c,j))
+                     dzm     = (z_thermal(c,j)-z_thermal(c,j-1))
+                     dzp     = (z_thermal(c,j+1)-z_thermal(c,j))
                      bmatrix_soil(c,4,j) =   - (1._r8-cnfac)*fact(c,j)* tk(c,j-1)/dzm
                      bmatrix_soil(c,3,j) = 1._r8+ (1._r8-cnfac)*fact(c,j)*(tk(c,j)/dzp + tk(c,j-1)/dzm)
                      bmatrix_soil(c,2,j) =   - (1._r8-cnfac)*fact(c,j)* tk(c,j)/dzp
                   else if (j == nlevgrnd) then
-                     dzm     = (z(c,j)-z(c,j-1))
+                     dzm     = (z_thermal(c,j)-z_thermal(c,j-1))
                      bmatrix_soil(c,4,j) =   - (1._r8-cnfac)*fact(c,j)*tk(c,j-1)/dzm
                      bmatrix_soil(c,3,j) = 1._r8+ (1._r8-cnfac)*fact(c,j)*tk(c,j-1)/dzm
                      bmatrix_soil(c,2,j) = 0._r8
@@ -4733,7 +4735,7 @@ contains
     ! Enforce expected array sizes
 
     associate(           &
-         z  => col_pp%z     & ! Input:  [real(r8) (:,:)]  layer thickness (m)
+         z_thermal  => col_pp%z     & ! Input:  [real(r8) (:,:)]  layer thickness (m)
          )
       !
       !
@@ -4746,11 +4748,11 @@ contains
                     .or. col_pp%itype(c) == icol_roof)) then
                   if (j >= col_pp%snl(c)+1) then
                      if (j == col_pp%snl(c)+1) then
-                        dzp     = z(c,j+1)-z(c,j)
+                        dzp     = z_thermal(c,j+1)-z_thermal(c,j)
                         bmatrix_soil_snow(c,5,j) = 0._r8
                      else if (j <= nlevurb-1) then
-                        dzm     = (z(c,j)-z(c,j-1))
-                        dzp     = (z(c,j+1)-z(c,j))
+                        dzm     = (z_thermal(c,j)-z_thermal(c,j-1))
+                        dzp     = (z_thermal(c,j+1)-z_thermal(c,j))
                         bmatrix_soil_snow(c,5,j) =   - (1._r8-cnfac)*fact(c,j)* tk(c,j-1)/dzm
                      end if
                   end if
@@ -4798,7 +4800,7 @@ contains
     ! Enforce expected array sizes
 
     associate(&
-         z => col_pp%z & ! Input:  [real(r8) (:,:)]  layer thickness (m)
+         z_thermal => col_pp%z & ! Input:  [real(r8) (:,:)]  layer thickness (m)
          )
 
       !
@@ -4812,12 +4814,12 @@ contains
                if (col_pp%itype(c) == icol_road_imperv .or. col_pp%itype(c) == icol_road_perv) then
                   if (j >= col_pp%snl(c)+1) then
                      if (j == col_pp%snl(c)+1) then
-                        dzp     = z(c,j+1)-z(c,j)
+                        dzp     = z_thermal(c,j+1)-z_thermal(c,j)
                         bmatrix_soil_snow(c,5,j) = 0._r8
                      else if (j == 1) then
                         ! this is the snow/soil interface layer
-                        dzm     = (z(c,j)-z(c,j-1))
-                        dzp     = (z(c,j+1)-z(c,j))
+                        dzm     = (z_thermal(c,j)-z_thermal(c,j-1))
+                        dzp     = (z_thermal(c,j+1)-z_thermal(c,j))
 
                         bmatrix_soil_snow(c,5,j) =   - frac_sno_eff(c) * (1._r8-cnfac) * fact(c,j) &
                              * tk(c,j-1)/dzm
@@ -4867,7 +4869,7 @@ contains
     ! Enforce expected array sizes
 
     associate(&
-         z => col_pp%z  & ! Input:  [real(r8) (:,:)]  layer thickness (m)
+         z_thermal => col_pp%z  & ! Input:  [real(r8) (:,:)]  layer thickness (m)
          )
 
       !
@@ -4880,12 +4882,12 @@ contains
             if (.not. lun_pp%urbpoi(l)) then
                if (j >= col_pp%snl(c)+1) then
                   if (j == col_pp%snl(c)+1) then
-                     dzp     = z(c,j+1)-z(c,j)
+                     dzp     = z_thermal(c,j+1)-z_thermal(c,j)
                      bmatrix_soil_snow(c,5,j) = 0._r8
                   else if (j == 1) then
                      ! this is the snow/soil interface layer
-                     dzm     = (z(c,j)-z(c,j-1))
-                     dzp     = (z(c,j+1)-z(c,j))
+                     dzm     = (z_thermal(c,j)-z_thermal(c,j-1))
+                     dzp     = (z_thermal(c,j+1)-z_thermal(c,j))
 
                      bmatrix_soil_snow(c,5,j) =  -frac_sno_eff(c) * (1._r8-cnfac) * fact(c,j) &
                           * tk(c,j-1)/dzm

@@ -69,24 +69,27 @@ contains
     !
     ! !LOCAL VARIABLES:
     integer  :: j
-    real(r8) :: zi_bot
-    real(r8) :: dz_orig ! input dz prior to any compression, used to calculate volrat.
+    real(r8) :: exice_thk ! thickness (m) of excess ice in layer j
+    real(r8) :: exice_abv ! cumulative excess-ice thickness (m) in layers above j; this is
+                          ! the downward displacement of layer j's whole reference position
+    real(r8) :: frac      ! fractional position (unitless) of the reference node z_ref(c,j)
+                          
     !-----------------------------------------------------------------------
 
-    zi_bot = 0._r8
-    col_pp%volrat(c,:) = 1._r8 ! This should always be 1 unless the layer currently is shrinking in this timestep.
+    exice_abv = 0._r8
     do j = 1, nlevgrnd
-       dz_orig = col_pp%dz(c,j)
-       col_pp%dz(c,j) = col_pp%dz_ref(c,j) + col_ws%excess_ice(c,j) / denice
-       col_pp%z(c,j)  = zi_bot + 0.5_r8 * col_pp%dz(c,j)
-       col_pp%zi(c,j) = zi_bot + col_pp%dz(c,j)
-       zi_bot = col_pp%zi(c,j)
-       ! calculate volume ratio to scale molar concentrations of BGC species
-       ! (i.e., layer compression decreases volume but doesn't remove chemical speices,
-       ! so it should increase molar concentrations)
-       col_pp%volrat(c,j) = dz_orig/col_pp%dz(c,j)
+       exice_thk = col_ws%excess_ice(c,j) / denice
+       frac      = (col_pp%z_ref(c,j) - col_pp%zi_ref(c,j-1)) / col_pp%dz_ref(c,j)
+
+       col_pp%dz(c,j) = col_pp%dz_ref(c,j) + exice_thk
+       ! Layer j is pushed down by all the excess ice above it, and its node sits
+       ! frac of the way through its own (now inflated) thickness.
+       col_pp%z(c,j)  = col_pp%z_ref(c,j)  + exice_abv + frac * exice_thk
+       col_pp%zi(c,j) = col_pp%zi_ref(c,j) + exice_abv + exice_thk
+
+       exice_abv = exice_abv + exice_thk
     end do
-    col_pp%zi(c,0) = 0._r8   ! surface interface (always 0)
+    col_pp%zi(c,0) = col_pp%zi_ref(c,0)
 
   end subroutine recompute_layer_geometry
 

@@ -344,7 +344,7 @@ contains
            if ( zisoi(j) <= depth_runoff_Nloss)  then
               sum_var = sum_var + h2osoi_liq(c,j)
            elseif ( zisoi(j-1) < depth_runoff_Nloss)  then
-              sum_var = sum_var + h2osoi_liq(c,j) * ((depth_runoff_Nloss - zisoi(j-1)) / col_pp%dz(c,j))
+              sum_var = sum_var + h2osoi_liq(c,j) * ((depth_runoff_Nloss - zisoi(j-1)) / col_pp%dz_ref(c,j))
            end if
         end do
         surface_water(fc) = sum_var 
@@ -385,12 +385,12 @@ contains
               ! assumes that 10% of mineral nitrogen is soluble
               disn_conc = 0._r8
               if (h2osoi_liq(c,j) > 0._r8) then
-                 disn_conc = (sf_no3 * smin_no3_vr(c,j) * col_pp%dz(c,j) )/(h2osoi_liq(c,j) )
+                 disn_conc = (sf_no3 * smin_no3_vr(c,j) * col_pp%dz_ref(c,j) )/(h2osoi_liq(c,j) )
               end if
               !
               ! calculate the N leaching flux as a function of the dissolved
               ! concentration and the sub-surface drainage flux
-              smin_no3_leached_vr(c,j) = disn_conc * qflx_drain(c) * h2osoi_liq(c,j) / ( tot_water(fc) * col_pp%dz(c,j) )
+              smin_no3_leached_vr(c,j) = disn_conc * qflx_drain(c) * h2osoi_liq(c,j) / ( tot_water(fc) * col_pp%dz_ref(c,j) )
               !
               ! ensure that leaching rate isn't larger than soil N pool
               smin_no3_leached_vr(c,j) = min(smin_no3_leached_vr(c,j), smin_no3_vr(c,j) / dt )
@@ -402,11 +402,11 @@ contains
               ! calculate the N loss from surface runoff, assuming a shallow mixing of surface waters into soil and removal based on runoff
               if ( zisoi(j) <= depth_runoff_Nloss )  then
                  smin_no3_runoff_vr(c,j) = disn_conc * qflx_surf(c) * &
-                      h2osoi_liq(c,j) / ( surface_water(fc) * col_pp%dz(c,j) )
+                      h2osoi_liq(c,j) / ( surface_water(fc) * col_pp%dz_ref(c,j) )
               elseif ( zisoi(j-1) < depth_runoff_Nloss )  then
                  smin_no3_runoff_vr(c,j) = disn_conc * qflx_surf(c) * &
                       h2osoi_liq(c,j) * ((depth_runoff_Nloss - zisoi(j-1)) / &
-                      col_pp%dz(c,j)) / ( surface_water(fc) * (depth_runoff_Nloss-zisoi(j-1) ))
+                      col_pp%dz_ref(c,j)) / ( surface_water(fc) * (depth_runoff_Nloss-zisoi(j-1) ))
               else
                  smin_no3_runoff_vr(c,j) = 0._r8
               endif

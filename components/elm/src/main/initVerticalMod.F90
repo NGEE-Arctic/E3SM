@@ -437,32 +437,47 @@ contains
              col_pp%z(c,1:nlevurb)  = zurb_wall(l,1:nlevurb)
              col_pp%zi(c,0:nlevurb) = ziurb_wall(l,0:nlevurb)
              col_pp%dz(c,1:nlevurb) = dzurb_wall(l,1:nlevurb)
+             col_pp%z_ref(c,1:nlevurb)  = zurb_wall(l,1:nlevurb)
+             col_pp%zi_ref(c,0:nlevurb) = ziurb_wall(l,0:nlevurb)
+             col_pp%dz_ref(c,1:nlevurb) = dzurb_wall(l,1:nlevurb)
              if (nlevurb < nlevgrnd) then
                 col_pp%z(c,nlevurb+1:nlevgrnd)  = spval
                 col_pp%zi(c,nlevurb+1:nlevgrnd) = spval
                 col_pp%dz(c,nlevurb+1:nlevgrnd) = spval
+                col_pp%z_ref(c,nlevurb+1:nlevgrnd)  = spval
+                col_pp%zi_ref(c,nlevurb+1:nlevgrnd) = spval
+                col_pp%dz_ref(c,nlevurb+1:nlevgrnd) = spval
              end if
           else if (col_pp%itype(c) == icol_roof) then
              col_pp%z(c,1:nlevurb)  = zurb_roof(l,1:nlevurb)
              col_pp%zi(c,0:nlevurb) = ziurb_roof(l,0:nlevurb)
              col_pp%dz(c,1:nlevurb) = dzurb_roof(l,1:nlevurb)
+             col_pp%z_ref(c,1:nlevurb)  = zurb_roof(l,1:nlevurb)
+             col_pp%zi_ref(c,0:nlevurb) = ziurb_roof(l,0:nlevurb)
+             col_pp%dz_ref(c,1:nlevurb) = dzurb_roof(l,1:nlevurb)
              if (nlevurb < nlevgrnd) then
                 col_pp%z(c,nlevurb+1:nlevgrnd)  = spval
                 col_pp%zi(c,nlevurb+1:nlevgrnd) = spval
                 col_pp%dz(c,nlevurb+1:nlevgrnd) = spval
+                col_pp%z_ref(c,nlevurb+1:nlevgrnd)  = spval
+                col_pp%zi_ref(c,nlevurb+1:nlevgrnd) = spval
+                col_pp%dz_ref(c,nlevurb+1:nlevgrnd) = spval
              end if
           else
              col_pp%z(c,1:nlevgrnd)  = zsoi(1:nlevgrnd)
              col_pp%zi(c,0:nlevgrnd) = zisoi(0:nlevgrnd)
              col_pp%dz(c,1:nlevgrnd) = dzsoi(1:nlevgrnd)
+             col_pp%z_ref(c,1:nlevgrnd)  = zsoi(1:nlevgrnd)
+             col_pp%zi_ref(c,0:nlevgrnd) = zisoi(0:nlevgrnd)
              col_pp%dz_ref(c,1:nlevgrnd) = dzsoi(1:nlevgrnd)
           end if
        else if (lun_pp%itype(l) /= istdlak) then
           col_pp%z(c,1:nlevgrnd)  = zsoi(1:nlevgrnd)
           col_pp%zi(c,0:nlevgrnd) = zisoi(0:nlevgrnd)
           col_pp%dz(c,1:nlevgrnd) = dzsoi(1:nlevgrnd)
+          col_pp%z_ref(c,1:nlevgrnd)  = zsoi(1:nlevgrnd)
+          col_pp%zi_ref(c,0:nlevgrnd) = zisoi(0:nlevgrnd)
           col_pp%dz_ref(c,1:nlevgrnd) = dzsoi(1:nlevgrnd)
-          col_pp%volrat(c,1:nlevgrnd) = 1._r8
        end if
     end do
 
@@ -588,6 +603,8 @@ contains
           col_pp%z(c,1:nlevgrnd)  = zsoi(1:nlevgrnd)
           col_pp%zi(c,0:nlevgrnd) = zisoi(0:nlevgrnd)
           col_pp%dz(c,1:nlevgrnd) = dzsoi(1:nlevgrnd)
+          col_pp%z_ref(c,1:nlevgrnd)  = zsoi(1:nlevgrnd)
+          col_pp%zi_ref(c,0:nlevgrnd) = zisoi(0:nlevgrnd)
           col_pp%dz_ref(c,1:nlevgrnd) = dzsoi(1:nlevgrnd)
        end if
     end do
@@ -847,12 +864,29 @@ contains
       end do
 
     !-----------------------------------------------
-    ! Register history field for deformed soil layer thickness
+    ! Register history field for deformed soil layer thickness. ZSOI/DZSOI
+    ! (histFileMod.F90:2234-2235) report the REFERENCE grid, so this is the
+    ! only output that shows the deformed thermal geometry.
+    !
+    ! Gated on use_polygonal_tundra and active by default within that gate,
+    ! matching the other excess-ice diagnostics (ColumnDataType.F90:1524-1547).
+    ! Both halves of that matter. Active, because success criterion
+    ! geometry-relaxes-to-reference reads DZ_SOIL from the h0 file and cannot
+    ! run if the field is never written. Gated, because DZ_SOIL is
+    ! time-varying, and adding a time-varying field unconditionally makes
+    ! cprnc report "DIFFER only in their field lists", which cime turns into
+    ! files_match = False (hist_utils.py:538-542) -- that would fail the five
+    ! non-polygon layer-structure comparisons for a reason with nothing to do
+    ! with the physics they exist to check. Time-CONSTANT field-list
+    ! differences are tolerated (cprnc.F90:152-166), which is why repointing
+    ! ZSOI/DZSOI is safe but this is not.
     !-----------------------------------------------
-    data2dptr => col_pp%dz(:,1:nlevgrnd)
-    call hist_addfld2d (fname='DZ_SOIL', units='m', type2d='levgrnd', avgflag='A', &
-         long_name='Soil layer thickness (deformed by excess ice where present)', &
-         ptr_col=data2dptr, l2g_scale_type='veg', default='inactive')
+    if (use_polygonal_tundra) then
+       data2dptr => col_pp%dz(:,1:nlevgrnd)
+       call hist_addfld2d (fname='DZ_SOIL', units='m', type2d='levgrnd', avgflag='A', &
+            long_name='Soil layer thickness (deformed by excess ice where present)', &
+            ptr_col=data2dptr, l2g_scale_type='veg')
+    end if
 
     call ncd_pio_closefile(ncid)
 

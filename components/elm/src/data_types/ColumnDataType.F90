@@ -1716,7 +1716,7 @@ contains
        this%wf2(c)                    = spval
        this%total_plant_stored_h2o(c) = 0._r8
        this%h2osfc(c)                 = 0._r8
-       this%h2osfc_p(c)               = 0._r8 ! DEBUG
+       this%h2osfc_p(c)               = 0._r8
        this%h2ocan(c)                 = 0._r8
        this%frac_h2osfc(c)            = 0._r8
        this%frac_h2osfc_act(c)        = 0._r8
@@ -1822,11 +1822,11 @@ contains
              this%h2osoi_vol(c,j) = min(this%h2osoi_vol(c,j), watsat_input(c,j))
 
              if (col_es%t_soisno(c,j) <= SHR_CONST_TKFRZ) then
-                this%h2osoi_ice(c,j) = col_pp%dz(c,j)*denice*this%h2osoi_vol(c,j)
+                this%h2osoi_ice(c,j) = col_pp%dz_ref(c,j)*denice*this%h2osoi_vol(c,j)
                 this%h2osoi_liq(c,j) = 0._r8
              else
                 this%h2osoi_ice(c,j) = 0._r8
-                this%h2osoi_liq(c,j) = col_pp%dz(c,j)*denh2o*this%h2osoi_vol(c,j)
+                this%h2osoi_liq(c,j) = col_pp%dz_ref(c,j)*denh2o*this%h2osoi_vol(c,j)
              endif
           end do
           do j = -nlevsno+1, 0
@@ -1874,11 +1874,11 @@ contains
        !--------------------------------------------
        do j = 1,nlevgrnd
           if (col_es%t_soisno(c,j) <= tfrz) then
-             this%h2osoi_ice(c,j) = col_pp%dz(c,j)*denice*this%h2osoi_vol(c,j)
+             this%h2osoi_ice(c,j) = col_pp%dz_ref(c,j)*denice*this%h2osoi_vol(c,j)
              this%h2osoi_liq(c,j) = 0._r8
           else
              this%h2osoi_ice(c,j) = 0._r8
-             this%h2osoi_liq(c,j) = col_pp%dz(c,j)*denh2o*this%h2osoi_vol(c,j)
+             this%h2osoi_liq(c,j) = col_pp%dz_ref(c,j)*denh2o*this%h2osoi_vol(c,j)
           endif
        end do
 
@@ -1889,13 +1889,16 @@ contains
          ! This estimate comes from field observations on the AK north slope
          ! Future development should replace this with best available ground
          ! ice maps.
-         this%excess_ice_volfrac(c,:) = 0.36_r8
-         
-         ! Convert to mass (kg/m2), using reference (mineral soil) layer thickness
+         nlevbed = col_pp%nlevbed(c)
+         this%excess_ice_volfrac(c,:) = 0._r8
+         this%excess_ice_volfrac(c,1:nlevbed) = 0.36_r8
+
+         ! Convert to mass (kg/m2), using reference (mineral soil) layer
+         ! thickness.
          do j = 1, nlevgrnd
             this%excess_ice(c,j) = this%excess_ice_volfrac(c,j) * col_pp%dz_ref(c,j) * denice
          end do
-         
+
          this%iwp_subsidence(c) = 0._r8
          
          ! set initial microtopographic parameters derived from high-res ATS simulations
@@ -1949,7 +1952,6 @@ contains
        this%h2osfc(bounds%begc:bounds%endc) = 0.0_r8
     end if
 
-    ! DEBUG
     call restartvar(ncid=ncid, flag=flag, varname='H2OSFC_P', xtype=ncd_double,  &
          dim1name='column', &
          long_name='surface water', units='kg/m2', &
@@ -2176,8 +2178,8 @@ contains
           end if
           if ( lun_pp%itype(l) /= istdlak ) then ! This calculation is now done for lakes in initLake.
              do j = 1,nlevs
-                this%h2osoi_vol(c,j) = this%h2osoi_liq(c,j)/(col_pp%dz(c,j)*denh2o) &
-                                         + this%h2osoi_ice(c,j)/(col_pp%dz(c,j)*denice)
+                this%h2osoi_vol(c,j) = this%h2osoi_liq(c,j)/(col_pp%dz_ref(c,j)*denh2o) &
+                                         + this%h2osoi_ice(c,j)/(col_pp%dz_ref(c,j)*denice)
              end do
           end if
        end do
@@ -2199,15 +2201,15 @@ contains
                 if (col_pp%is_soil(c) .or. col_pp%is_crop(c)) then
                    this%h2osoi_liq(c,j) = max(0._r8,this%h2osoi_liq(c,j))
                    this%h2osoi_ice(c,j) = max(0._r8,this%h2osoi_ice(c,j))
-                   this%h2osoi_vol(c,j) = this%h2osoi_liq(c,j)/(col_pp%dz(c,j)*denh2o) &
-                                       + this%h2osoi_ice(c,j)/(col_pp%dz(c,j)*denice)
+                   this%h2osoi_vol(c,j) = this%h2osoi_liq(c,j)/(col_pp%dz_ref(c,j)*denh2o) &
+                                       + this%h2osoi_ice(c,j)/(col_pp%dz_ref(c,j)*denice)
                    if (j == 1) then
-                      maxwatsat = (watsat_input(c,j)*col_pp%dz(c,j)*1000.0_r8 + pondmx) / (col_pp%dz(c,j)*1000.0_r8)
+                      maxwatsat = (watsat_input(c,j)*col_pp%dz_ref(c,j)*1000.0_r8 + pondmx) / (col_pp%dz_ref(c,j)*1000.0_r8)
                    else
                       maxwatsat =  watsat_input(c,j)
                    end if
                    if (this%h2osoi_vol(c,j) > maxwatsat) then
-                      excess = (this%h2osoi_vol(c,j) - maxwatsat)*col_pp%dz(c,j)*1000.0_r8
+                      excess = (this%h2osoi_vol(c,j) - maxwatsat)*col_pp%dz_ref(c,j)*1000.0_r8
                       totwat = this%h2osoi_liq(c,j) + this%h2osoi_ice(c,j)
                       this%h2osoi_liq(c,j) = this%h2osoi_liq(c,j) - &
                                            (this%h2osoi_liq(c,j)/totwat) * excess
@@ -2216,8 +2218,8 @@ contains
                    end if
                    this%h2osoi_liq(c,j) = max(watmin,this%h2osoi_liq(c,j))
                    this%h2osoi_ice(c,j) = max(watmin,this%h2osoi_ice(c,j))
-                   this%h2osoi_vol(c,j) = this%h2osoi_liq(c,j)/(col_pp%dz(c,j)*denh2o) &
-                                             + this%h2osoi_ice(c,j)/(col_pp%dz(c,j)*denice)
+                   this%h2osoi_vol(c,j) = this%h2osoi_liq(c,j)/(col_pp%dz_ref(c,j)*denh2o) &
+                                             + this%h2osoi_ice(c,j)/(col_pp%dz_ref(c,j)*denice)
                 end if
              end do
           end do
