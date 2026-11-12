@@ -17,7 +17,9 @@ module restFileMod
   use elm_varpar           , only : crop_prog
   use elm_varctl           , only : use_cn, use_c13, use_c14, use_lch4, use_fates, use_betr
   use elm_varctl           , only : use_erosion
-  use elm_varctl           , only : create_glacier_mec_landunit, iulog 
+  use elm_varctl           , only : create_glacier_mec_landunit, iulog
+  use elm_varctl           , only : use_polygonal_tundra
+  use ExcessIceMod         , only : inflate_layers_from_excess_ice
   use elm_varcon           , only : c13ratio, c14ratio
   use elm_varcon           , only : nameg, namet, namel, namec, namep, nameCohort
   use CH4Mod               , only : ch4_type
@@ -580,6 +582,11 @@ contains
 
     call col_ws%Restart (bounds, ncid, flag='read', &
          watsat_input=soilstate_vars%watsat_col(bounds%begc:bounds%endc,:))
+
+    ! After reading restart, inflate soil layer geometry to match restored excess ice
+    if (use_polygonal_tundra) then
+       call inflate_layers_from_excess_ice(bounds)
+    end if
 
     call veg_ws%Restart (bounds, ncid, flag='read')
 
