@@ -759,6 +759,8 @@ contains
      use elm_varpar       , only : nlevsoi, nlevgrnd
      use column_varcon    , only : icol_roof, icol_road_imperv
      use elm_varctl       , only : use_vsfm, use_var_soil_thick
+     use elm_varctl       , only : soil_water_retention_method, swrc_clapp_hornberger
+     use SoilWaterRetentionVanGenuchtenMod, only : vg_theta_from_suction, vg_he
      use domainMod        , only : ldomain
      use SoilWaterMovementMod, only : zengdecker_2009_with_var_soil_thick
      !
@@ -813,6 +815,9 @@ contains
      !-----------------------------------------------------------------------
 
      associate(                                                            &
+          watres             =>    soilstate_vars%watres_col             , & ! Input:  [real(r8) (:,:) ]  residual volumetric soil water (van Genuchten)
+          vg_alpha           =>    soilstate_vars%vg_alpha_col           , & ! Input:  [real(r8) (:,:) ]  van Genuchten alpha (1/mm)
+          vg_n               =>    soilstate_vars%vg_n_col               , & ! Input:  [real(r8) (:,:) ]  van Genuchten n (-)
           snl                =>    col_pp%snl                               , & ! Input:  [integer  (:)   ]  number of snow layers
           dz                 =>    col_pp%dz                                , & ! Input:  [real(r8) (:,:) ]  layer depth (m)
           z                  =>    col_pp%z                                 , & ! Input:  [real(r8) (:,:) ]  layer depth (m)
@@ -899,8 +904,15 @@ contains
           nlevbed = nlev2bed(c)
 
           !scs: use analytical expression for aquifer specific yield
-          rous = watsat(c,nlevbed) &
-               * ( 1. - (1.+1.e3*zwt(c)/sucsat(c,nlevbed))**(-1./bsw(c,nlevbed)))
+          if (soil_water_retention_method == swrc_clapp_hornberger) then
+             rous = watsat(c,nlevbed) &
+                  * ( 1. - (1.+1.e3*zwt(c)/sucsat(c,nlevbed))**(-1./bsw(c,nlevbed)))
+          else
+             ! van Genuchten: watsat minus the equilibrium water content at the surface for a
+             ! water table at zwt, with smp = -vg_he at the water table
+             rous = watsat(c,nlevbed) - vg_theta_from_suction(-(vg_he + 1.e3_r8*zwt(c)), &
+                  watsat(c,nlevbed), watres(c,nlevbed), vg_alpha(c,nlevbed), vg_n(c,nlevbed))
+          end if
           rous=max(rous,0.02_r8)
 
           !--  water table is below the soil column  --------------------------------------
@@ -923,8 +935,13 @@ contains
              if(qcharge_tot > 0.) then !rising water table
                 do j = jwt(c)+1, 1,-1
                    !scs: use analytical expression for specific yield
-                   s_y = watsat(c,j) &
-                        * ( 1. -  (1.+1.e3*zwt(c)/sucsat(c,j))**(-1./bsw(c,j)))
+                   if (soil_water_retention_method == swrc_clapp_hornberger) then
+                      s_y = watsat(c,j) &
+                           * ( 1. -  (1.+1.e3*zwt(c)/sucsat(c,j))**(-1./bsw(c,j)))
+                   else
+                      s_y = watsat(c,j) - vg_theta_from_suction(-(vg_he + 1.e3_r8*zwt(c)), &
+                           watsat(c,j), watres(c,j), vg_alpha(c,j), vg_n(c,j))
+                   end if
                    s_y=max(s_y,0.02_r8)
 
                    qcharge_layer=min(qcharge_tot,(s_y*(zwt(c) - zi(c,j-1))*1.e3))
@@ -938,8 +955,13 @@ contains
              else ! deepening water table (negative qcharge)
                 do j = jwt(c)+1, nlevbed
                    !scs: use analytical expression for specific yield
-                   s_y = watsat(c,j) &
-                        * ( 1. -  (1.+1.e3*zwt(c)/sucsat(c,j))**(-1./bsw(c,j)))
+                   if (soil_water_retention_method == swrc_clapp_hornberger) then
+                      s_y = watsat(c,j) &
+                           * ( 1. -  (1.+1.e3*zwt(c)/sucsat(c,j))**(-1./bsw(c,j)))
+                   else
+                      s_y = watsat(c,j) - vg_theta_from_suction(-(vg_he + 1.e3_r8*zwt(c)), &
+                           watsat(c,j), watres(c,j), vg_alpha(c,j), vg_n(c,j))
+                   end if
                    s_y=max(s_y,0.02_r8)
 
                    qcharge_layer=max(qcharge_tot,-(s_y*(zi(c,j) - zwt(c))*1.e3))
@@ -1098,6 +1120,8 @@ contains
      use elm_varcon       , only : pondmx, tfrz, watmin,rpi, secspday, nlvic
      use column_varcon    , only : icol_roof, icol_road_imperv, icol_road_perv
      use elm_varctl       , only : use_vsfm, use_var_soil_thick, use_firn_percolation_and_compaction
+     use elm_varctl       , only : soil_water_retention_method, swrc_clapp_hornberger
+     use SoilWaterRetentionVanGenuchtenMod, only : vg_theta_from_suction, vg_he
      use SoilWaterMovementMod, only : zengdecker_2009_with_var_soil_thick
      use pftvarcon        , only : rsub_top_globalmax
      use LandunitType     , only : lun_pp
@@ -1192,6 +1216,9 @@ contains
           eff_porosity       =>    soilstate_vars%eff_porosity_col       , & ! Input:  [real(r8) (:,:) ] effective porosity = porosity - vol_ice
           hk_l               =>    soilstate_vars%hk_l_col               , & ! Input:  [real(r8) (:,:) ] hydraulic conductivity (mm/s)
           smp_l              =>    soilstate_vars%smp_l_col              , & ! Input:  [real(r8) (:,:) ] soil matric potential (mm)
+          watres             =>    soilstate_vars%watres_col             , & ! Input:  [real(r8) (:,:) ] residual volumetric soil water (van Genuchten)
+          vg_alpha           =>    soilstate_vars%vg_alpha_col           , & ! Input:  [real(r8) (:,:) ] van Genuchten alpha (1/mm)
+          vg_n               =>    soilstate_vars%vg_n_col               , & ! Input:  [real(r8) (:,:) ] van Genuchten n (-)
 
           depth              =>    soilhydrology_vars%depth_col          , & ! Input:  [real(r8) (:,:) ] VIC soil depth
           c_param            =>    soilhydrology_vars%c_param_col        , & ! Input:  [real(r8) (:)   ] baseflow exponent (Qb)
@@ -1497,20 +1524,37 @@ contains
              if (use_vsfm) rsub_top(c) = 0._r8
 
              ! use analytical expression for aquifer specific yield
-             rous = watsat(c,nlevbed) &
-                  * ( 1. - (1.+1.e3*zwt(c)/sucsat(c,nlevbed))**(-1./bsw(c,nlevbed)))
+             if (soil_water_retention_method == swrc_clapp_hornberger) then
+                rous = watsat(c,nlevbed) &
+                     * ( 1. - (1.+1.e3*zwt(c)/sucsat(c,nlevbed))**(-1./bsw(c,nlevbed)))
+             else
+                ! van Genuchten: watsat minus the equilibrium water content at the surface for a
+                ! water table at zwt, with smp = -vg_he at the water table
+                rous = watsat(c,nlevbed) - vg_theta_from_suction(-(vg_he + 1.e3_r8*zwt(c)), &
+                     watsat(c,nlevbed), watres(c,nlevbed), vg_alpha(c,nlevbed), vg_n(c,nlevbed))
+             end if
              rous=max(rous,0.02_r8)
 
              !--  water table is below the soil column  --------------------------------------
              if(jwt(c) == nlevbed) then
                if (zengdecker_2009_with_var_soil_thick) then
                  if (-1._r8 * smp_l(c,nlevbed) < 0.5_r8 * dzmm(c,nlevbed)) then
-                    zwt(c) = z(c,nlevbed) - (smp_l(c,nlevbed) / 1000._r8)
+                    if (soil_water_retention_method == swrc_clapp_hornberger) then
+                       zwt(c) = z(c,nlevbed) - (smp_l(c,nlevbed) / 1000._r8)
+                    else
+                       ! hydrostatic below the bottom node, with smp = -vg_he at the water table
+                       zwt(c) = z(c,nlevbed) - ((smp_l(c,nlevbed) + vg_he) / 1000._r8)
+                    end if
                  end if
                  rsub_top(c) = imped * rsub_top_max * exp(-fff(c) * zwt(c))
                  rsub_top_tot = - rsub_top(c) * dtime
-                 s_y = watsat(c,nlevbed) &
-                     * ( 1. - (1.+1.e3*zwt(c)/sucsat(c,nlevbed))**(-1./bsw(c,nlevbed)))
+                 if (soil_water_retention_method == swrc_clapp_hornberger) then
+                    s_y = watsat(c,nlevbed) &
+                        * ( 1. - (1.+1.e3*zwt(c)/sucsat(c,nlevbed))**(-1./bsw(c,nlevbed)))
+                 else
+                    s_y = watsat(c,nlevbed) - vg_theta_from_suction(-(vg_he + 1.e3_r8*zwt(c)), &
+                         watsat(c,nlevbed), watres(c,nlevbed), vg_alpha(c,nlevbed), vg_n(c,nlevbed))
+                 end if
                  s_y=max(s_y,0.02_r8)
                  rsub_top_layer=max(rsub_top_tot,-(s_y*(zi(c,nlevbed) - zwt(c))*1.e3_r8))
                  rsub_top_layer=min(rsub_top_layer,0._r8)
@@ -1559,8 +1603,13 @@ contains
                    else
                       do j = jwt(c)+1, nlevbed
                          ! use analytical expression for specific yield
-                         s_y = watsat(c,j) &
-                              * ( 1. - (1.+1.e3*zwt(c)/sucsat(c,j))**(-1./bsw(c,j)))
+                         if (soil_water_retention_method == swrc_clapp_hornberger) then
+                            s_y = watsat(c,j) &
+                                 * ( 1. - (1.+1.e3*zwt(c)/sucsat(c,j))**(-1./bsw(c,j)))
+                         else
+                            s_y = watsat(c,j) - vg_theta_from_suction(-(vg_he + 1.e3_r8*zwt(c)), &
+                                 watsat(c,j), watres(c,j), vg_alpha(c,j), vg_n(c,j))
+                         end if
                          s_y=max(s_y,0.02_r8)
 
                          rsub_top_layer=max(rsub_top_tot,-(s_y*(zi(c,j) - zwt(c))*1.e3))
@@ -1791,6 +1840,8 @@ contains
      use domainMod        , only : ldomain
      use ocn2lndType      , only : ocn2lnd_type 
      use SoilWaterMovementMod, only : zengdecker_2009_with_var_soil_thick
+     use elm_varctl       , only : soil_water_retention_method, swrc_clapp_hornberger
+     use SoilWaterRetentionVanGenuchtenMod, only : vg_theta_from_suction, vg_he
      !
      ! !ARGUMENTS:
      type(bounds_type)        , intent(in)    :: bounds
@@ -1817,6 +1868,9 @@ contains
      !-----------------------------------------------------------------------
 
      associate(                                                  &
+          watres             =>    soilstate_vars%watres_col     , & ! Input:  [real(r8) (:,:) ] residual volumetric soil water (van Genuchten)
+          vg_alpha           =>    soilstate_vars%vg_alpha_col   , & ! Input:  [real(r8) (:,:) ] van Genuchten alpha (1/mm)
+          vg_n               =>    soilstate_vars%vg_n_col       , & ! Input:  [real(r8) (:,:) ] van Genuchten n (-)
           z                  =>    col_pp%z                      , & ! Input:  [real(r8) (:,:) ] layer depth (m)
           zi                 =>    col_pp%zi                     , & ! Input:  [real(r8) (:,:) ] interface level below a "z" level (m)
           dz                 =>    col_pp%dz                     , & ! Input:  [real(r8) (:,:) ] layer depth (m)
@@ -1915,8 +1969,15 @@ contains
           endif
 
           !scs: use analytical expression for aquifer specific yield
-          rous = watsat(c,nlevbed) &
-               * ( 1. - (1.+1.e3*zwt(c)/sucsat(c,nlevbed))**(-1./bsw(c,nlevbed)))
+          if (soil_water_retention_method == swrc_clapp_hornberger) then
+             rous = watsat(c,nlevbed) &
+                  * ( 1. - (1.+1.e3*zwt(c)/sucsat(c,nlevbed))**(-1./bsw(c,nlevbed)))
+          else
+             ! van Genuchten: watsat minus the equilibrium water content at the surface for a
+             ! water table at zwt, with smp = -vg_he at the water table
+             rous = watsat(c,nlevbed) - vg_theta_from_suction(-(vg_he + 1.e3_r8*zwt(c)), &
+                  watsat(c,nlevbed), watres(c,nlevbed), vg_alpha(c,nlevbed), vg_n(c,nlevbed))
+          end if
           rous=max(rous,0.02_r8)
 
           if (jwt(c) == nlevbed) then
@@ -1931,8 +1992,13 @@ contains
              if(lateral_tot > 0._r8) then !rising water table (posive qflx_lnd2ocn)
                 do j = jwt(c)+1, 1,-1
                    !scs: use analytical expression for specific yield
-                   s_y = watsat(c,j) &
-                        * ( 1. -  (1.+1.e3*zwt(c)/sucsat(c,j))**(-1./bsw(c,j)))
+                   if (soil_water_retention_method == swrc_clapp_hornberger) then
+                      s_y = watsat(c,j) &
+                           * ( 1. -  (1.+1.e3*zwt(c)/sucsat(c,j))**(-1./bsw(c,j)))
+                   else
+                      s_y = watsat(c,j) - vg_theta_from_suction(-(vg_he + 1.e3_r8*zwt(c)), &
+                           watsat(c,j), watres(c,j), vg_alpha(c,j), vg_n(c,j))
+                   end if
                    s_y = max(s_y,0.02_r8)
 
                    lateral_layer = min(lateral_tot,(s_y*(zwt(c) - zi(c,j-1))*1.e3))
@@ -1957,8 +2023,13 @@ contains
              else ! deepening water table (negative qflx_lnd2ocn)
                 do j = jwt(c)+1, nlevbed
                    !scs: use analytical expression for specific yield
-                   s_y = watsat(c,j) &
-                        * ( 1. -  (1.+1.e3*zwt(c)/sucsat(c,j))**(-1./bsw(c,j)))
+                   if (soil_water_retention_method == swrc_clapp_hornberger) then
+                      s_y = watsat(c,j) &
+                           * ( 1. -  (1.+1.e3*zwt(c)/sucsat(c,j))**(-1./bsw(c,j)))
+                   else
+                      s_y = watsat(c,j) - vg_theta_from_suction(-(vg_he + 1.e3_r8*zwt(c)), &
+                           watsat(c,j), watres(c,j), vg_alpha(c,j), vg_n(c,j))
+                   end if
                    s_y = max(s_y,0.02_r8)
 
                    lateral_layer = max(lateral_tot,-(s_y*(zi(c,j) - zwt(c))*1.e3))
