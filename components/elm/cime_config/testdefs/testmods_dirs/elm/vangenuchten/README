@@ -1,0 +1,4 @@
+Test with the van Genuchten (1980) - Mualem soil water retention curve
+(soil_water_retention_model = 'van_genuchten_1980') instead of the default
+Clapp and Hornberger (1978) curve. The vangenuchten_* directories combine it
+with other testmods through include_user_mods.
