@@ -836,8 +836,6 @@ contains
                ' use_vsfm, use_pflotran, use_betr, use_fates_planthydro, or use_vichydro'//&
                errMsg(__FILE__, __LINE__))
        end if
-       call endrun(msg=' ERROR:: soil_water_retention_model = van_genuchten_1980 is not yet implemented'//&
-            errMsg(__FILE__, __LINE__))
     end if
 
     if (masterproc) then

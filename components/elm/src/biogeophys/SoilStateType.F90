@@ -23,6 +23,8 @@ module SoilStateType
   use elm_varctl      , only : use_var_soil_thick
   use elm_varctl      , only : squareomfrac
   use elm_varctl      , only : iulog, fsurdat, hist_wrtch4diag
+  use elm_varctl      , only : soil_water_retention_method, swrc_clapp_hornberger, swrc_van_genuchten
+  use elm_varctl      , only : use_vg_porosity_for_bulk_density
   use CH4varcon       , only : allowlakeprod
   use LandunitType    , only : lun_pp                
   use ColumnType      , only : col_pp                
@@ -62,6 +64,9 @@ module SoilStateType
      real(r8), pointer :: watmin_col           (:,:) ! col minimum volumetric soil water (nlevsoi)
      real(r8), pointer :: sucsat_col           (:,:) ! col minimum soil suction (mm) (nlevgrnd)
      real(r8), pointer :: sucmin_col           (:,:) ! col minimum allowable soil liquid suction pressure (mm) [Note: sucmin_col is a negative value, while sucsat_col is a positive quantity]
+     real(r8), pointer :: watres_col           (:,:) ! col residual volumetric soil water, van Genuchten only (nlevgrnd)
+     real(r8), pointer :: vg_alpha_col         (:,:) ! col van Genuchten alpha (1/mm), van Genuchten only (nlevgrnd)
+     real(r8), pointer :: vg_n_col             (:,:) ! col van Genuchten n (-), van Genuchten only (nlevgrnd)
      real(r8), pointer :: soilbeta_col         (:)   ! col factor that reduces ground evaporation L&P1992(-)
      real(r8), pointer :: soilalpha_col        (:)   ! col factor that reduces ground saturated specific humidity (-)
      real(r8), pointer :: soilalpha_u_col      (:)   ! col urban factor that reduces ground saturated specific humidity (-)
@@ -167,6 +172,9 @@ contains
     allocate(this%watmin_col           (begc:endc,nlevgrnd))            ; this%watmin_col           (:,:) = spval
     allocate(this%sucsat_col           (begc:endc,nlevgrnd))            ; this%sucsat_col           (:,:) = spval
     allocate(this%sucmin_col           (begc:endc,nlevgrnd))            ; this%sucmin_col           (:,:) = spval
+    allocate(this%watres_col           (begc:endc,nlevgrnd))            ; this%watres_col           (:,:) = spval
+    allocate(this%vg_alpha_col         (begc:endc,nlevgrnd))            ; this%vg_alpha_col         (:,:) = spval
+    allocate(this%vg_n_col             (begc:endc,nlevgrnd))            ; this%vg_n_col             (:,:) = spval
     allocate(this%soilbeta_col         (begc:endc))                     ; this%soilbeta_col         (:)   = spval
     allocate(this%soilalpha_col        (begc:endc))                     ; this%soilalpha_col        (:)   = spval
     allocate(this%soilalpha_u_col      (begc:endc))                     ; this%soilalpha_u_col      (:)   = spval
@@ -331,6 +339,24 @@ contains
             ptr_col=this%watfc_col, default='active')
     end if
 
+    ! registered only in van Genuchten mode, so Clapp-Hornberger field lists are unchanged
+    if (soil_water_retention_method == swrc_van_genuchten) then
+       this%watres_col(begc:endc,:) = spval
+       call hist_addfld2d (fname='watres', units='m^3/m^3', type2d='levgrnd', &
+            avgflag='A', long_name='residual water content (van Genuchten)', &
+            ptr_col=this%watres_col, default='inactive')
+
+       this%vg_alpha_col(begc:endc,:) = spval
+       call hist_addfld2d (fname='vg_alpha', units='1/mm', type2d='levgrnd', &
+            avgflag='A', long_name='van Genuchten alpha', &
+            ptr_col=this%vg_alpha_col, default='inactive')
+
+       this%vg_n_col(begc:endc,:) = spval
+       call hist_addfld2d (fname='vg_n', units='1', type2d='levgrnd', &
+            avgflag='A', long_name='van Genuchten n', &
+            ptr_col=this%vg_n_col, default='inactive')
+    end if
+
   end subroutine InitHistory
 
   !-----------------------------------------------------------------------
@@ -344,6 +370,8 @@ contains
     use organicFileMod      , only : organicrd
     use SharedParamsMod   , only : ParamsShareInst
     use FuncPedotransferMod , only : pedotransf, get_ipedof
+    use FuncPedotransferMod , only : pedotransf_vg_rosetta_class, pedotransf_vg_peat_liu2019
+    use SoilWaterRetentionVanGenuchtenMod, only : vg_theta_from_suction, vg_se_from_kr, vg_to_ch_lenhard
     use RootBiophysMod      , only : init_vegrootfr
     use, intrinsic :: ieee_exceptions
     use elm_varcon          , only : tkair
@@ -385,6 +413,11 @@ contains
     real(r8)           :: quartz_adj                    ! temporary, gravel fraction for current layer relative to total solid volume
     real(r8)           :: rho_p, rho_b                  ! temporaries, particle and bulk densities adjusted by organic matter
     real(r8)           :: organic_max                   ! organic matter (kg/m3) where soil is assumed to act like peat
+    real(r8)           :: vg_watsat_min, vg_watres_min  ! van Genuchten saturated and residual water content of mineral soil (v/v)
+    real(r8)           :: vg_alpha_min, vg_n_min        ! van Genuchten alpha (1/mm) and n of mineral soil
+    real(r8)           :: vg_watsat_om, vg_watres_om    ! van Genuchten saturated and residual water content of peat (v/v)
+    real(r8)           :: vg_alpha_om, vg_n_om          ! van Genuchten alpha (1/mm) and n of peat
+    real(r8), parameter :: vg_n_lower = 1.05_r8         ! smallest van Genuchten n accepted (keeps m = 1-1/n well away from 0)
     integer            :: dimid                         ! dimension id
     logical            :: readvar
     type(file_desc_t)  :: ncid                          ! netcdf id
@@ -781,7 +814,21 @@ contains
                 om_sucsat         = min(10.3_r8 - 0.2_r8   *(zsoi(lev)/zsapric), 10.1_r8)
                 om_hksat          = max(0.28_r8 - 0.2799_r8*(zsoi(lev)/zsapric), 0.0001_r8)
 
+                if (soil_water_retention_method == swrc_van_genuchten) then
+                   ! van Genuchten parameters: Rosetta class averages for the mineral soil, and
+                   ! Liu and Lennartz (2019) for peat at bulk density organic_max (kg/m3 -> g/cm3).
+                   ! Their alpha regression has a depth term (cm), capped at zsapric like om_* above.
+                   call pedotransf_vg_rosetta_class(sand, clay, &
+                        vg_watsat_min, vg_watres_min, vg_alpha_min, vg_n_min)
+                   call pedotransf_vg_peat_liu2019(organic_max*1.e-3_r8, 100._r8*min(zsoi(lev), zsapric), &
+                        vg_watsat_om, vg_watres_om, vg_alpha_om, vg_n_om)
+                   om_watsat = vg_watsat_om
+                   if (use_vg_porosity_for_bulk_density) this%watsat_col(c,lev) = vg_watsat_min
+                end if
+
                 this%bd_col(c,lev)        = (1._r8 - this%watsat_col(c,lev))*2.7e3_r8
+                ! in van Genuchten mode, porosity is always the vG value; only bulk density may use Cosby
+                if (soil_water_retention_method == swrc_van_genuchten) this%watsat_col(c,lev) = vg_watsat_min
                 this%watsat_col(c,lev)    = (1._r8 - om_frac) * this%watsat_col(c,lev) + om_watsat*om_frac
                 tkm                       = (1._r8-om_frac) * (8.80_r8*sand+2.92_r8*clay)/(sand+clay)+om_tkm*om_frac ! W/(m K)
                 this%bsw_col(c,lev)       = (1._r8-om_frac) * (2.91_r8 + 0.159_r8*clay) + om_frac*om_b
@@ -822,21 +869,57 @@ contains
                    this%csol_col(c,lev) = csol_bedrock
                 endif
 
-                this%watdry_col(c,lev) = this%watsat_col(c,lev) * &
-                     (316230._r8/this%sucsat_col(c,lev)) ** (-1._r8/this%bsw_col(c,lev))
-                this%watopt_col(c,lev) = this%watsat_col(c,lev) * &
-                     (158490._r8/this%sucsat_col(c,lev)) ** (-1._r8/this%bsw_col(c,lev))
+                if (soil_water_retention_method == swrc_clapp_hornberger) then
+                   this%watdry_col(c,lev) = this%watsat_col(c,lev) * &
+                        (316230._r8/this%sucsat_col(c,lev)) ** (-1._r8/this%bsw_col(c,lev))
+                   this%watopt_col(c,lev) = this%watsat_col(c,lev) * &
+                        (158490._r8/this%sucsat_col(c,lev)) ** (-1._r8/this%bsw_col(c,lev))
 
-                !! added by K.Sakaguchi for beta from Lee and Pielke, 1992
-                ! water content at field capacity, defined as hk = 0.1 mm/day
-                ! used eqn (7.70) in CLM3 technote with k = 0.1 (mm/day) / secspday (day/sec)
-                this%watfc_col(c,lev) = this%watsat_col(c,lev) * &
-                     (0.1_r8 / (this%hksat_col(c,lev)*secspday))**(1._r8/(2._r8*this%bsw_col(c,lev)+3._r8))
+                   !! added by K.Sakaguchi for beta from Lee and Pielke, 1992
+                   ! water content at field capacity, defined as hk = 0.1 mm/day
+                   ! used eqn (7.70) in CLM3 technote with k = 0.1 (mm/day) / secspday (day/sec)
+                   this%watfc_col(c,lev) = this%watsat_col(c,lev) * &
+                        (0.1_r8 / (this%hksat_col(c,lev)*secspday))**(1._r8/(2._r8*this%bsw_col(c,lev)+3._r8))
 
-                this%sucmin_col(c,lev) = min_liquid_pressure
+                   this%sucmin_col(c,lev) = min_liquid_pressure
 
-                this%watmin_col(c,lev) = &
-                     this%watsat_col(c,lev)*(-min_liquid_pressure/this%sucsat_col(c,lev))**(-1._r8/this%bsw_col(c,lev))
+                   this%watmin_col(c,lev) = &
+                        this%watsat_col(c,lev)*(-min_liquid_pressure/this%sucsat_col(c,lev))**(-1._r8/this%bsw_col(c,lev))
+                else
+                   ! mix the van Genuchten parameters with peat by om_frac: residual water content
+                   ! linearly (porosity was mixed above), alpha and n in log space
+                   this%watres_col(c,lev)   = (1._r8 - om_frac)*vg_watres_min + om_frac*vg_watres_om
+                   this%vg_alpha_col(c,lev) = 10._r8**((1._r8 - om_frac)*log10(vg_alpha_min) + om_frac*log10(vg_alpha_om))
+                   this%vg_n_col(c,lev)     = 10._r8**((1._r8 - om_frac)*log10(vg_n_min) + om_frac*log10(vg_n_om))
+                   if (this%vg_n_col(c,lev) < vg_n_lower .or. this%watres_col(c,lev) >= this%watsat_col(c,lev)) then
+                      write(iulog,*) 'c, lev, vg_n, watres, watsat = ', c, lev, this%vg_n_col(c,lev), &
+                           this%watres_col(c,lev), this%watsat_col(c,lev)
+                      call endrun(msg=' ERROR: invalid van Genuchten parameters'//errMsg(__FILE__, __LINE__))
+                   end if
+
+                   ! same suctions as above: 316230 mm for btran = 0, 158490 mm for btran = 1
+                   this%watdry_col(c,lev) = vg_theta_from_suction(-316230._r8, this%watsat_col(c,lev), &
+                        this%watres_col(c,lev), this%vg_alpha_col(c,lev), this%vg_n_col(c,lev))
+                   this%watopt_col(c,lev) = vg_theta_from_suction(-158490._r8, this%watsat_col(c,lev), &
+                        this%watres_col(c,lev), this%vg_alpha_col(c,lev), this%vg_n_col(c,lev))
+
+                   ! water content at field capacity, defined as hk = 0.1 mm/day (Lee and Pielke, 1992);
+                   ! limited to watsat when hksat is below 0.1 mm/day
+                   this%watfc_col(c,lev) = this%watres_col(c,lev) + &
+                        (this%watsat_col(c,lev) - this%watres_col(c,lev)) * &
+                        vg_se_from_kr(0.1_r8/(this%hksat_col(c,lev)*secspday), &
+                        this%vg_alpha_col(c,lev), this%vg_n_col(c,lev))
+
+                   this%sucmin_col(c,lev) = min_liquid_pressure
+
+                   this%watmin_col(c,lev) = vg_theta_from_suction(min_liquid_pressure, this%watsat_col(c,lev), &
+                        this%watres_col(c,lev), this%vg_alpha_col(c,lev), this%vg_n_col(c,lev))
+
+                   ! Clapp-Hornberger-equivalent b and saturated suction (Lenhard et al., 1989), for
+                   ! code that uses them as pore-structure indices rather than as a retention curve
+                   call vg_to_ch_lenhard(this%vg_alpha_col(c,lev), this%vg_n_col(c,lev), &
+                        this%bsw_col(c,lev), this%sucsat_col(c,lev))
+                end if
 
                if (trim(soil_thermal_conductivity_model) == 'balland_and_arp') then
                   ! Adjust fractions to be relative to total solid volume 
