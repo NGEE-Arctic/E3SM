@@ -114,6 +114,8 @@ module controlMod
                         use_extrasnowlayers, use_T_rho_dependent_snowthk, &
                         use_vancouver, use_mexicocity, use_noio, use_finetop_rad, &
                         soil_thermal_conductivity_model
+  use elm_varctl              , only: soil_water_retention_model, use_vg_porosity_for_bulk_density, &
+                        soil_water_retention_method, swrc_clapp_hornberger, swrc_van_genuchten
   !
   ! !PUBLIC TYPES:
   implicit none
@@ -425,6 +427,10 @@ contains
    ! NGEE Arctic options
    namelist /elm_inparm/ &
          use_polygonal_tundra, use_arctic_init, soil_thermal_conductivity_model
+
+    ! Soil water retention curve
+    namelist /elm_inparm/ &
+         soil_water_retention_model, use_vg_porosity_for_bulk_density
     ! ----------------------------------------------------------------------
     ! Default values
     ! ----------------------------------------------------------------------
@@ -807,6 +813,33 @@ contains
             errMsg(__FILE__, __LINE__))
     endif
 
+    ! Soil water retention curve
+    select case (trim(soil_water_retention_model))
+    case ('clapp_hornberger_1978')
+       soil_water_retention_method = swrc_clapp_hornberger
+    case ('van_genuchten_1980')
+       soil_water_retention_method = swrc_van_genuchten
+    case default
+       write(iulog,*)'soil_water_retention_model = ',trim(soil_water_retention_model),' is not supported'
+       call endrun(msg=' ERROR:: choices are clapp_hornberger_1978 or van_genuchten_1980'//&
+            errMsg(__FILE__, __LINE__))
+    end select
+    !$acc update device(soil_water_retention_method)
+
+    if (soil_water_retention_method == swrc_van_genuchten) then
+       ! These models compute soil suction from ELM's Clapp-Hornberger parameters with
+       ! their own retention curves, which would be inconsistent with van Genuchten
+       if (use_vsfm .or. use_pflotran .or. use_betr .or. use_fates_planthydro .or. use_vichydro) then
+          write(iulog,*)'use_vsfm = ',use_vsfm,', use_pflotran = ',use_pflotran,', use_betr = ',use_betr, &
+               ', use_fates_planthydro = ',use_fates_planthydro,', use_vichydro = ',use_vichydro
+          call endrun(msg=' ERROR:: soil_water_retention_model = van_genuchten_1980 is not supported with'// &
+               ' use_vsfm, use_pflotran, use_betr, use_fates_planthydro, or use_vichydro'//&
+               errMsg(__FILE__, __LINE__))
+       end if
+       call endrun(msg=' ERROR:: soil_water_retention_model = van_genuchten_1980 is not yet implemented'//&
+            errMsg(__FILE__, __LINE__))
+    end if
+
     if (masterproc) then
        write(iulog,*) 'Successfully initialized run control settings'
        write(iulog,*)
@@ -1148,6 +1181,10 @@ contains
     call mpi_bcast (use_arctic_init, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (soil_thermal_conductivity_model, len(soil_thermal_conductivity_model), MPI_CHARACTER, 0, mpicom, ier)
 
+    ! Soil water retention curve
+    call mpi_bcast (soil_water_retention_model, len(soil_water_retention_model), MPI_CHARACTER, 0, mpicom, ier)
+    call mpi_bcast (use_vg_porosity_for_bulk_density, 1, MPI_LOGICAL, 0, mpicom, ier)
+
   end subroutine control_spmd
 
   !------------------------------------------------------------------------
@@ -1468,6 +1505,12 @@ contains
     if (use_polygonal_tundra) write(iulog, *) '    use_polygonal_tundra    =', use_polygonal_tundra
     if (use_arctic_init) write(iulog, *)      '    use_arctic_init         =', use_arctic_init
     write(iulog, *) '    soil_thermal_conductivity_model =', trim(soil_thermal_conductivity_model)
+
+    ! Soil water retention curve
+    write(iulog, *) '    soil_water_retention_model =', trim(soil_water_retention_model)
+    if (soil_water_retention_method == swrc_van_genuchten) then
+       write(iulog, *) '    use_vg_porosity_for_bulk_density =', use_vg_porosity_for_bulk_density
+    end if
 
   end subroutine control_print
 

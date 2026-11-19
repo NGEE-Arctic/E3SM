@@ -439,6 +439,17 @@ module elm_varctl
   character(len=32), public :: soil_thermal_conductivity_model = 'farouki'  ! Soil thermal conductivity model: 'farouki' (default) or 'balland_and_arp'
 
   !----------------------------------------------------------
+  ! Soil water retention curve
+  !----------------------------------------------------------
+  character(len=32), public :: soil_water_retention_model = 'clapp_hornberger_1978' ! 'clapp_hornberger_1978' (default) or 'van_genuchten_1980'
+  logical          , public :: use_vg_porosity_for_bulk_density = .false.          ! van Genuchten only: bulk density from the vG porosity instead of Cosby et al. (1984)
+  integer, parameter, public :: swrc_clapp_hornberger = 0                          ! values of soil_water_retention_method
+  integer, parameter, public :: swrc_van_genuchten    = 1
+  integer          , public :: soil_water_retention_method = swrc_clapp_hornberger ! set from soil_water_retention_model in controlMod
+  !$acc declare copyin(swrc_clapp_hornberger, swrc_van_genuchten)
+  !$acc declare create(soil_water_retention_method)
+
+  !----------------------------------------------------------
   ! VSFM switches
   !----------------------------------------------------------
   logical          , public :: use_vsfm                    = .false.

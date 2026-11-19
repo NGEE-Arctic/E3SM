@@ -2411,4 +2411,27 @@ conductivity based on soil texture and moisture content.
 <default>Default: farouki</default>
 </entry>
 
+<entry id="soil_water_retention_model" type="char*32" category="default_settings"
+       group="elm_inparm" valid_values="clapp_hornberger_1978,van_genuchten_1980" value="clapp_hornberger_1978">
+Select the soil water retention curve and unsaturated hydraulic conductivity model.
+'clapp_hornberger_1978' (default) uses the Clapp and Hornberger (1978) power law with parameters
+from Cosby et al. (1984). 'van_genuchten_1980' uses the van Genuchten (1980) curve with Mualem (1976)
+conductivity, in the air-entry-modified form of Ippisch et al. (2006), with parameters from the
+Rosetta3 texture-class averages (Zhang and Schaap, 2017) mixed with peat values from Liu and Lennartz (2019).
+In van Genuchten mode, saturated hydraulic conductivity is unchanged, porosity comes from the van
+Genuchten parameters, and the Clapp-Hornberger b and saturated suction are replaced by their
+Lenhard et al. (1989) equivalents. 'van_genuchten_1980' cannot be combined with use_vsfm,
+use_pflotran, use_betr, use_fates_planthydro, or use_vichydro.
+<default>Default: clapp_hornberger_1978</default>
+</entry>
+
+<entry id="use_vg_porosity_for_bulk_density" type="logical" category="default_settings"
+       group="elm_inparm" value=".false.">
+Only used when soil_water_retention_model = 'van_genuchten_1980'. If .true., compute mineral soil
+bulk density from the van Genuchten porosity. If .false. (default), compute it from the Cosby et al.
+(1984) porosity, as in Clapp-Hornberger mode, so that bulk density, and the biogeochemistry that
+uses it, does not change with the retention model.
+<default>Default: .false.</default>
+</entry>
+
 </namelist_definition>
