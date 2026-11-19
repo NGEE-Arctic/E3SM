@@ -207,8 +207,8 @@ contains
    !Schaap publish H1w only as ratios to the Rosetta1 class averages (model H1 of Schaap et al.,
    !2001, J. Hydrol., 251, 163-176) in their Table 1, so both tables are kept here and the
    !product is formed below. Rosetta1 gives log10 of alpha in 1/cm and of n; the alpha and n
-   !ratios apply to the anti-logged class means.
-   !TODO(verify): Rosetta1 values transcribed from memory, not yet checked against a primary source.
+   !ratios apply to the anti-logged class means. The Rosetta1 values are the class-average
+   !table distributed with Rosetta (theta_r, theta_s, log10 alpha, log10 n).
    use shr_kind_mod         , only : r8 => shr_kind_r8
    use abortutils           , only : endrun
    implicit none
