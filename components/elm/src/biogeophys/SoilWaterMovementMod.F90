@@ -269,6 +269,8 @@ contains
     ! !USES:
       !$acc routine seq
     use elm_varctl           , only : use_var_soil_thick
+    use elm_varctl           , only : soil_water_retention_method, swrc_clapp_hornberger
+    use SoilWaterRetentionVanGenuchtenMod, only : vg_suction, vg_hk, vg_theta_from_suction, vg_layer_mean_theta_eq
     use shr_kind_mod         , only : r8 => shr_kind_r8
     use shr_const_mod        , only : SHR_CONST_TKFRZ, SHR_CONST_LATICE, SHR_CONST_G
     use decompMod            , only : bounds_type
@@ -345,9 +347,14 @@ contains
     real(r8) :: dsmpds                                       !temporary variable
     real(r8) :: dhkds                                        !temporary variable
     real(r8) :: hktmp                                        !temporary variable
+    real(r8) :: se                                           ! van Genuchten effective saturation [-]
+    integer  :: jn                                           ! layer index below j (van Genuchten)
     !-----------------------------------------------------------------------
 
     associate(&
+         watres            =>    soilstate_vars%watres_col          , & ! Input:  [real(r8) (:,:) ]  residual volumetric soil water (van Genuchten)
+         vg_alpha          =>    soilstate_vars%vg_alpha_col        , & ! Input:  [real(r8) (:,:) ]  van Genuchten alpha (1/mm)
+         vg_n              =>    soilstate_vars%vg_n_col            , & ! Input:  [real(r8) (:,:) ]  van Genuchten n (-)
          z                 =>    col_pp%z                              , & ! Input:  [real(r8) (:,:) ]  layer depth (m)
          zi                =>    col_pp%zi                             , & ! Input:  [real(r8) (:,:) ]  interface level below a "z" level (m)
          dz                =>    col_pp%dz                             , & ! Input:  [real(r8) (:,:) ]  layer thickness (m)
@@ -439,8 +446,15 @@ contains
                if(zwt(c) <= zi(c,j)) then
                   smp1 = hfus*(tfrz-t_soisno(c,j))/(grav*t_soisno(c,j)) * 1000._r8  !(mm)
                   !smp1 = max(0._r8,smp1)
-                  smp1 = max(sucsat(c,nlevsoi),smp1)
-                  vwc_zwt(c) = watsat(c,nlevsoi)*(smp1/sucsat(c,nlevbed))**(-1._r8/bsw(c,nlevsoi))
+                  if (soil_water_retention_method == swrc_clapp_hornberger) then
+                     smp1 = max(sucsat(c,nlevsoi),smp1)
+                     vwc_zwt(c) = watsat(c,nlevsoi)*(smp1/sucsat(c,nlevbed))**(-1._r8/bsw(c,nlevsoi))
+                  else
+                     ! liquid water content at the freezing-point-depression suction; the
+                     ! curve is saturated for suctions below the air-entry value
+                     vwc_zwt(c) = vg_theta_from_suction(-smp1, watsat(c,nlevbed), watres(c,nlevbed), &
+                          vg_alpha(c,nlevbed), vg_n(c,nlevbed))
+                  end if
                   ! for temperatures close to tfrz, limit vwc to total water content
                   vwc_zwt(c) = min(vwc_zwt(c), 0.5*(watsat(c,nlevbed) + h2osoi_vol(c,nlevbed)) )
                   exit
@@ -451,118 +465,175 @@ contains
 
       ! calculate the equilibrium water content based on the water table depth
 
-      do fc = 1, num_hydrologyc
-         c = filter_hydrologyc(fc)
-         nlevbed = nlev2bed(c)
-         do j = 1, nlevbed
-            if ((zwtmm(c) <= zimm(c,j-1))) then
-               vol_eq(c,j) = watsat(c,j)
+      if (soil_water_retention_method == swrc_clapp_hornberger) then
+         do fc = 1, num_hydrologyc
+            c = filter_hydrologyc(fc)
+            nlevbed = nlev2bed(c)
+            do j = 1, nlevbed
+               if ((zwtmm(c) <= zimm(c,j-1))) then
+                  vol_eq(c,j) = watsat(c,j)
 
-               ! use the weighted average from the saturated part (depth > wtd) and the equilibrium solution for the
-               ! rest of the layer, the equilibrium solution is based on Clapp-Hornberg parameterization
-               ! and no extension to full range swrc is needed
+                  ! use the weighted average from the saturated part (depth > wtd) and the equilibrium solution for the
+                  ! rest of the layer, the equilibrium solution is based on Clapp-Hornberg parameterization
+                  ! and no extension to full range swrc is needed
 
-            else if ((zwtmm(c) .lt. zimm(c,j)) .and. (zwtmm(c) .gt. zimm(c,j-1))) then
-               tempi = 1.0_r8
-               temp0 = (((sucsat(c,j)+zwtmm(c)-zimm(c,j-1))/sucsat(c,j)))**(1._r8-1._r8/bsw(c,j))
-               voleq1 = -sucsat(c,j)*watsat(c,j)/(1._r8-1._r8/bsw(c,j))/(zwtmm(c)-zimm(c,j-1))*(tempi-temp0)
-               vol_eq(c,j) = (voleq1*(zwtmm(c)-zimm(c,j-1)) + watsat(c,j)*(zimm(c,j)-zwtmm(c)))/(zimm(c,j)-zimm(c,j-1))
-               vol_eq(c,j) = min(watsat(c,j),vol_eq(c,j))
-               vol_eq(c,j) = max(vol_eq(c,j),0.0_r8)
-            else
-               tempi = (((sucsat(c,j)+zwtmm(c)-zimm(c,j))/sucsat(c,j)))**(1._r8-1._r8/bsw(c,j))
-               temp0 = (((sucsat(c,j)+zwtmm(c)-zimm(c,j-1))/sucsat(c,j)))**(1._r8-1._r8/bsw(c,j))
-               vol_eq(c,j) = -sucsat(c,j)*watsat(c,j)/(1._r8-1._r8/bsw(c,j))/(zimm(c,j)-zimm(c,j-1))*(tempi-temp0)
-               vol_eq(c,j) = max(vol_eq(c,j),0.0_r8)
-               vol_eq(c,j) = min(watsat(c,j),vol_eq(c,j))
-            endif
-            zq(c,j) = -sucsat(c,j)*(max(vol_eq(c,j)/watsat(c,j),0.01_r8))**(-bsw(c,j))
-            zq(c,j) = max(smpmin(c), zq(c,j))
+               else if ((zwtmm(c) .lt. zimm(c,j)) .and. (zwtmm(c) .gt. zimm(c,j-1))) then
+                  tempi = 1.0_r8
+                  temp0 = (((sucsat(c,j)+zwtmm(c)-zimm(c,j-1))/sucsat(c,j)))**(1._r8-1._r8/bsw(c,j))
+                  voleq1 = -sucsat(c,j)*watsat(c,j)/(1._r8-1._r8/bsw(c,j))/(zwtmm(c)-zimm(c,j-1))*(tempi-temp0)
+                  vol_eq(c,j) = (voleq1*(zwtmm(c)-zimm(c,j-1)) + watsat(c,j)*(zimm(c,j)-zwtmm(c)))/(zimm(c,j)-zimm(c,j-1))
+                  vol_eq(c,j) = min(watsat(c,j),vol_eq(c,j))
+                  vol_eq(c,j) = max(vol_eq(c,j),0.0_r8)
+               else
+                  tempi = (((sucsat(c,j)+zwtmm(c)-zimm(c,j))/sucsat(c,j)))**(1._r8-1._r8/bsw(c,j))
+                  temp0 = (((sucsat(c,j)+zwtmm(c)-zimm(c,j-1))/sucsat(c,j)))**(1._r8-1._r8/bsw(c,j))
+                  vol_eq(c,j) = -sucsat(c,j)*watsat(c,j)/(1._r8-1._r8/bsw(c,j))/(zimm(c,j)-zimm(c,j-1))*(tempi-temp0)
+                  vol_eq(c,j) = max(vol_eq(c,j),0.0_r8)
+                  vol_eq(c,j) = min(watsat(c,j),vol_eq(c,j))
+               endif
+               zq(c,j) = -sucsat(c,j)*(max(vol_eq(c,j)/watsat(c,j),0.01_r8))**(-bsw(c,j))
+               zq(c,j) = max(smpmin(c), zq(c,j))
+            end do
          end do
-      end do
 
-      ! If water table is below soil column calculate zq for the 11th layer
-      do fc=1, num_hydrologyc
-         c = filter_hydrologyc(fc)
-         j = nlev2bed(c)
-         if(jwt(c) == nlevbed) then
-            tempi = 1._r8
-            temp0 = (((sucsat(c,j)+zwtmm(c)-zimm(c,j))/sucsat(c,j)))**(1._r8-1._r8/bsw(c,j))
-            delta_z_zwt = zwtmm(c) - zimm(c,j)
-            if(delta_z_zwt == 0._r8) delta_z_zwt = 1._r8
-            vol_eq(c,j+1) = -sucsat(c,j)*watsat(c,j)/(1._r8-1._r8/bsw(c,j))/(delta_z_zwt)*(tempi-temp0)
-            vol_eq(c,j+1) = max(vol_eq(c,j+1),0.0_r8)
-            vol_eq(c,j+1) = min(watsat(c,j),vol_eq(c,j+1))
-            zq(c,j+1) = -sucsat(c,j)*(max(vol_eq(c,j+1)/watsat(c,j),0.01_r8))**(-bsw(c,j))
-            zq(c,j+1) = max(smpmin(c), zq(c,j+1))
-         end if
-      end do
+         ! If water table is below soil column calculate zq for the 11th layer
+         do fc=1, num_hydrologyc
+            c = filter_hydrologyc(fc)
+            j = nlev2bed(c)
+            if(jwt(c) == nlevbed) then
+               tempi = 1._r8
+               temp0 = (((sucsat(c,j)+zwtmm(c)-zimm(c,j))/sucsat(c,j)))**(1._r8-1._r8/bsw(c,j))
+               delta_z_zwt = zwtmm(c) - zimm(c,j)
+               if(delta_z_zwt == 0._r8) delta_z_zwt = 1._r8
+               vol_eq(c,j+1) = -sucsat(c,j)*watsat(c,j)/(1._r8-1._r8/bsw(c,j))/(delta_z_zwt)*(tempi-temp0)
+               vol_eq(c,j+1) = max(vol_eq(c,j+1),0.0_r8)
+               vol_eq(c,j+1) = min(watsat(c,j),vol_eq(c,j+1))
+               zq(c,j+1) = -sucsat(c,j)*(max(vol_eq(c,j+1)/watsat(c,j),0.01_r8))**(-bsw(c,j))
+               zq(c,j+1) = max(smpmin(c), zq(c,j+1))
+            end if
+         end do
+      else
+         ! van Genuchten: the layer-mean equilibrium water content of a hydrostatic profile
+         ! with smp = -vg_he at the water table has no closed form, so it is integrated
+         ! numerically; a saturated layer gives zq = -vg_he, the suction at saturation
+         do fc = 1, num_hydrologyc
+            c = filter_hydrologyc(fc)
+            nlevbed = nlev2bed(c)
+            do j = 1, nlevbed
+               vol_eq(c,j) = vg_layer_mean_theta_eq(zimm(c,j-1), zimm(c,j), zwtmm(c), &
+                    watsat(c,j), watres(c,j), vg_alpha(c,j), vg_n(c,j))
+               call vg_suction(vol_eq(c,j)/watsat(c,j), watres(c,j)/watsat(c,j), &
+                    vg_alpha(c,j), vg_n(c,j), smpmin(c), zq(c,j), dsmpds)
+            end do
+         end do
+
+         ! If water table is below soil column calculate zq for the layer between the
+         ! column bottom and the water table, with the parameters of the bottom layer
+         do fc=1, num_hydrologyc
+            c = filter_hydrologyc(fc)
+            j = nlev2bed(c)
+            if(jwt(c) == j) then
+               vol_eq(c,j+1) = vg_layer_mean_theta_eq(zimm(c,j), zwtmm(c), zwtmm(c), &
+                    watsat(c,j), watres(c,j), vg_alpha(c,j), vg_n(c,j))
+               call vg_suction(vol_eq(c,j+1)/watsat(c,j), watres(c,j)/watsat(c,j), &
+                    vg_alpha(c,j), vg_n(c,j), smpmin(c), zq(c,j+1), dsmpds)
+            end if
+         end do
+      end if
 
       ! Hydraulic conductivity and soil matric potential and their derivatives
 
       sdamp = 0._r8
-      do fc = 1, num_hydrologyc
-         c = filter_hydrologyc(fc)
-         nlevbed = nlev2bed(c)
-         do j = 1, nlevbed
-            ! compute hydraulic conductivity based on liquid water content only
+      if (soil_water_retention_method == swrc_clapp_hornberger) then
+         do fc = 1, num_hydrologyc
+            c = filter_hydrologyc(fc)
+            nlevbed = nlev2bed(c)
+            do j = 1, nlevbed
+               ! compute hydraulic conductivity based on liquid water content only
 
-            if (origflag == 1) then
-               s1 = 0.5_r8*(h2osoi_vol(c,j) + h2osoi_vol(c,min(nlevsoi, j+1))) / &
-                    (0.5_r8*(watsat(c,j)+watsat(c,min(nlevsoi, j+1))))
-            else
-               s1 = 0.5_r8*(vwc_liq(c,j) + vwc_liq(c,min(nlevsoi, j+1))) / &
-                    (0.5_r8*(watsat(c,j)+watsat(c,min(nlevsoi, j+1))))
-            endif
-            s1 = min(1._r8, s1)
-            s2 = hksat(c,j)*s1**(2._r8*bsw(c,j)+2._r8)
+               if (origflag == 1) then
+                  s1 = 0.5_r8*(h2osoi_vol(c,j) + h2osoi_vol(c,min(nlevsoi, j+1))) / &
+                       (0.5_r8*(watsat(c,j)+watsat(c,min(nlevsoi, j+1))))
+               else
+                  s1 = 0.5_r8*(vwc_liq(c,j) + vwc_liq(c,min(nlevsoi, j+1))) / &
+                       (0.5_r8*(watsat(c,j)+watsat(c,min(nlevsoi, j+1))))
+               endif
+               s1 = min(1._r8, s1)
+               s2 = hksat(c,j)*s1**(2._r8*bsw(c,j)+2._r8)
 
-            ! replace fracice with impedance factor, as in zhao 97,99
-            if (origflag == 1) then
-               imped(c,j)=(1._r8-0.5_r8*(fracice(c,j)+fracice(c,min(nlevsoi, j+1))))
-            else
-               imped(c,j)=10._r8**(-e_ice*(0.5_r8*(icefrac(c,j)+icefrac(c,min(nlevsoi, j+1)))))
-            endif
-            hk(c,j) = imped(c,j)*s1*s2
-            dhkdw(c,j) = imped(c,j)*(2._r8*bsw(c,j)+3._r8)*s2* &
-                 (1._r8/(watsat(c,j)+watsat(c,min(nlevsoi, j+1))))
+               ! replace fracice with impedance factor, as in zhao 97,99
+               if (origflag == 1) then
+                  imped(c,j)=(1._r8-0.5_r8*(fracice(c,j)+fracice(c,min(nlevsoi, j+1))))
+               else
+                  imped(c,j)=10._r8**(-e_ice*(0.5_r8*(icefrac(c,j)+icefrac(c,min(nlevsoi, j+1)))))
+               endif
+               hk(c,j) = imped(c,j)*s1*s2
+               dhkdw(c,j) = imped(c,j)*(2._r8*bsw(c,j)+3._r8)*s2* &
+                    (1._r8/(watsat(c,j)+watsat(c,min(nlevsoi, j+1))))
 
-            !compute un-restricted hydraulic conductivity
-            !call soil_water_retention_curve%soil_hk(hksat(c,j), imped(c,j), s1, bsw(c,j), hktmp, dhkds)
-            !if(hktmp/=hk(c,j))write(10,*)'diff',hktmp,hk(c,j)
-            !    call endrun('bad in hk')
-            !endif
-            !apply ice impedance
-            !hk(c,j) = imped(c,j)*hk(c,j)
-            !dhkdw(c,j) = imped(c,j) * dhkds * (1._r8/(watsat(c,j)+watsat(c,min(nlevsoi, j+1))))
+               !compute un-restricted hydraulic conductivity
+               !call soil_water_retention_curve%soil_hk(hksat(c,j), imped(c,j), s1, bsw(c,j), hktmp, dhkds)
+               !if(hktmp/=hk(c,j))write(10,*)'diff',hktmp,hk(c,j)
+               !    call endrun('bad in hk')
+               !endif
+               !apply ice impedance
+               !hk(c,j) = imped(c,j)*hk(c,j)
+               !dhkdw(c,j) = imped(c,j) * dhkds * (1._r8/(watsat(c,j)+watsat(c,min(nlevsoi, j+1))))
 
 
-            ! compute matric potential and derivative based on liquid water content only
-            if (origflag == 1) then
-               s_node = max(h2osoi_vol(c,j)/watsat(c,j), 0.01_r8)
-            else
-               s_node = max(vwc_liq(c,j)/watsat(c,j), 0.01_r8)
-            endif
-            s_node = min(1.0_r8, s_node)
+               ! compute matric potential and derivative based on liquid water content only
+               if (origflag == 1) then
+                  s_node = max(h2osoi_vol(c,j)/watsat(c,j), 0.01_r8)
+               else
+                  s_node = max(vwc_liq(c,j)/watsat(c,j), 0.01_r8)
+               endif
+               s_node = min(1.0_r8, s_node)
 
-            !call soil_water_retention_curve%soil_suction(sucsat(c,j), s_node, bsw(c,j), smp(c,j), dsmpds)
+               !call soil_water_retention_curve%soil_suction(sucsat(c,j), s_node, bsw(c,j), smp(c,j), dsmpds)
 
-            smp(c,j) = -sucsat(c,j)*s_node**(-bsw(c,j))
-            smp(c,j) = max(smpmin(c), smp(c,j))
-            !do not turn on the line below, which will cause bit to bit error, jyt, 2014 Mar 6
-            !dsmpdw(c,j) = dsmpds/watsat(c,j)
+               smp(c,j) = -sucsat(c,j)*s_node**(-bsw(c,j))
+               smp(c,j) = max(smpmin(c), smp(c,j))
+               !do not turn on the line below, which will cause bit to bit error, jyt, 2014 Mar 6
+               !dsmpdw(c,j) = dsmpds/watsat(c,j)
 
-            if (origflag == 1) then
-               dsmpdw(c,j) = -bsw(c,j)*smp(c,j)/(s_node*watsat(c,j))
-            else
-               dsmpdw(c,j) = -bsw(c,j)*smp(c,j)/vwc_liq(c,j)
-            endif
+               if (origflag == 1) then
+                  dsmpdw(c,j) = -bsw(c,j)*smp(c,j)/(s_node*watsat(c,j))
+               else
+                  dsmpdw(c,j) = -bsw(c,j)*smp(c,j)/vwc_liq(c,j)
+               endif
 
-            smp_l(c,j) = smp(c,j)
-            hk_l(c,j) = hk(c,j)
+               smp_l(c,j) = smp(c,j)
+               hk_l(c,j) = hk(c,j)
 
+            end do
          end do
-      end do
+      else
+         ! van Genuchten, liquid water content only (origflag = 0)
+         do fc = 1, num_hydrologyc
+            c = filter_hydrologyc(fc)
+            nlevbed = nlev2bed(c)
+            do j = 1, nlevbed
+               jn = min(nlevbed, j+1)
+
+               ! hydraulic conductivity at the interface below layer j, from the effective
+               ! saturation of layers j and jn pooled, with layer j's parameters; d(se)/d(vol_liq)
+               ! is then the same for both layers, as dhkdw assumes
+               se = (vwc_liq(c,j) + vwc_liq(c,jn) - watres(c,j) - watres(c,jn)) / &
+                    (watsat(c,j) + watsat(c,jn) - watres(c,j) - watres(c,jn))
+               imped(c,j)=10._r8**(-e_ice*(0.5_r8*(icefrac(c,j)+icefrac(c,jn))))
+               call vg_hk(hksat(c,j), imped(c,j), se, vg_alpha(c,j), vg_n(c,j), hk(c,j), dhkds)
+               dhkdw(c,j) = dhkds/(watsat(c,j) + watsat(c,jn) - watres(c,j) - watres(c,jn))
+
+               ! matric potential and its derivative with respect to vol_liq
+               call vg_suction(vwc_liq(c,j)/watsat(c,j), watres(c,j)/watsat(c,j), &
+                    vg_alpha(c,j), vg_n(c,j), smpmin(c), smp(c,j), dsmpds)
+               dsmpdw(c,j) = dsmpds/watsat(c,j)
+
+               smp_l(c,j) = smp(c,j)
+               hk_l(c,j) = hk(c,j)
+            end do
+         end do
+      end if
 
       ! aquifer (11th) layer
       do fc = 1, num_hydrologyc
@@ -648,22 +719,30 @@ contains
             cmx(c,j+1) = 0._r8
          else ! water table is below soil column
 
-            ! compute aquifer soil moisture as average of layer 10 and saturation
-            if(origflag == 1) then
-               s_node = max(0.5*(1.0_r8+h2osoi_vol(c,j)/watsat(c,j)), 0.01_r8)
+            if (soil_water_retention_method == swrc_clapp_hornberger) then
+               ! compute aquifer soil moisture as average of layer 10 and saturation
+               if(origflag == 1) then
+                  s_node = max(0.5*(1.0_r8+h2osoi_vol(c,j)/watsat(c,j)), 0.01_r8)
+               else
+                  s_node = max(0.5*((vwc_zwt(c)+vwc_liq(c,j))/watsat(c,j)), 0.01_r8)
+               endif
+               s_node = min(1.0_r8, s_node)
+
+               ! compute smp for aquifer layer
+               !call soil_water_retention_curve%soil_suction(sucsat(c,j), s_node, bsw(c,j), smp1, dsmpds)
+               smp1 = -sucsat(c,j)*s_node**(-bsw(c,j))
+               smp1 = max(smpmin(c), smp1)
+
+               ! compute dsmpdw for aquifer layer
+               !dsmpdw1 = dsmpds/watsat(c,j)
+               dsmpdw1 = -bsw(c,j)*smp1/(s_node*watsat(c,j))
             else
-               s_node = max(0.5*((vwc_zwt(c)+vwc_liq(c,j))/watsat(c,j)), 0.01_r8)
-            endif
-            s_node = min(1.0_r8, s_node)
-
-            ! compute smp for aquifer layer
-            !call soil_water_retention_curve%soil_suction(sucsat(c,j), s_node, bsw(c,j), smp1, dsmpds)
-            smp1 = -sucsat(c,j)*s_node**(-bsw(c,j))
-            smp1 = max(smpmin(c), smp1)
-
-            ! compute dsmpdw for aquifer layer
-            !dsmpdw1 = dsmpds/watsat(c,j)
-            dsmpdw1 = -bsw(c,j)*smp1/(s_node*watsat(c,j))
+               ! van Genuchten: aquifer water content is the average of the bottom layer and
+               ! the water table, with the parameters of the bottom layer
+               call vg_suction(0.5_r8*(vwc_zwt(c)+vwc_liq(c,j))/watsat(c,j), watres(c,j)/watsat(c,j), &
+                    vg_alpha(c,j), vg_n(c,j), smpmin(c), smp1, dsmpds)
+               dsmpdw1 = dsmpds/watsat(c,j)
+            end if
 
             ! first set up bottom layer of soil column
             den    = (zmm(c,j) - zmm(c,j-1))
@@ -756,19 +835,27 @@ contains
             if (jwt(c) < nlevbed) then
                wh_zwt = 0._r8   !since wh_zwt = -sucsat - zq_zwt, where zq_zwt = -sucsat
 
-               ! Recharge rate qcharge to groundwater (positive to aquifer)
-               s_node = max(h2osoi_vol(c,jwt(c)+1)/watsat(c,jwt(c)+1), 0.01_r8)
-               s1 = min(1._r8, s_node)
+               if (soil_water_retention_method == swrc_clapp_hornberger) then
+                  ! Recharge rate qcharge to groundwater (positive to aquifer)
+                  s_node = max(h2osoi_vol(c,jwt(c)+1)/watsat(c,jwt(c)+1), 0.01_r8)
+                  s1 = min(1._r8, s_node)
 
-               !scs: this is the expression for unsaturated hk
-               ka = imped(c,jwt(c)+1)*hksat(c,jwt(c)+1) &
-                 *s1**(2._r8*bsw(c,jwt(c)+1)+3._r8)
+                  !scs: this is the expression for unsaturated hk
+                  ka = imped(c,jwt(c)+1)*hksat(c,jwt(c)+1) &
+                    *s1**(2._r8*bsw(c,jwt(c)+1)+3._r8)
 
-               !compute unsaturated hk, this shall be tested later, because it
-               !is not bit for bit
-               !call soil_water_retention_curve%soil_hk(hksat(c,jwt(c)+1), s1, bsw(c,jwt(c)+1), ka)
-               !apply ice impedance
-               !ka = imped(c,jwt(c)+1) * ka
+                  !compute unsaturated hk, this shall be tested later, because it
+                  !is not bit for bit
+                  !call soil_water_retention_curve%soil_hk(hksat(c,jwt(c)+1), s1, bsw(c,jwt(c)+1), ka)
+                  !apply ice impedance
+                  !ka = imped(c,jwt(c)+1) * ka
+               else
+                  ! van Genuchten unsaturated hk of the layer above the water table, from total
+                  ! water as above; wh_zwt = 0 still holds since smp = zq = -vg_he at the water table
+                  jn = jwt(c)+1
+                  se = (h2osoi_vol(c,jn) - watres(c,jn))/(watsat(c,jn) - watres(c,jn))
+                  call vg_hk(hksat(c,jn), imped(c,jn), se, vg_alpha(c,jn), vg_n(c,jn), ka, dhkds)
+               end if
                ! Recharge rate qcharge to groundwater (positive to aquifer)
                smp1 = max(smpmin(c), smp(c,max(1,jwt(c))))
                wh      = smp1 - zq(c,max(1,jwt(c)))
@@ -793,19 +880,27 @@ contains
             if (jwt(c) < nlevbed) then
                wh_zwt = 0._r8   !since wh_zwt = -sucsat - zq_zwt, where zq_zwt = -sucsat
 
-               ! Recharge rate qcharge to groundwater (positive to aquifer)
-               s_node = max(h2osoi_vol(c,jwt(c)+1)/watsat(c,jwt(c)+1), 0.01_r8)
-               s1 = min(1._r8, s_node)
+               if (soil_water_retention_method == swrc_clapp_hornberger) then
+                  ! Recharge rate qcharge to groundwater (positive to aquifer)
+                  s_node = max(h2osoi_vol(c,jwt(c)+1)/watsat(c,jwt(c)+1), 0.01_r8)
+                  s1 = min(1._r8, s_node)
 
-               !scs: this is the expression for unsaturated hk
-               ka = imped(c,jwt(c)+1)*hksat(c,jwt(c)+1) &
-                 *s1**(2._r8*bsw(c,jwt(c)+1)+3._r8)
+                  !scs: this is the expression for unsaturated hk
+                  ka = imped(c,jwt(c)+1)*hksat(c,jwt(c)+1) &
+                    *s1**(2._r8*bsw(c,jwt(c)+1)+3._r8)
 
-               !compute unsaturated hk, this shall be tested later, because it
-               !is not bit for bit
-               !call soil_water_retention_curve%soil_hk(hksat(c,jwt(c)+1), s1, bsw(c,jwt(c)+1), ka)
-               !apply ice impedance
-               !ka = imped(c,jwt(c)+1) * ka
+                  !compute unsaturated hk, this shall be tested later, because it
+                  !is not bit for bit
+                  !call soil_water_retention_curve%soil_hk(hksat(c,jwt(c)+1), s1, bsw(c,jwt(c)+1), ka)
+                  !apply ice impedance
+                  !ka = imped(c,jwt(c)+1) * ka
+               else
+                  ! van Genuchten unsaturated hk of the layer above the water table, from total
+                  ! water as above; wh_zwt = 0 still holds since smp = zq = -vg_he at the water table
+                  jn = jwt(c)+1
+                  se = (h2osoi_vol(c,jn) - watres(c,jn))/(watsat(c,jn) - watres(c,jn))
+                  call vg_hk(hksat(c,jn), imped(c,jn), se, vg_alpha(c,jn), vg_n(c,jn), ka, dhkds)
+               end if
                ! Recharge rate qcharge to groundwater (positive to aquifer)
                smp1 = max(smpmin(c), smp(c,max(1,jwt(c))))
                wh      = smp1 - zq(c,max(1,jwt(c)))
