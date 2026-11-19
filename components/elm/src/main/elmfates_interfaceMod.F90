@@ -135,6 +135,8 @@ module ELMFatesInterfaceMod
    use elm_varcon        , only : dzsoi_decomp
    use FuncPedotransferMod, only: get_ipedof
    use SoilWaterRetentionCurveMod, only : soil_water_retention_curve_type
+   use elm_varctl        , only : soil_water_retention_method, swrc_clapp_hornberger
+   use SoilWaterRetentionVanGenuchtenMod, only : vg_suction
 
    ! Used FATES Modules
    use FatesConstantsMod     , only : ifalse,itrue
@@ -1186,6 +1188,7 @@ contains
       integer  :: nlevsoil                 ! number of soil layers at the site
       integer  :: ier                      ! allocate status code
       real(r8) :: s_node, smp_node         ! local for relative water content and potential
+      real(r8) :: dsmpds                   ! d(smp_node)/ds, unused (van Genuchten)
       logical  :: nitr_suppl,phos_suppl    ! Is ELM currently supplementing N or P?
       real(r8), pointer :: lnfm24(:)       ! 24-hour averaged lightning data
       real(r8), pointer :: gdp_lf_col(:)          ! gdp data
@@ -1279,11 +1282,19 @@ contains
 
          do j = 1,nlevsoil
             if(this%fates(nc)%bc_out(s)%active_suction_sl(j)) then
-               s_node = max(col_ws%h2osoi_liqvol(c,j)/soilstate_inst%eff_porosity_col(c,j) ,0.01_r8)
-               call soil_water_retention_curve%soil_suction(soilstate_inst%sucsat_col(c,j), &
-                       s_node, &
-                       soilstate_inst%bsw_col(c,j), &
-                       smp_node)
+               if (soil_water_retention_method == swrc_clapp_hornberger) then
+                  s_node = max(col_ws%h2osoi_liqvol(c,j)/soilstate_inst%eff_porosity_col(c,j) ,0.01_r8)
+                  call soil_water_retention_curve%soil_suction(soilstate_inst%sucsat_col(c,j), &
+                          s_node, &
+                          soilstate_inst%bsw_col(c,j), &
+                          smp_node)
+               else
+                  ! van Genuchten curve scaled to the effective porosity, as for non-FATES btran
+                  call vg_suction(col_ws%h2osoi_liqvol(c,j)/soilstate_inst%eff_porosity_col(c,j), &
+                          soilstate_inst%watres_col(c,j)/soilstate_inst%watsat_col(c,j), &
+                          soilstate_inst%vg_alpha_col(c,j), soilstate_inst%vg_n_col(c,j), &
+                          soilstate_inst%smpmin_col(c), smp_node, dsmpds)
+               end if
                this%fates(nc)%bc_in(s)%smp_sl(j) = smp_node
             end if
          end do
@@ -2444,6 +2455,7 @@ contains
       ! local variables
       real(r8) :: smp_node ! Soil suction potential, negative, [mm]
       real(r8) :: s_node
+      real(r8) :: dsmpds   ! d(smp_node)/ds, unused (van Genuchten)
       integer  :: s
       integer  :: c
       integer  :: j
@@ -2535,11 +2547,19 @@ contains
 
            do j = 1,nlevsoil
               if(this%fates(nc)%bc_out(s)%active_suction_sl(j)) then
-                 s_node = max(h2osoi_liqvol(c,j)/eff_porosity(c,j),0.01_r8)
-                 call soil_water_retention_curve%soil_suction( soilstate_inst%sucsat_col(c,j), &
-                       s_node, &
-                       soilstate_inst%bsw_col(c,j), &
-                       smp_node)
+                 if (soil_water_retention_method == swrc_clapp_hornberger) then
+                    s_node = max(h2osoi_liqvol(c,j)/eff_porosity(c,j),0.01_r8)
+                    call soil_water_retention_curve%soil_suction( soilstate_inst%sucsat_col(c,j), &
+                          s_node, &
+                          soilstate_inst%bsw_col(c,j), &
+                          smp_node)
+                 else
+                    ! van Genuchten curve scaled to the effective porosity, as for non-FATES btran
+                    call vg_suction(h2osoi_liqvol(c,j)/eff_porosity(c,j), &
+                          soilstate_inst%watres_col(c,j)/soilstate_inst%watsat_col(c,j), &
+                          soilstate_inst%vg_alpha_col(c,j), soilstate_inst%vg_n_col(c,j), &
+                          soilstate_inst%smpmin_col(c), smp_node, dsmpds)
+                 end if
 
                  ! Non-fates places a maximum (which is a negative upper bound) on smp
 

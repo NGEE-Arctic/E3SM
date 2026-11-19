@@ -1422,6 +1422,8 @@ contains
       !$acc routine seq
     use elm_varpar       , only : nlevsno, nlevgrnd,nlevurb
     use elm_varctl       , only : iulog, use_polygonal_tundra
+    use elm_varctl       , only : soil_water_retention_method, swrc_clapp_hornberger
+    use SoilWaterRetentionVanGenuchtenMod, only : vg_theta_from_suction
     use elm_varcon       , only : tfrz, hfus, grav, denice
     use elm_time_manager , only : get_curr_date
     use column_varcon    , only : icol_roof, icol_sunwall, icol_shadewall, icol_road_perv
@@ -1456,6 +1458,9 @@ contains
     call t_startf('PhaseChangebeta')
 
     associate(                                                        &
+         watres           =>    soilstate_vars%watres_col           , & ! Input:  [real(r8) (:,:) ] residual volumetric soil water (van Genuchten)
+         vg_alpha         =>    soilstate_vars%vg_alpha_col         , & ! Input:  [real(r8) (:,:) ] van Genuchten alpha (1/mm)
+         vg_n             =>    soilstate_vars%vg_n_col             , & ! Input:  [real(r8) (:,:) ] van Genuchten n (-)
          snl              =>    col_pp%snl                             , & ! Input:  [integer  (:)   ] number of snow layers
          dz               =>    col_pp%dz                              , & ! Input:  [real(r8) (:,:) ] layer thickness (m)
 
@@ -1612,7 +1617,14 @@ contains
                if (col_pp%is_soil(c) .or. col_pp%is_crop(c) .or. col_pp%itype(c) == icol_road_perv) then
                   if(t_soisno(c,j) < tfrz) then
                      smp_i(c,j) = hfus*(tfrz-t_soisno(c,j))/(grav*t_soisno(c,j)) * 1000._r8  !(mm)
-                     supercool(c,j) = watsat(c,j)*(smp_i(c,j)/sucsat(c,j))**(-1._r8/bsw(c,j))
+                     if (soil_water_retention_method == swrc_clapp_hornberger) then
+                        supercool(c,j) = watsat(c,j)*(smp_i(c,j)/sucsat(c,j))**(-1._r8/bsw(c,j))
+                     else
+                        ! liquid water content in equilibrium with ice at the freezing-point-
+                        ! depression suction (saturated below the air-entry suction)
+                        supercool(c,j) = vg_theta_from_suction(-smp_i(c,j), watsat(c,j), watres(c,j), &
+                             vg_alpha(c,j), vg_n(c,j))
+                     end if
                      supercool(c,j) = supercool(c,j)*dz(c,j)*1000._r8       ! (mm)
                   endif
                endif

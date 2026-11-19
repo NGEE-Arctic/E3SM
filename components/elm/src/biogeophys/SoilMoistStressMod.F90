@@ -320,6 +320,8 @@ contains
     use EnergyFluxType       , only : energyflux_type
     use VegetationType            , only : veg_pp
     use elm_varctl       , only : use_hydrstress
+    use elm_varctl       , only : soil_water_retention_method, swrc_clapp_hornberger
+    use SoilWaterRetentionVanGenuchtenMod, only : vg_suction
     !
     ! !ARGUMENTS:
     implicit none
@@ -335,12 +337,16 @@ contains
     real(r8), parameter :: btran0 = 0.0_r8  ! initial value
     real(r8) :: smp_node, s_node  !temporary variables
     real(r8) :: smp_node_lf       !temporary variable
+    real(r8) :: dsmpds            !d(smp)/ds, unused (van Genuchten)
     integer :: p, f, j, c, l      !indices
     !------------------------------------------------------------------------------
 
     ! Enforce expected array sizes
 
     associate(                                                &
+         watres        => soilstate_vars%watres_col         , & ! Input:  [real(r8) (:,:) ]  residual volumetric soil water (van Genuchten)  (constant)
+         vg_alpha      => soilstate_vars%vg_alpha_col       , & ! Input:  [real(r8) (:,:) ]  van Genuchten alpha (1/mm)                      (constant)
+         vg_n          => soilstate_vars%vg_n_col           , & ! Input:  [real(r8) (:,:) ]  van Genuchten n (-)                             (constant)
          smpso         => veg_vp%smpso                  , & ! Input:  [real(r8) (:)   ]  soil water potential at full stomatal opening (mm)
          smpsc         => veg_vp%smpsc                  , & ! Input:  [real(r8) (:)   ]  soil water potential at full stomatal closure (mm)
          tc_stress     => veg_vp%tc_stress              , & ! Input:  [real(r8)       ]  critical soil temperature for soil water stress (C)
@@ -371,10 +377,16 @@ contains
             if (h2osoi_liqvol(c,j) .le. 0._r8 .or. t_soisno(c,j) .le. tfrz + tc_stress) then
                     rootr(p,j) = 0._r8
             else
-               s_node = max(h2osoi_liqvol(c,j)/eff_porosity(c,j),0.01_r8)
-               !smp_node = max(smpsc(veg_pp%itype(p)), -sucsat(c,j)*s_node**(-bsw(c,j)))
-               !call soil_water_retention_curve%soil_suction(sucsat(c,j), s_node, bsw(c,j), smp_node)
-               smp_node = -sucsat(c,j)*s_node**( -bsw(c,j) )
+               if (soil_water_retention_method == swrc_clapp_hornberger) then
+                  s_node = max(h2osoi_liqvol(c,j)/eff_porosity(c,j),0.01_r8)
+                  !smp_node = max(smpsc(veg_pp%itype(p)), -sucsat(c,j)*s_node**(-bsw(c,j)))
+                  !call soil_water_retention_curve%soil_suction(sucsat(c,j), s_node, bsw(c,j), smp_node)
+                  smp_node = -sucsat(c,j)*s_node**( -bsw(c,j) )
+               else
+                  ! van Genuchten curve scaled to the effective porosity; floored at smpsc, as below
+                  call vg_suction(h2osoi_liqvol(c,j)/eff_porosity(c,j), watres(c,j)/watsat(c,j), &
+                       vg_alpha(c,j), vg_n(c,j), smpsc(veg_pp%itype(p)), smp_node, dsmpds)
+               end if
 
                smp_node = max(smpsc(veg_pp%itype(p)), smp_node)
 
@@ -392,10 +404,15 @@ contains
                endif
 
                !smp_node_lf = max(smpsc(veg_pp%itype(p)), -sucsat(c,j)*(h2osoi_vol(c,j)/watsat(c,j))**(-bsw(c,j)))
-               s_node = h2osoi_vol(c,j)/watsat(c,j)
+               if (soil_water_retention_method == swrc_clapp_hornberger) then
+                  s_node = h2osoi_vol(c,j)/watsat(c,j)
 
-               !call soil_water_retention_curve%soil_suction(sucsat(c,j), s_node, bsw(c,j), smp_node_lf)
-               smp_node_lf = -sucsat(c,j)*s_node**( -bsw(c,j) )
+                  !call soil_water_retention_curve%soil_suction(sucsat(c,j), s_node, bsw(c,j), smp_node_lf)
+                  smp_node_lf = -sucsat(c,j)*s_node**( -bsw(c,j) )
+               else
+                  call vg_suction(h2osoi_vol(c,j)/watsat(c,j), watres(c,j)/watsat(c,j), &
+                       vg_alpha(c,j), vg_n(c,j), smpsc(veg_pp%itype(p)), smp_node_lf, dsmpds)
+               end if
 
                !smp_node_lf =  -sucsat(c,j)*(h2osoi_vol(c,j)/watsat(c,j))**(-bsw(c,j))
                smp_node_lf = max(smpsc(veg_pp%itype(p)), smp_node_lf)

@@ -76,6 +76,8 @@ contains
     use landunit_varcon    , only : istice, istice_mec, istwet, istsoil, istdlak, istcrop, istdlak
     use elm_varpar         , only : nlevgrnd, nlevurb, nlevsno, nlevsoi
     use shr_const_mod   , only : SHR_CONST_PI
+    use elm_varctl         , only : soil_water_retention_method, swrc_clapp_hornberger
+    use SoilWaterRetentionVanGenuchtenMod, only : vg_suction
     !
     ! !ARGUMENTS:
     type(bounds_type)      , intent(in)    :: bounds
@@ -112,9 +114,13 @@ contains
     real(r8) :: vol_liq      ! partial volume of liquid water in layer
     real(r8) :: fh2o_eff(bounds%begc:bounds%endc) ! effective surface water fraction (i.e. seen by atm)
     real(r8) :: slope_rad, deg2rad
+    real(r8) :: dsmpds       ! d(psit)/ds, unused (van Genuchten)
     !------------------------------------------------------------------------------
 
     associate(                                                          &
+         watres           =>    soilstate_vars%watres_col             , & ! Input:  [real(r8) (:,:) ] residual volumetric soil water (van Genuchten)
+         vg_alpha         =>    soilstate_vars%vg_alpha_col           , & ! Input:  [real(r8) (:,:) ] van Genuchten alpha (1/mm)
+         vg_n             =>    soilstate_vars%vg_n_col               , & ! Input:  [real(r8) (:,:) ] van Genuchten n (-)
          snl              =>    col_pp%snl                            , & ! Input:  [integer  (:)   ] number of snow layers
          dz               =>    col_pp%dz                             , & ! Input:  [real(r8) (:,:) ] layer depth (m)
          zii              =>    col_pp%zii                            , & ! Output: [real(r8) (:)   ] convective boundary height [m]
@@ -250,10 +256,15 @@ contains
 
             if (col_pp%is_soil(c) .or. col_pp%is_crop(c)) then
                wx   = (h2osoi_liq(c,1)/denh2o+h2osoi_ice(c,1)/denice)/dz(c,1)
-               fac  = min(1._r8, wx/watsat(c,1))
-               fac  = max( fac, 0.01_r8 )
-               psit = -sucsat(c,1) * fac ** (-bsw(c,1))
-               psit = max(smpmin(c), psit)
+               if (soil_water_retention_method == swrc_clapp_hornberger) then
+                  fac  = min(1._r8, wx/watsat(c,1))
+                  fac  = max( fac, 0.01_r8 )
+                  psit = -sucsat(c,1) * fac ** (-bsw(c,1))
+                  psit = max(smpmin(c), psit)
+               else
+                  call vg_suction(wx/watsat(c,1), watres(c,1)/watsat(c,1), vg_alpha(c,1), vg_n(c,1), &
+                       smpmin(c), psit, dsmpds)
+               end if
                ! modify qred to account for h2osfc
                hr   = exp(psit/roverg/t_soisno(c,1))
                qred = (1._r8 - frac_sno(c) - frac_h2osfc(c))*hr &

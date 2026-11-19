@@ -111,6 +111,8 @@ contains
     use SoilWaterRetentionCurveMod, only : soil_water_retention_curve_type
     use SurfaceResistanceMod, only : getlblcef
     use PhotosynthesisType, only : photosyns_vars_TimeStepInit
+    use elm_varctl         , only : soil_water_retention_method, swrc_clapp_hornberger
+    use SoilWaterRetentionVanGenuchtenMod, only : vg_s_from_suction
     !
     ! !ARGUMENTS:
     type(bounds_type)         , intent(in)    :: bounds
@@ -326,6 +328,9 @@ contains
     !------------------------------------------------------------------------------
 
     associate(                                                               &
+         watres               => soilstate_vars%watres_col                 , & ! Input:  [real(r8) (:,:) ]  residual volumetric soil water (van Genuchten)  (constant)
+         vg_alpha             => soilstate_vars%vg_alpha_col               , & ! Input:  [real(r8) (:,:) ]  van Genuchten alpha (1/mm)                      (constant)
+         vg_n                 => soilstate_vars%vg_n_col                   , & ! Input:  [real(r8) (:,:) ]  van Genuchten n (-)                             (constant)
          snl                  => col_pp%snl                                   , & ! Input:  [integer  (:)   ]  number of snow layers
          dayl                 => grc_pp%dayl                                  , & ! Input:  [real(r8) (:)   ]  daylength (s)
          max_dayl             => grc_pp%max_dayl                              , & ! Input:  [real(r8) (:)   ]  maximum daylength for this grid cell (s)
@@ -660,7 +665,14 @@ contains
 
                   ! Calculate vol_liq_so - i.e., vol_liq at which smp_node = smpso - by inverting the above equations
                   ! for the root resistance factors
-                  vol_liq_so   = eff_porosity(c,j) * (-smpso(veg_pp%itype(p))/sucsat(c,j))**(-1/bsw(c,j))
+                  if (soil_water_retention_method == swrc_clapp_hornberger) then
+                     vol_liq_so   = eff_porosity(c,j) * (-smpso(veg_pp%itype(p))/sucsat(c,j))**(-1/bsw(c,j))
+                  else
+                     ! inverse of the van Genuchten curve scaled to the effective porosity, as in
+                     ! calc_root_moist_stress_clm45default
+                     vol_liq_so   = eff_porosity(c,j) * vg_s_from_suction(smpso(veg_pp%itype(p)), &
+                          watres(c,j)/watsat(c,j), vg_alpha(c,j), vg_n(c,j))
+                  end if
 
                   ! Translate vol_liq_so and eff_porosity into h2osoi_liq_so and h2osoi_liq_sat and calculate deficit
                   h2osoi_liq_so  = vol_liq_so * denh2o * col_pp%dz(c,j)

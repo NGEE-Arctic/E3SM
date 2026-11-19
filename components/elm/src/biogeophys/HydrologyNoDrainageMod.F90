@@ -69,6 +69,8 @@ contains
     use column_varcon        , only : icol_roof, icol_road_imperv, icol_road_perv, icol_sunwall
     use column_varcon        , only : icol_shadewall
     use elm_varctl           , only : use_cn, use_betr, use_fates, use_pflotran, pf_hmode, use_fan
+    use elm_varctl           , only : soil_water_retention_method, swrc_clapp_hornberger
+    use SoilWaterRetentionVanGenuchtenMod, only : vg_suction
     use elm_varpar           , only : nlevgrnd, nlevsno, nlevsoi, nlevurb
     use SnowHydrologyMod     , only : SnowCompaction, CombineSnowLayers, DivideSnowLayers, DivideExtraSnowLayers, SnowCapping
     use SnowHydrologyMod     , only : SnowWater, BuildSnowFilter 
@@ -109,6 +111,7 @@ contains
     integer  :: nlevbed                       ! # layers to bedrock
     real(r8) :: psi,vwc,fsattmp,psifrz        ! temporary variables for soilpsi calculation
     real(r8) :: watdry                        ! temporary
+    real(r8) :: smpvg, dsmpds                 ! van Genuchten soil suction (mm) and d(smp)/ds (mm)
     real(r8) :: rwat(bounds%begc:bounds%endc) ! soil water wgted by depth to maximum depth of 0.5 m
     real(r8) :: swat(bounds%begc:bounds%endc) ! same as rwat but at saturation
     real(r8) :: rz(bounds%begc:bounds%endc)   ! thickness of soil layers contributing to rwat (m)
@@ -121,6 +124,10 @@ contains
     !-----------------------------------------------------------------------
     
     associate(                                                          & 
+         watres             => soilstate_vars%watres_col              , & ! Input:  [real(r8) (:,:) ]  residual volumetric soil water (van Genuchten)
+         vg_alpha           => soilstate_vars%vg_alpha_col            , & ! Input:  [real(r8) (:,:) ]  van Genuchten alpha (1/mm)
+         vg_n               => soilstate_vars%vg_n_col                , & ! Input:  [real(r8) (:,:) ]  van Genuchten n (-)
+         watdry_col         => soilstate_vars%watdry_col              , & ! Input:  [real(r8) (:,:) ]  btran parameter for btran = 0
          z                  => col_pp%z                                  , & ! Input:  [real(r8) (:,:) ]  layer depth  (m)                      
          dz                 => col_pp%dz                                 , & ! Input:  [real(r8) (:,:) ]  layer thickness depth (m)             
          zi                 => col_pp%zi                                 , & ! Input:  [real(r8) (:,:) ]  interface depth (m)                   
@@ -477,27 +484,47 @@ contains
          .not.(use_pflotran .and. pf_hmode) ) then
          ! Update soilpsi.
          ! ZMS: Note this could be merged with the following loop updating smp_l in the future.
-         do j = 1, nlevgrnd
-            do fc = 1, num_hydrologyc
-               c = filter_hydrologyc(fc)
+         if (soil_water_retention_method == swrc_clapp_hornberger) then
+            do j = 1, nlevgrnd
+               do fc = 1, num_hydrologyc
+                  c = filter_hydrologyc(fc)
 
-               if (h2osoi_liq(c,j) > 0._r8) then
+                  if (h2osoi_liq(c,j) > 0._r8) then
 
-                  vwc = h2osoi_liq(c,j)/(dz(c,j)*denh2o)
+                     vwc = h2osoi_liq(c,j)/(dz(c,j)*denh2o)
 
-                  ! the following limit set to catch very small values of
-                  ! fractional saturation that can crash the calculation of psi
+                     ! the following limit set to catch very small values of
+                     ! fractional saturation that can crash the calculation of psi
 
-                  ! use the same contants used in the supercool so that psi for frozen soils is consistent
-                  fsattmp = max(vwc/watsat(c,j), 0.001_r8)
-                  psi = sucsat(c,j) * (-9.8e-6_r8) * (fsattmp)**(-bsw(c,j))  ! Mpa
-                  soilpsi(c,j) = min(max(psi,-15.0_r8),0._r8)
+                     ! use the same contants used in the supercool so that psi for frozen soils is consistent
+                     fsattmp = max(vwc/watsat(c,j), 0.001_r8)
+                     psi = sucsat(c,j) * (-9.8e-6_r8) * (fsattmp)**(-bsw(c,j))  ! Mpa
+                     soilpsi(c,j) = min(max(psi,-15.0_r8),0._r8)
 
-               else
-                  soilpsi(c,j) = -15.0_r8
-               end if
+                  else
+                     soilpsi(c,j) = -15.0_r8
+                  end if
+               end do
             end do
-         end do
+         else
+            do j = 1, nlevgrnd
+               do fc = 1, num_hydrologyc
+                  c = filter_hydrologyc(fc)
+
+                  if (h2osoi_liq(c,j) > 0._r8) then
+                     ! van Genuchten suction of the liquid water content (mm), converted to MPa
+                     ! with the same factor as above; the curve floors at smpmin when dry
+                     vwc = h2osoi_liq(c,j)/(dz(c,j)*denh2o)
+                     call vg_suction(vwc/watsat(c,j), watres(c,j)/watsat(c,j), vg_alpha(c,j), vg_n(c,j), &
+                          smpmin(c), smpvg, dsmpds)
+                     psi = smpvg * 9.8e-6_r8  ! Mpa
+                     soilpsi(c,j) = min(max(psi,-15.0_r8),0._r8)
+                  else
+                     soilpsi(c,j) = -15.0_r8
+                  end if
+               end do
+            end do
+         end if
       end if
 
       if (use_cn .or. use_fates) then
@@ -517,7 +544,11 @@ contains
                c = filter_hydrologyc(fc)
                !if (z(c,j)+0.5_r8*dz(c,j) <= 0.5_r8) then
                if (z(c,j)+0.5_r8*dz(c,j) <= 0.05_r8) then
-                  watdry = watsat(c,j) * (316230._r8/sucsat(c,j)) ** (-1._r8/bsw(c,j))
+                  if (soil_water_retention_method == swrc_clapp_hornberger) then
+                     watdry = watsat(c,j) * (316230._r8/sucsat(c,j)) ** (-1._r8/bsw(c,j))
+                  else
+                     watdry = watdry_col(c,j)
+                  end if
                   rwat(c) = rwat(c) + (h2osoi_vol(c,j)-watdry) * dz(c,j)
                   swat(c) = swat(c) + (watsat(c,j)    -watdry) * dz(c,j)
                   rz(c) = rz(c) + dz(c,j)
@@ -531,7 +562,11 @@ contains
                tsw  = rwat(c)/rz(c)
                stsw = swat(c)/rz(c)
             else
-               watdry = watsat(c,1) * (316230._r8/sucsat(c,1)) ** (-1._r8/bsw(c,1))
+               if (soil_water_retention_method == swrc_clapp_hornberger) then
+                  watdry = watsat(c,1) * (316230._r8/sucsat(c,1)) ** (-1._r8/bsw(c,1))
+               else
+                  watdry = watdry_col(c,1)
+               end if
                tsw = h2osoi_vol(c,1) - watdry
                stsw = watsat(c,1) - watdry
             end if
@@ -542,7 +577,11 @@ contains
             do fc = 1, num_hydrologyc
                c = filter_hydrologyc(fc)
                if (z(c,j)+0.5_r8*dz(c,j) <= 0.17_r8) then
-                  watdry = watsat(c,j) * (316230._r8/sucsat(c,j)) ** (-1._r8/bsw(c,j))
+                  if (soil_water_retention_method == swrc_clapp_hornberger) then
+                     watdry = watsat(c,j) * (316230._r8/sucsat(c,j)) ** (-1._r8/bsw(c,j))
+                  else
+                     watdry = watdry_col(c,j)
+                  end if
                   rwat(c) = rwat(c) + (h2osoi_vol(c,j)-watdry) * dz(c,j)
                   swat(c) = swat(c) + (watsat(c,j)    -watdry) * dz(c,j)
                   rz(c) = rz(c) + dz(c,j)
@@ -556,7 +595,11 @@ contains
                tsw  = rwat(c)/rz(c)
                stsw = swat(c)/rz(c)
             else
-               watdry = watsat(c,1) * (316230._r8/sucsat(c,1)) ** (-1._r8/bsw(c,1))
+               if (soil_water_retention_method == swrc_clapp_hornberger) then
+                  watdry = watsat(c,1) * (316230._r8/sucsat(c,1)) ** (-1._r8/bsw(c,1))
+               else
+                  watdry = watdry_col(c,1)
+               end if
                tsw = h2osoi_vol(c,1) - watdry
                stsw = watsat(c,1) - watdry
             end if
